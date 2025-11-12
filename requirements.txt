@@ -1,6 +1,6 @@
 # Autoppia Worker Dependencies
 # Core SDK and framework dependencies
-autoppia-sdk>=0.1.0
+# Note: autoppia-sdk is not yet available on PyPI, worker is standalone
 python-dotenv>=1.0.0
 
 # AI/ML dependencies (framework-agnostic)
