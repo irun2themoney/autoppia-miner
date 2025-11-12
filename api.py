@@ -99,6 +99,93 @@ async def process_request(request_data: Dict[str, Any]):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.post("/solve_task")
+async def solve_task(request_data: Dict[str, Any]):
+    """
+    Solve task endpoint for Autoppia mining
+    This endpoint is called by the miner to solve web agent tasks
+    
+    Request format:
+    {
+        "id": "task_id",
+        "prompt": "Task description",
+        "url": "https://example.com",
+        "seed": 12345,
+        "web_project_name": "project_name",
+        "specifications": {...}
+    }
+    
+    Response format:
+    {
+        "task_id": "task_id",
+        "actions": [
+            {"action_type": "click", "x": 100, "y": 100},
+            {"action_type": "type", "text": "hello", "selector": "#input"}
+        ],
+        "success": true,
+        "message": "Task processed successfully"
+    }
+    """
+    try:
+        task_id = request_data.get("id", "unknown")
+        prompt = request_data.get("prompt", "")
+        url = request_data.get("url", "")
+        
+        logger.info(f"Received task: {task_id}")
+        logger.info(f"Task prompt: {prompt}")
+        logger.info(f"Task URL: {url}")
+        
+        # Use worker's generate task to create action plan
+        # For now, return a basic action sequence
+        # TODO: Implement actual web agent logic using Chutes API or other AI
+        
+        # Basic implementation - can be enhanced with actual web agent logic
+        actions = []
+        
+        # If URL provided, navigate first
+        if url:
+            actions.append({
+                "action_type": "navigate",
+                "url": url
+            })
+        
+        # Add a wait action
+        actions.append({
+            "action_type": "wait",
+            "duration": 2.0
+        })
+        
+        # Add a screenshot to see the page
+        actions.append({
+            "action_type": "screenshot"
+        })
+        
+        # For now, return basic actions
+        # In production, you'd use AI to analyze the prompt and generate proper actions
+        
+        response = {
+            "task_id": task_id,
+            "actions": actions,
+            "success": True,
+            "message": "Task processed successfully"
+        }
+        
+        logger.info(f"Returning {len(actions)} actions for task {task_id}")
+        return JSONResponse(content=response)
+        
+    except Exception as e:
+        logger.error(f"Error solving task: {str(e)}")
+        return JSONResponse(
+            content={
+                "task_id": request_data.get("id", "unknown") if "request_data" in locals() else "unknown",
+                "success": False,
+                "error": str(e),
+                "actions": []
+            },
+            status_code=500
+        )
+
+
 @app.get("/metrics")
 async def get_metrics():
     """Get worker metrics for monitoring"""
