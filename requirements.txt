@@ -4,8 +4,10 @@
 python-dotenv>=1.0.0
 
 # AI/ML dependencies (framework-agnostic)
-openai>=1.0.0
-anthropic>=0.18.0
+# Note: OpenAI and Anthropic are optional - only needed if you want direct integration
+# The worker uses Chutes API by default, which doesn't require these
+# openai>=1.0.0  # Optional - uncomment if needed
+# anthropic>=0.18.0  # Optional - uncomment if needed
 
 # Utilities
 pydantic>=2.0.0
