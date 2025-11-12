@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: autoppia-miner
+    env: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    plan: free
+    envVars:
+      - key: CHUTES_API_KEY
+        sync: false
+      - key: CHUTES_API_URL
+        value: https://api.chutes.ai
+      - key: WORKER_NAME
+        value: autoppia-miner
+      - key: WORKER_VERSION
+        value: 0.1.0
+      - key: LOG_LEVEL
+        value: INFO
+    healthCheckPath: /health
+    autoDeploy: true
+

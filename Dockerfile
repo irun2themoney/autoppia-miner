@@ -32,6 +32,9 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
     CMD python -c "import httpx; httpx.get('http://localhost:8080/health')"
 
+# Expose port (can be overridden by platform)
+EXPOSE 8080
+
 # Run the API server
 CMD ["python", "api.py"]
 

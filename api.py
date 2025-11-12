@@ -112,12 +112,16 @@ async def get_metrics():
 
 if __name__ == "__main__":
     import uvicorn
+    import os
+    
+    # Get port from environment variable (Railway/Render set this)
+    port = int(os.getenv("PORT", 8080))
     
     # Run the API server
     uvicorn.run(
         "api:app",
         host="0.0.0.0",
-        port=8080,
+        port=port,
         log_level="info"
     )
 
