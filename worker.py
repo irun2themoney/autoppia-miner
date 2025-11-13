@@ -19,7 +19,6 @@ load_dotenv()
 
 class WorkerConfig(BaseModel):
     """Worker configuration model"""
-    api_key: str = Field(default="", description="API key for authentication")
     chutes_api_key: Optional[str] = Field(default=None, description="Chutes API key")
     model: str = Field(default="gpt-4", description="AI model to use")
     max_tokens: int = Field(default=1000, description="Maximum tokens for responses")
@@ -146,7 +145,6 @@ class AutoppiaWorker:
         
         # Load from environment
         return WorkerConfig(
-            api_key=os.getenv("AUTOPPIA_API_KEY", ""),
             chutes_api_key=os.getenv("CHUTES_API_KEY"),
             model=os.getenv("MODEL", "gpt-4"),
             max_tokens=int(os.getenv("MAX_TOKENS", "1000")),

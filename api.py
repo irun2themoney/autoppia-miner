@@ -18,7 +18,7 @@ import asyncio
 from typing import Dict, Any, Optional, List
 from datetime import datetime, timezone
 from collections import defaultdict
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger

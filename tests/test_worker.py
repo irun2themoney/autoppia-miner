@@ -14,7 +14,6 @@ class TestAutoppiaWorker:
     def worker_config(self):
         """Fixture for worker configuration"""
         return {
-            "api_key": "test_api_key",
             "model": "gpt-4",
             "max_tokens": 1000,
             "temperature": 0.7
