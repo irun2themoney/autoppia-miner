@@ -26,6 +26,17 @@ class WorkerConfig(BaseModel):
     temperature: float = Field(default=0.7, description="Temperature for AI generation")
     chutes_api_url: str = Field(default="https://api.chutes.ai", description="Chutes API base URL")
     
+    # Multi-model routing configuration
+    use_model_routing: bool = Field(default=True, description="Enable intelligent model routing")
+    models: Dict[str, str] = Field(
+        default={
+            "simple": "llama-2-7b",
+            "medium": "mixtral-8x7b",
+            "complex": "gpt-4"
+        },
+        description="Models for different task complexities"
+    )
+    
     model_config = {"extra": "allow"}  # Allow additional configuration fields
 
 
@@ -84,6 +95,49 @@ class AutoppiaWorker:
         
         logger.info(f"Initializing {self.worker_name} v{self.worker_version}")
         logger.info(f"Worker configuration loaded: model={self.config.model}")
+        if self.config.use_model_routing:
+            logger.info(f"Multi-model routing enabled with models: {self.config.models}")
+    
+    def _detect_task_complexity(self, prompt: str, input_data: Optional[Dict[str, Any]] = None) -> str:
+        """
+        Detect task complexity and return 'simple', 'medium', or 'complex'
+        
+        SIMPLE: Single action, clear target (click, navigate, scroll)
+        MEDIUM: 2-3 steps, decision making (fill form, search, select)
+        COMPLEX: Multi-step reasoning, conditional logic (analyze, compare, evaluate)
+        """
+        prompt_lower = prompt.lower() if prompt else ""
+        input_str = str(input_data).lower() if input_data else ""
+        combined = f"{prompt_lower} {input_str}"
+        
+        # Complexity indicators
+        complex_keywords = ['analyze', 'compare', 'reason', 'evaluate', 'condition', 
+                          'logic', 'calculate', 'figure out', 'determine', 'why', 'recommend']
+        medium_keywords = ['fill', 'form', 'find', 'search', 'select', 'enter', 
+                          'submit', 'filter', 'sort', 'navigate']
+        simple_keywords = ['click', 'go to', 'scroll', 'wait', 'screenshot', 'read', 'hover']
+        
+        complex_score = sum(1 for kw in complex_keywords if kw in combined)
+        medium_score = sum(1 for kw in medium_keywords if kw in combined)
+        simple_score = sum(1 for kw in simple_keywords if kw in combined)
+        
+        if complex_score >= 2:
+            return "complex"
+        elif medium_score >= 2 or (simple_score > 0 and medium_score > 0):
+            return "medium"
+        else:
+            return "simple"
+    
+    async def _get_model_for_task(self, prompt: str, input_data: Optional[Dict[str, Any]] = None) -> str:
+        """Select the best model based on task complexity"""
+        if not self.config.use_model_routing:
+            return self.config.model
+        
+        complexity = self._detect_task_complexity(prompt, input_data)
+        model = self.config.models.get(complexity, self.config.model)
+        logger.info(f"Task complexity: {complexity} → Using model: {model}")
+        
+        return model
     
     def _load_config(self, config: Optional[Dict[str, Any]] = None) -> WorkerConfig:
         """Load configuration from dict or environment variables"""
@@ -197,14 +251,19 @@ class AutoppiaWorker:
         return result
     
     async def _handle_generate(self, request: WorkerRequest) -> Dict[str, Any]:
-        """Handle AI generation tasks using Chutes API"""
+        """Handle AI generation tasks using Chutes API with intelligent model routing"""
         logger.info("Executing generate task")
         
         input_data = request.input_data or {}
         prompt = input_data.get("prompt", "")
-        model = input_data.get("model") or self.config.model
         max_tokens = input_data.get("max_tokens") or self.config.max_tokens
         temperature = input_data.get("temperature") or self.config.temperature
+        
+        # YOLO Enhancement: Intelligent model routing
+        if self.config.use_model_routing:
+            model = await self._get_model_for_task(prompt, input_data)
+        else:
+            model = input_data.get("model") or self.config.model
         
         # Use Chutes API if available
         if self.chutes_client and self.config.chutes_api_key:
