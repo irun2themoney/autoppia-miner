@@ -1,11 +1,12 @@
 # 🚀 Autoppia Miner - Production Ready
 
-> **Status**: ✅ **FULLY OPERATIONAL**  
-> **Worker**: Deployed on Render  
+> **Status**: ✅ **FULLY OPERATIONAL & OPTIMIZED**  
+> **Worker**: Deployed on Render (`https://autoppia-miner.onrender.com`)  
 > **Miner**: Running on Mac via PM2  
-> **Network**: Bittensor Subnet 36 (Autoppia)
+> **Network**: Bittensor Subnet 36 (Autoppia)  
+> **Last Updated**: November 13, 2025 ✨ Performance & Security Improvements
 
-An Autoppia AI Worker for mining and processing web agent tasks. Currently competing on Subnet 36 with a registered hotkey earning TAO rewards.
+An Autoppia AI Worker for mining and processing web agent tasks. Currently competing on Subnet 36 with a registered hotkey earning TAO rewards. Recently optimized with AI-powered task solving, comprehensive error handling, and real-time metrics.
 
 ## 🎯 Quick Start
 
@@ -28,13 +29,18 @@ This worker is built according to the [Autoppia Documentation](https://luxit.git
 - **Production-ready**: Currently mining and earning TAO rewards
 - **Integrated with Chutes API**: Advanced AI processing capabilities
 
-## Features
+## ✨ Features
 
-- **Web Agent Tasks**: Process complex web automation tasks
-- **AI Generation**: Generate action sequences using GPT-4 via Chutes API
-- **Health Monitoring**: Built-in health checks and metrics
-- **RESTful API**: HTTP API for integration with Bittensor validators
-- **Process Management**: Stable operation via PM2 with auto-restart
+- **🤖 AI-Powered Task Solving**: Generate optimized action sequences for web agents using Chutes API
+- **📊 Real-Time Metrics**: Monitor request count, success rate, and error tracking
+- **🔐 Security**: Configurable CORS, comprehensive input validation, safe error handling
+- **🏥 Health Monitoring**: Built-in health checks with API status verification
+- **⚙️ Data Processing**: Multi-operation support (normalize, transform, count)
+- **🔍 Data Mining**: Regex-based pattern matching and extraction
+- **📈 Intelligent Model Routing**: Automatically select best model based on task complexity
+- **🚀 RESTful API**: Full HTTP API with proper error handling and status codes
+- **💾 Process Management**: Stable operation via PM2 with auto-restart
+- **📝 Comprehensive Logging**: Structured logging with configurable levels
 
 ## ⚡ Quick Start (Already Done!)
 
@@ -71,11 +77,32 @@ See [SETUP_AND_MINING_GUIDE.md](./SETUP_AND_MINING_GUIDE.md) for complete config
 
 ## 📚 API Endpoints
 
-- **`GET /`** - Root endpoint
-- **`GET /health`** - Health check
-- **`POST /solve_task`** - Main Bittensor mining endpoint (used by validators)
-- **`GET /metadata`** - Worker metadata
-- **`GET /metrics`** - Worker metrics
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/` | GET | Root endpoint with service info |
+| `/health` | GET | Health check with API connectivity status |
+| `/metadata` | GET | Worker capabilities and metadata |
+| `/metrics` | GET | Real-time request metrics and performance |
+| `/solve_task` | POST | **Main endpoint** - AI-powered task solving for validators |
+| `/process` | POST | Generic data processing with multiple operations |
+
+### Example Requests
+
+**Solve Web Agent Task** (Main endpoint)
+```bash
+curl -X POST https://autoppia-miner.onrender.com/solve_task \
+  -H "Content-Type: application/json" \
+  -d '{
+    "id": "task_123",
+    "prompt": "Click the login button and enter username",
+    "url": "https://example.com/login"
+  }'
+```
+
+**Get Metrics**
+```bash
+curl https://autoppia-miner.onrender.com/metrics
+```
 
 ## 🧪 Testing
 
@@ -87,25 +114,39 @@ pytest tests/ -v
 pytest tests/test_worker.py::TestAutoppiaWorker::test_mine_task -v
 ```
 
+## 🚀 Recent Improvements (Nov 13, 2025)
+
+**✨ Latest Optimizations**:
+- 🤖 **AI Integration**: `/solve_task` now fully AI-powered via Chutes API
+- 📊 **Metrics Tracking**: Real-time request counters and success/error rates
+- 🔐 **Security**: Configurable CORS, comprehensive input validation
+- 🐛 **Bug Fixes**: 10+ fixes including critical error handling improvements
+- 📝 **Documentation**: 3 new detailed guides explaining all changes
+- ✅ **Testing**: All 7 unit tests passing with enhanced handlers
+
+For complete details: See [FIXES_APPLIED.md](./FIXES_APPLIED.md) and [YOLO_REFACTOR_SUMMARY.md](./YOLO_REFACTOR_SUMMARY.md)
+
 ## 🌐 Currently Running
 
 This worker is currently:
 - ✅ **Deployed on Render**: https://autoppia-miner.onrender.com
 - ✅ **Mining on Subnet 36**: Autoppia Web Agents Subnet
 - ✅ **Earning TAO rewards**: With registered hotkey
-- ✅ **Processing tasks**: From Bittensor validators
+- ✅ **Processing tasks**: From Bittensor validators (with AI-powered solutions)
+- ✅ **Monitoring**: Real-time metrics available at `/metrics`
 
-See [PROJECT_STATUS.md](./PROJECT_STATUS.md) for current metrics and [SETUP_AND_MINING_GUIDE.md](./SETUP_AND_MINING_GUIDE.md) for detailed information.
+See [SETUP_AND_MINING_GUIDE.md](./SETUP_AND_MINING_GUIDE.md) for detailed information.
 
 ## 📂 Project Structure
 
 See [PROJECT_STATUS.md](./PROJECT_STATUS.md) for a detailed breakdown.
 
 Key files:
-- `worker.py` - Core worker logic
-- `api.py` - FastAPI server with endpoints
+- `worker.py` - Core worker logic with enhanced handlers
+- `api.py` - FastAPI server with AI-powered endpoints
 - `requirements.txt` - Python dependencies
-- `Dockerfile` / `render.yaml` - Deployment config
+- `Dockerfile` - Optimized deployment config
+- `tests/` - Comprehensive test suite (7 tests, all passing)
 
 ## 🛡️ Privacy & Security
 
@@ -113,14 +154,20 @@ Key files:
 - **Encrypted communication**: All API calls use HTTPS
 - **Privacy-preserving**: Following Autoppia standards
 - **Audit logging**: Configurable log levels for security
+- **Input validation**: All endpoints validate and sanitize inputs
+- **CORS configured**: Configurable origins for security
 
 ## 📚 Documentation
 
-| Document | Purpose |
-|----------|---------|
-| [SETUP_AND_MINING_GUIDE.md](./SETUP_AND_MINING_GUIDE.md) | **⭐ START HERE** - Complete comprehensive guide |
-| [OPERATIONS_MANUAL.md](./OPERATIONS_MANUAL.md) | Daily operations & quick commands |
-| [QUICK_REFERENCE.md](./QUICK_REFERENCE.md) | Status, configs, troubleshooting, API keys |
+**Main Guides:**
+- [SETUP_AND_MINING_GUIDE.md](./SETUP_AND_MINING_GUIDE.md) - **⭐ START HERE** for complete setup & mining guide
+- [OPERATIONS_MANUAL.md](./OPERATIONS_MANUAL.md) - Daily operations & quick commands  
+- [QUICK_REFERENCE.md](./QUICK_REFERENCE.md) - Status, configs, troubleshooting
+
+**Latest Updates (Nov 13, 2025):**
+- [FIXES_APPLIED.md](./FIXES_APPLIED.md) - **📝 Detailed documentation of all fixes and improvements**
+- [YOLO_REFACTOR_SUMMARY.md](./YOLO_REFACTOR_SUMMARY.md) - Executive summary of optimizations
+- [CHANGES_CHECKLIST.md](./CHANGES_CHECKLIST.md) - Complete checklist of modifications
 
 ## 🔗 Resources
 
