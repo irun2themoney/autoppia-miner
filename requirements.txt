@@ -1,28 +1,10 @@
-# Autoppia Worker Dependencies
-# Core SDK and framework dependencies
-# Note: autoppia-sdk is not yet available on PyPI, worker is standalone
+# Autoppia Worker - Lean Dependencies
 python-dotenv>=1.0.0
-
-# AI/ML dependencies (framework-agnostic)
-# Note: OpenAI and Anthropic are optional - only needed if you want direct integration
-# The worker uses Chutes API by default, which doesn't require these
-# openai>=1.0.0  # Optional - uncomment if needed
-# anthropic>=0.18.0  # Optional - uncomment if needed
-
-# Utilities
 pydantic>=2.0.0
 httpx>=0.25.0
-pyyaml>=6.0.0
-
-# API Server
 fastapi>=0.104.0
 uvicorn[standard]>=0.24.0
-
-# Logging and monitoring
 loguru>=0.7.0
-
-# Testing
 pytest>=7.4.0
 pytest-asyncio>=0.21.0
 pytest-cov>=4.1.0
-

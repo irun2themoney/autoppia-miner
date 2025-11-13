@@ -10,30 +10,29 @@ Enhanced with:
 """
 
 import json
+import os
 import re
 import hashlib
-from typing import Dict, Any, Optional, List, Tuple
+import time
+import asyncio
+from typing import Dict, Any, Optional, List
 from datetime import datetime, timezone
-from fastapi import FastAPI, HTTPException
+from collections import defaultdict
+from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
-from worker import AutoppiaWorker, WorkerRequest, WorkerResponse
 from dotenv import load_dotenv
-from collections import defaultdict
-import time
+from worker import AutoppiaWorker, WorkerRequest
 
 load_dotenv()
 
 # Initialize FastAPI app
 app = FastAPI(
     title="Autoppia Miner Worker",
-    description="An Autoppia AI Worker for mining and processing tasks",
+    description="Autoppia AI Worker for mining and processing tasks",
     version="0.1.0"
 )
-
-# Configure CORS more securely
-import os
 cors_origins = os.getenv("CORS_ORIGINS", "").split(",") if os.getenv("CORS_ORIGINS") else ["*"]
 cors_origins = [origin.strip() for origin in cors_origins if origin.strip()]
 
@@ -241,6 +240,7 @@ class RetryHandler:
         base_delay: float = 0.5
     ):
         """Execute async function with retry logic"""
+        import asyncio
         for attempt in range(max_retries):
             try:
                 return await coro_func()
@@ -251,8 +251,6 @@ class RetryHandler:
                 logger.warning(f"Attempt {attempt + 1} failed, retrying in {delay}s: {str(e)}")
                 await asyncio.sleep(delay)
 
-
-import asyncio
 
 
 @app.get("/")
