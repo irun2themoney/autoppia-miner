@@ -21,6 +21,8 @@ An Autoppia AI Worker for mining and processing web agent tasks on Bittensor Sub
 
 ## ⚡ Quick Start
 
+### HTTP API Worker (Standalone)
+
 ```bash
 # 1. Clone repository
 git clone https://github.com/irun2themoney/autoppia-miner.git
@@ -35,15 +37,33 @@ pip install -r requirements.txt
 cp env.example .env
 # Edit .env with your CHUTES_API_KEY
 
-# 4. Start worker
+# 4. Start HTTP API worker
 python api.py
 ```
+
+### Bittensor Miner (Full Integration)
+
+```bash
+# 1-3. Same as above
+
+# 4. Register on subnet 36 (requires TAO tokens)
+btcli subnet register --netuid 36 --wallet.name YOUR_WALLET --wallet.hotkey YOUR_HOTKEY
+
+# 5. Start Bittensor miner
+python miner.py --wallet.name YOUR_WALLET --wallet.hotkey YOUR_HOTKEY --network finney --axon.port 8091
+
+# OR use the start script
+./start_miner.sh YOUR_WALLET YOUR_HOTKEY
+```
+
+See [MINER_SETUP.md](./MINER_SETUP.md) for detailed miner setup instructions.
 
 ## Configuration
 
 **Essential Environment Variables**:
 - `CHUTES_API_KEY`: Your Chutes API key (required for AI tasks)
 - `CHUTES_API_URL`: Default is `https://api.chutes.ai`
+- `API_URL`: HTTP API URL (for miner.py, default: `https://autoppia-miner.onrender.com`)
 - `WORKER_NAME`: Your worker's name (default: `autoppia-miner`)
 - `LOG_LEVEL`: INFO (default) or DEBUG for verbose logs
 
@@ -128,12 +148,17 @@ python -c "from fastapi.testclient import TestClient; from api import app; clien
 
 ```
 autoppia-miner/
-├── api.py              # FastAPI server (main entry point)
+├── api.py              # FastAPI server (HTTP API worker)
 ├── worker.py           # Core worker logic
-├── requirements.txt    # Python dependencies
+├── miner.py            # Bittensor miner (connects to subnet 36)
+├── requirements.txt    # Python dependencies (includes bittensor)
 ├── Dockerfile          # Docker deployment config
 ├── render.yaml         # Render deployment config
 ├── env.example         # Environment variables template
+├── start_miner.sh      # Quick start script for miner
+├── monitor_*.sh        # Monitoring scripts
+├── check_deployment.sh # Deployment health check
+├── MINER_SETUP.md      # Detailed miner setup guide
 ├── tests/              # Test suite
 │   ├── test_worker.py
 │   ├── test_task_classification.py
@@ -182,6 +207,29 @@ curl https://autoppia-miner.onrender.com/metrics
 - ✅ Action generation working
 - ✅ Error handling graceful
 - ✅ Fast response times (<1s)
+
+## 🚀 Bittensor Mining
+
+### Architecture
+
+```
+Validator → Bittensor Network → Miner (miner.py) → HTTP API (api.py) → Response
+```
+
+### Setup
+
+1. **Register on Subnet 36**: Requires TAO tokens for registration
+2. **Start Miner**: Connects to Bittensor network and serves validator requests
+3. **HTTP API**: Processes tasks and returns action sequences
+4. **Earn Rewards**: Validators evaluate performance and distribute TAO rewards
+
+See [MINER_SETUP.md](./MINER_SETUP.md) for complete setup instructions.
+
+### Monitoring
+
+- **Miner Status**: `btcli wallet overview --netuid 36`
+- **HTTP API**: `./monitor_once.sh` or `./monitor_loop.sh`
+- **Deployment**: `./check_deployment.sh`
 
 ## 📄 License
 
