@@ -5,6 +5,8 @@
 > **Worker**: Live on Render (`https://autoppia-miner.onrender.com`)  
 > **Tests**: 52/52 passing ✅  
 > **Deployment**: Active and verified ✅  
+> **Miner**: Running with latest code (updated Nov 13, 2025)  
+> **Leaderboard**: [InfiniteWeb Arena](https://infinitewebarena.autoppia.com/)  
 > **Last Updated**: November 13, 2025
 
 An Autoppia AI Worker for mining and processing web agent tasks on Bittensor Subnet 36. Optimized with AI-powered task solving, intelligent classification, and real-time metrics. **Ready for validator testing.**
@@ -178,6 +180,8 @@ autoppia-miner/
 - [Autoppia Docs](https://luxit.gitbook.io/autoppia-docs)
 - [Bittensor Docs](https://docs.bittensor.com)
 - [Subnet 36 Stats](https://taostats.io/subnets/36/)
+- [InfiniteWeb Arena Leaderboard](https://infinitewebarena.autoppia.com/)
+- [Official GitHub Repo](https://github.com/autoppia/autoppia_web_agents_subnet)
 
 ## ✅ Validator Testing
 
