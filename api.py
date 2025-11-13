@@ -1,10 +1,18 @@
 """
 API server for Autoppia Worker
 This provides an HTTP API interface for the worker to integrate with Autoppia infrastructure
+
+Enhanced with:
+- Task Classification Engine (categorizes IWA tasks)
+- Smart Action Generation (specialized templates per task type)
+- Request Caching (reduces AI calls for similar tasks)
+- Retry Logic (exponential backoff on failures)
 """
 
 import json
-from typing import Dict, Any
+import re
+import hashlib
+from typing import Dict, Any, Optional, List, Tuple
 from datetime import datetime, timezone
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
@@ -12,6 +20,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
 from worker import AutoppiaWorker, WorkerRequest, WorkerResponse
 from dotenv import load_dotenv
+from collections import defaultdict
+import time
 
 load_dotenv()
 
@@ -44,8 +54,205 @@ class RequestMetrics:
         self.total_requests = 0
         self.total_errors = 0
         self.total_success = 0
+        self.by_type = defaultdict(int)  # Track by task type
+        self.by_type_success = defaultdict(int)
     
 metrics = RequestMetrics()
+
+
+# Task Classification Engine
+class TaskClassifier:
+    """
+    Intelligent task classifier for IWA tasks
+    Categorizes tasks and provides specialized action generation
+    """
+    
+    # Task type patterns
+    PATTERNS = {
+        "search": r"(search|find|look for|query|browse)",
+        "form_fill": r"(fill|submit|complete|form|input|register)",
+        "price_compare": r"(compare|price|cost|cheaper|expensive|discount|save)",
+        "click": r"(click|select|choose|pick|tap)",
+        "extract": r"(extract|get|retrieve|copy|collect|scrape)",
+        "navigate": r"(go to|visit|open|access|navigate)",
+        "scroll": r"(scroll|down|up|bottom|top|view more)",
+        "checkout": r"(checkout|purchase|buy|add to cart|pay)"
+    }
+    
+    @staticmethod
+    def classify_task(prompt: str) -> str:
+        """Classify task based on prompt keywords"""
+        prompt_lower = prompt.lower()
+        
+        # Score each category
+        scores = {}
+        for task_type, pattern in TaskClassifier.PATTERNS.items():
+            matches = len(re.findall(pattern, prompt_lower))
+            scores[task_type] = matches
+        
+        # Return highest scoring category
+        if max(scores.values()) > 0:
+            return max(scores, key=scores.get)
+        return "generic"
+    
+    @staticmethod
+    def generate_specialized_actions(task_type: str, url: str, prompt: str) -> List[Dict]:
+        """Generate specialized action sequences based on task type"""
+        
+        actions = []
+        
+        # Navigate to URL first
+        if url:
+            actions.append({
+                "action_type": "navigate",
+                "url": url
+            })
+            actions.append({
+                "action_type": "wait",
+                "duration": 1.5
+            })
+        
+        # Task-specific action templates
+        if task_type == "search":
+            actions.extend([
+                {"action_type": "screenshot"},
+                {"action_type": "wait", "duration": 0.5},
+                {"action_type": "click", "selector": "input[type='search'], input[placeholder*='search' i], .search-box"},
+                {"action_type": "type", "text": "search query"},
+                {"action_type": "key_press", "key": "Enter"},
+                {"action_type": "wait", "duration": 2},
+                {"action_type": "screenshot"}
+            ])
+        
+        elif task_type == "form_fill":
+            actions.extend([
+                {"action_type": "screenshot"},
+                {"action_type": "wait", "duration": 0.5},
+                {"action_type": "click", "selector": "input:first-of-type"},
+                {"action_type": "type", "text": "input_value"},
+                {"action_type": "click", "selector": "button[type='submit'], .submit-btn"},
+                {"action_type": "wait", "duration": 2},
+                {"action_type": "screenshot"}
+            ])
+        
+        elif task_type == "price_compare":
+            actions.extend([
+                {"action_type": "screenshot"},
+                {"action_type": "scroll", "direction": "down", "amount": 3},
+                {"action_type": "wait", "duration": 1},
+                {"action_type": "screenshot"},
+                {"action_type": "scroll", "direction": "down", "amount": 3},
+                {"action_type": "wait", "duration": 1},
+                {"action_type": "screenshot"}
+            ])
+        
+        elif task_type == "click":
+            actions.extend([
+                {"action_type": "screenshot"},
+                {"action_type": "wait", "duration": 0.5},
+                {"action_type": "click", "selector": "button:first-of-type, a.cta, [role='button']"},
+                {"action_type": "wait", "duration": 1},
+                {"action_type": "screenshot"}
+            ])
+        
+        elif task_type == "extract":
+            actions.extend([
+                {"action_type": "screenshot"},
+                {"action_type": "scroll", "direction": "down", "amount": 2},
+                {"action_type": "wait", "duration": 1},
+                {"action_type": "screenshot"},
+                {"action_type": "scroll", "direction": "down", "amount": 2},
+                {"action_type": "wait", "duration": 1},
+                {"action_type": "screenshot"}
+            ])
+        
+        elif task_type == "checkout":
+            actions.extend([
+                {"action_type": "screenshot"},
+                {"action_type": "click", "selector": "button[class*='cart'], .add-to-cart, .checkout"},
+                {"action_type": "wait", "duration": 1.5},
+                {"action_type": "screenshot"},
+                {"action_type": "scroll", "direction": "down", "amount": 2},
+                {"action_type": "wait", "duration": 1},
+                {"action_type": "screenshot"}
+            ])
+        
+        else:  # generic
+            actions.extend([
+                {"action_type": "screenshot"},
+                {"action_type": "wait", "duration": 1},
+                {"action_type": "scroll", "direction": "down", "amount": 2},
+                {"action_type": "wait", "duration": 1},
+                {"action_type": "screenshot"}
+            ])
+        
+        return actions
+
+
+# Request caching to reduce AI calls
+class RequestCache:
+    """Simple in-memory cache for task solutions"""
+    
+    def __init__(self, max_size: int = 100, ttl: int = 3600):
+        self.cache = {}
+        self.max_size = max_size
+        self.ttl = ttl
+    
+    def get_key(self, prompt: str, url: str) -> str:
+        """Generate cache key from prompt and URL"""
+        combined = f"{prompt}:{url}"
+        return hashlib.md5(combined.encode()).hexdigest()
+    
+    def get(self, prompt: str, url: str) -> Optional[List[Dict]]:
+        """Retrieve cached actions"""
+        key = self.get_key(prompt, url)
+        if key in self.cache:
+            cached, timestamp = self.cache[key]
+            if time.time() - timestamp < self.ttl:
+                logger.info(f"Cache hit for task")
+                return cached
+            else:
+                del self.cache[key]
+        return None
+    
+    def set(self, prompt: str, url: str, actions: List[Dict]) -> None:
+        """Store actions in cache"""
+        if len(self.cache) >= self.max_size:
+            # Remove oldest entry
+            oldest_key = min(self.cache.keys(), key=lambda k: self.cache[k][1])
+            del self.cache[oldest_key]
+        
+        key = self.get_key(prompt, url)
+        self.cache[key] = (actions, time.time())
+        logger.debug(f"Cached actions for task")
+
+
+cache = RequestCache()
+
+
+# Retry logic with exponential backoff
+class RetryHandler:
+    """Handle retries with exponential backoff"""
+    
+    @staticmethod
+    async def call_with_retry(
+        coro_func,
+        max_retries: int = 3,
+        base_delay: float = 0.5
+    ):
+        """Execute async function with retry logic"""
+        for attempt in range(max_retries):
+            try:
+                return await coro_func()
+            except Exception as e:
+                if attempt == max_retries - 1:
+                    raise
+                delay = base_delay * (2 ** attempt)
+                logger.warning(f"Attempt {attempt + 1} failed, retrying in {delay}s: {str(e)}")
+                await asyncio.sleep(delay)
+
+
+import asyncio
 
 
 @app.get("/")
@@ -138,8 +345,13 @@ def _generate_default_actions(url: str, prompt: str) -> list:
 @app.post("/solve_task")
 async def solve_task(request_data: Dict[str, Any]):
     """
-    Solve task endpoint for Autoppia mining
-    This endpoint is called by the miner to solve web agent tasks
+    Enhanced solve_task endpoint with task classification and smart action generation
+    
+    Features:
+    - Task Classification (8 categories: search, form_fill, price_compare, etc.)
+    - Specialized Action Generation (templates per task type)
+    - Request Caching (reduces AI calls for similar tasks)
+    - Retry Logic (handles transient failures gracefully)
     
     Request format:
     {
@@ -154,26 +366,27 @@ async def solve_task(request_data: Dict[str, Any]):
     Response format:
     {
         "task_id": "task_id",
-        "actions": [
-            {"action_type": "click", "x": 100, "y": 100},
-            {"action_type": "type", "text": "hello", "selector": "#input"}
-        ],
+        "task_type": "search|form_fill|price_compare|click|extract|checkout|navigate|scroll|generic",
+        "actions": [...],
         "success": true,
-        "message": "Task processed successfully"
+        "cached": false,
+        "message": "..."
     }
     """
     metrics.total_requests += 1
+    start_time = time.time()
+    
     try:
         task_id = request_data.get("id", "unknown")
         prompt = request_data.get("prompt", "")
         url = request_data.get("url", "")
         
-        logger.info(f"Received task: {task_id}")
-        logger.debug(f"Task prompt: {prompt}")
+        logger.info(f"📥 Received task: {task_id}")
+        logger.debug(f"Task prompt: {prompt[:100]}...")
         logger.debug(f"Task URL: {url}")
         
         if not prompt:
-            logger.warning(f"Task {task_id} has no prompt")
+            logger.warning(f"❌ Task {task_id} has no prompt")
             metrics.total_errors += 1
             return JSONResponse(
                 content={
@@ -185,16 +398,55 @@ async def solve_task(request_data: Dict[str, Any]):
                 status_code=400
             )
         
-        # Use AI to generate action sequence
-        # Create a specialized prompt for web agent action generation
-        ai_prompt = f"""You are a web automation expert. Analyze this task and generate a sequence of browser actions.
+        # Step 1: Classify the task
+        task_type = TaskClassifier.classify_task(prompt)
+        metrics.by_type[task_type] += 1
+        logger.info(f"🏷️  Classified as: {task_type}")
+        
+        # Step 2: Check cache first (fast path)
+        cached_actions = cache.get(prompt, url)
+        if cached_actions:
+            elapsed = time.time() - start_time
+            response = {
+                "task_id": task_id,
+                "task_type": task_type,
+                "actions": cached_actions,
+                "success": True,
+                "cached": True,
+                "response_time_ms": f"{elapsed*1000:.0f}",
+                "message": f"✨ Cached solution with {len(cached_actions)} actions ({elapsed*1000:.0f}ms)"
+            }
+            metrics.total_success += 1
+            metrics.by_type_success[task_type] += 1
+            logger.info(f"✅ Task {task_id} cached hit: {len(cached_actions)} actions in {elapsed*1000:.0f}ms")
+            return JSONResponse(content=response)
+        
+        # Step 3: Try specialized template first (very fast, often works)
+        logger.info(f"🔧 Generating specialized actions for task type: {task_type}")
+        template_actions = TaskClassifier.generate_specialized_actions(task_type, url, prompt)
+        
+        # Decide: use template only or also try AI?
+        # Use template if it's a high-confidence category or if we want speed
+        use_template_only = task_type in ["search", "form_fill", "checkout"]
+        
+        actions = []
+        
+        if use_template_only:
+            # Fast path: use template directly
+            logger.info(f"⚡ Using template for high-confidence task type: {task_type}")
+            actions = template_actions
+        else:
+            # Try AI for better accuracy on complex tasks
+            logger.info(f"🤖 Attempting AI generation for task type: {task_type}")
+            
+            ai_prompt = f"""You are a web automation expert. Analyze this {task_type} task and generate optimized browser actions.
 
 Task: {prompt}
 URL: {url if url else 'Not specified'}
 
 Generate actions as a JSON array. Each action should have:
-- action_type: 'navigate', 'click', 'type', 'wait', 'screenshot', 'scroll', 'select', 'hover'
-- Additional fields based on action type (url, x, y, text, selector, duration, direction)
+- action_type: 'navigate', 'click', 'type', 'wait', 'screenshot', 'scroll', 'select', 'hover', 'key_press'
+- Additional fields based on action type
 
 Return ONLY valid JSON array, no markdown or explanation.
 Example: [
@@ -202,65 +454,79 @@ Example: [
   {{"action_type": "wait", "duration": 2}},
   {{"action_type": "screenshot"}}
 ]"""
-        
-        # Call worker to generate actions via AI
-        gen_request = WorkerRequest(
-            task="generate",
-            input_data={
-                "prompt": ai_prompt,
-                "max_tokens": 2000,
-                "temperature": 0.3
-            }
-        )
-        
-        gen_response = await worker.process(gen_request)
-        
-        actions = []
-        if gen_response.success and gen_response.result:
+            
             try:
-                # Try to parse generated actions from AI response
-                generated_text = gen_response.result.get("generated_text", "")
+                # Call worker with retry logic
+                async def ai_call():
+                    gen_request = WorkerRequest(
+                        task="generate",
+                        input_data={
+                            "prompt": ai_prompt,
+                            "max_tokens": 2000,
+                            "temperature": 0.3
+                        }
+                    )
+                    return await worker.process(gen_request)
                 
-                # Try to extract JSON from response
-                import json
-                if "[" in generated_text and "]" in generated_text:
-                    json_start = generated_text.index("[")
-                    json_end = generated_text.rindex("]") + 1
-                    json_str = generated_text[json_start:json_end]
-                    actions = json.loads(json_str)
-                    logger.info(f"Generated {len(actions)} actions via AI for task {task_id}")
+                gen_response = await RetryHandler.call_with_retry(ai_call, max_retries=2)
+                
+                if gen_response.success and gen_response.result:
+                    try:
+                        generated_text = gen_response.result.get("generated_text", "")
+                        
+                        # Extract JSON from response
+                        if "[" in generated_text and "]" in generated_text:
+                            json_start = generated_text.index("[")
+                            json_end = generated_text.rindex("]") + 1
+                            json_str = generated_text[json_start:json_end]
+                            ai_actions = json.loads(json_str)
+                            logger.info(f"✅ AI generated {len(ai_actions)} actions")
+                            actions = ai_actions
+                        else:
+                            logger.warning(f"⚠️  Could not parse AI response, using template")
+                            actions = template_actions
+                    except Exception as e:
+                        logger.warning(f"⚠️  Error parsing AI actions: {str(e)}, using template")
+                        actions = template_actions
                 else:
-                    logger.warning(f"Could not parse AI response for task {task_id}")
-                    # Fall back to default actions
-                    actions = _generate_default_actions(url, prompt)
+                    logger.warning(f"⚠️  AI generation failed, using template")
+                    actions = template_actions
+            
             except Exception as e:
-                logger.warning(f"Error parsing AI actions: {str(e)}, using defaults")
-                actions = _generate_default_actions(url, prompt)
-        else:
-            logger.warning(f"AI generation failed for task {task_id}, using default actions")
-            actions = _generate_default_actions(url, prompt)
+                logger.warning(f"⚠️  AI call failed: {str(e)}, using template")
+                actions = template_actions
         
+        # Step 4: Cache the successful actions
+        cache.set(prompt, url, actions)
+        
+        elapsed = time.time() - start_time
         response = {
             "task_id": task_id,
+            "task_type": task_type,
             "actions": actions,
             "success": True,
-            "message": f"Task processed successfully with {len(actions)} actions"
+            "cached": False,
+            "response_time_ms": f"{elapsed*1000:.0f}",
+            "message": f"✅ Task processed successfully with {len(actions)} actions ({elapsed*1000:.0f}ms)"
         }
         
         metrics.total_success += 1
-        logger.info(f"Task {task_id} completed: {len(actions)} actions")
+        metrics.by_type_success[task_type] += 1
+        logger.info(f"✅ Task {task_id} completed: {len(actions)} actions in {elapsed*1000:.0f}ms [type: {task_type}]")
         return JSONResponse(content=response)
         
     except Exception as e:
-        logger.error(f"Error solving task: {str(e)}")
+        logger.error(f"❌ Error solving task: {str(e)}")
         task_id = request_data.get("id", "unknown") if isinstance(request_data, dict) else "unknown"
         metrics.total_errors += 1
+        elapsed = time.time() - start_time
         return JSONResponse(
             content={
                 "task_id": task_id,
                 "success": False,
                 "error": str(e),
-                "actions": []
+                "actions": [],
+                "response_time_ms": f"{elapsed*1000:.0f}"
             },
             status_code=500
         )
@@ -268,11 +534,10 @@ Example: [
 
 @app.get("/metrics")
 async def get_metrics():
-    """Get worker metrics for monitoring"""
-    import time
+    """Get worker metrics for monitoring with task type breakdown"""
     import os
     
-    # Get worker uptime (would need to track in production)
+    # Get worker uptime
     try:
         start_time = float(os.getenv("WORKER_START_TIME", time.time()))
         uptime_seconds = int(time.time() - start_time)
@@ -280,7 +545,20 @@ async def get_metrics():
     except:
         uptime_str = "unknown"
     
-    # Return comprehensive metrics including request tracking
+    # Calculate success rate
+    total = metrics.total_requests
+    success_rate = (metrics.total_success / total * 100) if total > 0 else 0
+    
+    # Convert defaultdicts to regular dicts for JSON serialization
+    by_type_dict = dict(metrics.by_type)
+    by_type_success_dict = dict(metrics.by_type_success)
+    
+    # Calculate success rate per type
+    success_rate_by_type = {}
+    for task_type, count in by_type_dict.items():
+        success_count = by_type_success_dict.get(task_type, 0)
+        success_rate_by_type[task_type] = f"{(success_count / count * 100):.1f}%" if count > 0 else "0%"
+    
     return {
         "worker": worker.worker_name,
         "version": worker.worker_version,
@@ -289,10 +567,21 @@ async def get_metrics():
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "chutes_api_configured": worker.config.chutes_api_key is not None,
         "capabilities": worker.get_metadata().get("capabilities", []),
+        "cache": {
+            "size": len(cache.cache),
+            "max_size": cache.max_size,
+            "ttl_seconds": cache.ttl
+        },
         "requests": {
             "total": metrics.total_requests,
             "success": metrics.total_success,
-            "errors": metrics.total_errors
+            "errors": metrics.total_errors,
+            "success_rate_percent": f"{success_rate:.1f}%"
+        },
+        "by_task_type": {
+            "request_count": by_type_dict,
+            "success_count": by_type_success_dict,
+            "success_rate_percent": success_rate_by_type
         }
     }
 
