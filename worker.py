@@ -199,56 +199,141 @@ class AutoppiaWorker:
                 error=str(e),
                 metadata={
                     "task": request.task,
-                    "timestamp": datetime.utcnow().isoformat()
+                    "timestamp": datetime.now(timezone.utc).isoformat()
                 }
             )
     
     async def _handle_mine(self, request: WorkerRequest) -> Dict[str, Any]:
-        """Handle mining tasks"""
+        """
+        Handle mining tasks
+        
+        Input data expected:
+        - source: Data source to mine from
+        - pattern: Pattern to match for mining
+        - limit: Optional limit on items to return
+        """
         logger.info("Executing mine task")
         
-        # Extract mining parameters
         input_data = request.input_data or {}
         source = input_data.get("source", "")
         pattern = input_data.get("pattern", "")
+        limit = input_data.get("limit", 100)
         
-        # Implement mining logic here
-        # This is a placeholder - implement your specific mining logic
-        result = {
-            "mined_data": [],
-            "source": source,
-            "pattern": pattern,
-            "count": 0
-        }
+        if not source or not pattern:
+            logger.warning("Mine task missing source or pattern")
+            return {
+                "mined_data": [],
+                "source": source,
+                "pattern": pattern,
+                "count": 0,
+                "status": "incomplete - missing parameters"
+            }
         
-        logger.info(f"Mining completed: {result['count']} items found")
-        return result
+        try:
+            # Mining logic: Extract data matching pattern from source
+            # This is framework-agnostic and can be customized per use case
+            mined_data = []
+            
+            # Example: If source is a string, find all matches
+            if isinstance(source, str) and isinstance(pattern, str):
+                import re
+                try:
+                    matches = re.findall(pattern, source)
+                    mined_data = matches[:limit]
+                except re.error as e:
+                    logger.warning(f"Invalid regex pattern: {str(e)}")
+            
+            result = {
+                "mined_data": mined_data,
+                "source": source[:100] if isinstance(source, str) else str(source)[:100],
+                "pattern": pattern,
+                "count": len(mined_data),
+                "status": "success"
+            }
+            
+            logger.info(f"Mining completed: {result['count']} items found")
+            return result
+            
+        except Exception as e:
+            logger.error(f"Mining error: {str(e)}")
+            return {
+                "mined_data": [],
+                "source": source,
+                "pattern": pattern,
+                "count": 0,
+                "status": f"error: {str(e)}"
+            }
     
     async def _handle_process(self, request: WorkerRequest) -> Dict[str, Any]:
-        """Handle data processing tasks"""
+        """
+        Handle data processing tasks
+        
+        Input data expected:
+        - data: List of items to process
+        - operation: Optional processing operation to apply
+        """
         logger.info("Executing process task")
         
         input_data = request.input_data or {}
         data = input_data.get("data", [])
+        operation = input_data.get("operation", "normalize")
         
-        # Implement processing logic here
-        processed_data = []
-        for item in data:
-            # Process each item
-            processed_item = {
-                "original": item,
-                "processed": True,
-                "timestamp": datetime.utcnow().isoformat()
+        if not isinstance(data, list):
+            logger.warning("Process task data is not a list")
+            return {
+                "processed_count": 0,
+                "data": [],
+                "status": "error - data must be a list"
             }
-            processed_data.append(processed_item)
         
-        result = {
-            "processed_count": len(processed_data),
-            "data": processed_data
-        }
-        
-        logger.info(f"Processing completed: {result['processed_count']} items")
-        return result
+        try:
+            processed_data = []
+            for idx, item in enumerate(data):
+                try:
+                    # Process each item based on operation type
+                    if operation == "normalize":
+                        # Normalize string data
+                        processed_value = str(item).strip().lower() if item else ""
+                    elif operation == "uppercase":
+                        processed_value = str(item).upper() if item else ""
+                    elif operation == "count":
+                        processed_value = len(str(item)) if item else 0
+                    else:
+                        processed_value = item
+                    
+                    processed_item = {
+                        "index": idx,
+                        "original": item,
+                        "processed": processed_value,
+                        "timestamp": datetime.now(timezone.utc).isoformat()
+                    }
+                    processed_data.append(processed_item)
+                except Exception as e:
+                    logger.warning(f"Error processing item {idx}: {str(e)}")
+                    processed_data.append({
+                        "index": idx,
+                        "original": item,
+                        "error": str(e),
+                        "timestamp": datetime.now(timezone.utc).isoformat()
+                    })
+            
+            result = {
+                "processed_count": len(processed_data),
+                "data": processed_data,
+                "operation": operation,
+                "status": "success"
+            }
+            
+            logger.info(f"Processing completed: {result['processed_count']} items with {operation}")
+            return result
+            
+        except Exception as e:
+            logger.error(f"Processing error: {str(e)}")
+            return {
+                "processed_count": 0,
+                "data": [],
+                "status": f"error: {str(e)}"
+            }
     
     async def _handle_generate(self, request: WorkerRequest) -> Dict[str, Any]:
         """Handle AI generation tasks using Chutes API with intelligent model routing"""
@@ -384,7 +469,7 @@ class AutoppiaWorker:
             "status": "healthy",
             "worker": self.worker_name,
             "version": self.worker_version,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "chutes_api_configured": self.config.chutes_api_key is not None
         }
         
