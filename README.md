@@ -1,10 +1,11 @@
 # 🚀 Autoppia Miner
 
-> **Status**: ✅ **PRODUCTION READY & FULLY TESTED**  
+> **Status**: ✅ **PRODUCTION READY & FULLY DEPLOYED**  
 > **Network**: Bittensor Subnet 36 (Autoppia Web Agents)  
 > **Worker**: Live on Render (`https://autoppia-miner.onrender.com`)  
 > **Tests**: 52/52 passing ✅  
-> **Last Verified**: November 13, 2025
+> **Deployment**: Active and verified ✅  
+> **Last Updated**: November 13, 2025
 
 An Autoppia AI Worker for mining and processing web agent tasks on Bittensor Subnet 36. Optimized with AI-powered task solving, intelligent classification, and real-time metrics. **Ready for validator testing.**
 
