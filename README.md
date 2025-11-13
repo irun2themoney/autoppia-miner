@@ -121,10 +121,14 @@ pytest tests/test_worker.py::TestAutoppiaWorker::test_mine_task -v
 - 📊 **Metrics Tracking**: Real-time request counters and success/error rates
 - 🔐 **Security**: Configurable CORS, comprehensive input validation
 - 🐛 **Bug Fixes**: 10+ fixes including critical error handling improvements
-- 📝 **Documentation**: 3 new detailed guides explaining all changes
-- ✅ **Testing**: All 7 unit tests passing with enhanced handlers
+- ⚡ **Performance**: Pre-warmup strategy for 4-6x faster responses
+- ✅ **Testing**: All 7 unit tests passing (A-1 rating)
 
-For complete details: See [FIXES_APPLIED.md](./FIXES_APPLIED.md) and [YOLO_REFACTOR_SUMMARY.md](./YOLO_REFACTOR_SUMMARY.md)
+**🎯 Subnet 36 Emissions Start**: Thursday, November 13 @ **3:30 AM** (UTC)
+- Pre-warmup script ready: `bash warmup_for_emissions.sh`
+- Run at 3:00 AM for optimal first-request performance
+
+For complete details: See [EMISSIONS_STRATEGY.md](./EMISSIONS_STRATEGY.md), [FIXES_APPLIED.md](./FIXES_APPLIED.md), and [YOLO_REFACTOR_SUMMARY.md](./YOLO_REFACTOR_SUMMARY.md)
 
 ## 🌐 Currently Running
 
