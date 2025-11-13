@@ -234,6 +234,14 @@ See [MINER_SETUP.md](./MINER_SETUP.md) for complete setup instructions.
 - **Miner Status**: `btcli wallet overview --netuid 36`
 - **HTTP API**: `./monitor_once.sh` or `./monitor_loop.sh`
 - **Deployment**: `./check_deployment.sh`
+- **Leaderboard**: [InfiniteWeb Arena](https://infinitewebarena.autoppia.com/) - Track your position and performance
+
+### Recent Updates
+
+- ✅ Updated to latest miner code (Nov 13, 2025)
+- ✅ IWAP timeout increased (30s → 90s) for better reliability
+- ✅ Platform launch: InfiniteWeb Arena is live
+- ✅ Leaderboard tracking available
 
 ## 📄 License
 
