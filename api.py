@@ -718,7 +718,8 @@ Example: [
         elapsed = time.time() - start_time
         return JSONResponse(
             content={
-                "task_id": task_id,
+                "id": task_id,  # Use 'id' to match InfiniteWeb Arena's expected format
+                "task_id": task_id,  # Keep for backward compatibility
                 "success": False,
                 "error": str(e),
                 "actions": [],
