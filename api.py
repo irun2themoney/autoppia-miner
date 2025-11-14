@@ -27,7 +27,7 @@ from dotenv import load_dotenv
 from worker import AutoppiaWorker, WorkerRequest
 
 try:
-load_dotenv()
+    load_dotenv()
 except Exception:
     pass  # Continue even if .env file can't be loaded
 
