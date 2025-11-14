@@ -392,7 +392,12 @@ async def solve_task(request_data: Dict[str, Any]):
                 "web_agent_id": request_data.get("id", "unknown"),
                 "recording": "",
             },
-            status_code=500
+            status_code=500,
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+                "Access-Control-Allow-Headers": "*",
+            }
         )
 
 
