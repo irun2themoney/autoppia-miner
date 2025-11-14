@@ -1,766 +1,599 @@
 """
-API server for Autoppia Worker
-This provides an HTTP API interface for the worker to integrate with Autoppia infrastructure
+Optimized API server for IWA (Infinite Web Arena)
+Lightweight, fast, and effective - optimized for competitive performance
 
-Enhanced with:
-- Task Classification Engine (categorizes IWA tasks)
-- Smart Action Generation (specialized templates per task type)
-- Request Caching (reduces AI calls for similar tasks)
-- Retry Logic (exponential backoff on failures)
+Key optimizations:
+- Minimal logging (errors only)
+- No external AI dependencies
+- Streamlined task classification
+- Optimized action templates
+- Fast response times (<50ms typical)
 """
 
 import json
 import os
 import re
-import hashlib
+import sys
 import time
-import asyncio
-from typing import Dict, Any, Optional, List
-from datetime import datetime, timezone
+from typing import Dict, Any, List
 from collections import defaultdict
 from threading import Lock
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-from loguru import logger
-from dotenv import load_dotenv
-from worker import AutoppiaWorker, WorkerRequest
 
-try:
-    load_dotenv()
-except Exception:
-    pass  # Continue even if .env file can't be loaded
+# Minimal logging - use print for errors only (no external dependency needed)
+def log_error(msg):
+    print(f"ERROR: {msg}", file=sys.stderr)
 
-# Initialize FastAPI app
-app = FastAPI(
-    title="Autoppia Miner Worker",
-    description="Autoppia AI Worker for mining and processing tasks",
-    version="0.1.0"
-)
-cors_origins = os.getenv("CORS_ORIGINS", "").split(",") if os.getenv("CORS_ORIGINS") else ["*"]
-cors_origins = [origin.strip() for origin in cors_origins if origin.strip()]
+def log_warning(msg):
+    pass  # Suppress warnings for speed
 
+app = FastAPI(title="IWA Miner", version="2.0.0")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=cors_origins,
-    allow_credentials=True,
+    allow_origins=["*"],
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
 )
 
-# Add request logging middleware to catch all requests
-@app.middleware("http")
-async def log_requests(request, call_next):
-    """Log all incoming requests for debugging"""
-    import time
-    start_time = time.time()
-    
-    # Log request details
-    logger.info(f"🌐 REQUEST: {request.method} {request.url.path} from {request.client.host if request.client else 'unknown'}")
-    
-    # Read request body if it's a POST request
-    if request.method == "POST":
-        body = await request.body()
-        if body:
-            try:
-                import json
-                body_json = json.loads(body)
-                logger.info(f"📦 REQUEST BODY: {json.dumps(body_json, indent=2)[:500]}")
-            except:
-                logger.info(f"📦 REQUEST BODY (raw): {body[:200]}")
-    
-    response = await call_next(request)
-    
-    # Log response details
-    process_time = time.time() - start_time
-    logger.info(f"📤 RESPONSE: {request.method} {request.url.path} -> {response.status_code} ({process_time*1000:.0f}ms)")
-    
-    return response
-
-# Initialize worker (deferred to startup to handle initialization errors gracefully)
-worker = None
-
-
-@app.on_event("startup")
-async def startup_event():
-    """Initialize worker on startup"""
-    global worker
-    try:
-        # Create logs directory if it doesn't exist
-        os.makedirs("logs", exist_ok=True)
-        worker = AutoppiaWorker()
-        logger.info("✅ Worker initialized successfully on startup")
-    except Exception as e:
-        logger.error(f"❌ Failed to initialize worker on startup: {str(e)}")
-        logger.error("Application will run in degraded mode")
-        # Don't raise - allow app to start but return errors on worker-dependent endpoints
-
-
-def get_worker():
-    """Get worker instance with safety check"""
-    if worker is None:
-        raise HTTPException(status_code=503, detail="Worker not initialized. Please try again.")
-    return worker
-
-# Request tracking for metrics
-class RequestMetrics:
+# Minimal metrics
+class Metrics:
     def __init__(self):
-        self.total_requests = 0
-        self.total_errors = 0
-        self.total_success = 0
-        self.by_type = defaultdict(int)  # Track by task type
-        self.by_type_success = defaultdict(int)
+        self.total = 0
+        self.success = 0
+        self.by_type = defaultdict(int)
+        self.lock = Lock()
     
-metrics = RequestMetrics()
+    def record(self, task_type: str, success: bool):
+        with self.lock:
+            self.total += 1
+            if success:
+                self.success += 1
+                self.by_type[task_type] += 1
+
+metrics = Metrics()
 
 
-# Task Classification Engine
+def extract_keywords(prompt: str) -> Dict[str, Any]:
+    """Extract keywords and context from prompt for smart selector generation"""
+    prompt_lower = prompt.lower()
+    keywords = {
+        "action_words": [],
+        "target_words": [],
+        "form_fields": [],
+        "button_types": []
+    }
+    
+    # Extract action words
+    action_patterns = {
+        "login": ["login", "sign in", "log in", "authenticate"],
+        "logout": ["logout", "sign out", "log out"],
+        "submit": ["submit", "send", "post", "confirm"],
+        "search": ["search", "find", "look for", "query"],
+        "click": ["click", "select", "choose", "pick"],
+        "fill": ["fill", "enter", "type", "input"],
+        "navigate": ["go to", "visit", "open", "navigate"],
+        "add": ["add", "create", "new"],
+        "remove": ["remove", "delete", "remove"],
+        "checkout": ["checkout", "purchase", "buy", "pay"],
+        "switch": ["switch", "toggle", "change", "set"],
+        "view": ["view", "show", "display"],
+    }
+    
+    for action_type, patterns in action_patterns.items():
+        if any(pattern in prompt_lower for pattern in patterns):
+            keywords["action_words"].append(action_type)
+    
+    # Extract target words (what to interact with)
+    target_patterns = {
+        "button": ["button", "btn", "click"],
+        "link": ["link", "href", "anchor"],
+        "input": ["input", "field", "textbox", "textarea"],
+        "form": ["form", "submit"],
+        "search": ["search", "query", "find"],
+        "cart": ["cart", "basket", "shopping"],
+        "menu": ["menu", "nav", "navigation"],
+        "dropdown": ["dropdown", "select", "menu"],
+    }
+    
+    for target_type, patterns in target_patterns.items():
+        if any(pattern in prompt_lower for pattern in patterns):
+            keywords["target_words"].append(target_type)
+    
+    # Extract form field types
+    field_patterns = {
+        "email": ["email", "e-mail", "mail"],
+        "password": ["password", "pwd", "pass"],
+        "name": ["name", "username", "user name"],
+        "phone": ["phone", "telephone", "mobile"],
+        "address": ["address", "location"],
+        "date": ["date", "time", "when"],
+        "country": ["country", "nation"],
+    }
+    
+    for field_type, patterns in field_patterns.items():
+        if any(pattern in prompt_lower for pattern in patterns):
+            keywords["form_fields"].append(field_type)
+    
+    # Extract button types
+    button_patterns = {
+        "submit": ["submit", "send", "post"],
+        "login": ["login", "sign in"],
+        "register": ["register", "sign up", "create account"],
+        "cancel": ["cancel", "close"],
+        "delete": ["delete", "remove"],
+        "add": ["add", "create", "new"],
+    }
+    
+    for btn_type, patterns in button_patterns.items():
+        if any(pattern in prompt_lower for pattern in patterns):
+            keywords["button_types"].append(btn_type)
+    
+    return keywords
+
+
+def generate_smart_selector(prompt: str, task_type: str, action_type: str = "click") -> Dict[str, Any]:
+    """Generate smart selector using official IWA selector attributes"""
+    keywords = extract_keywords(prompt)
+    prompt_lower = prompt.lower()
+    
+    # For text-based selectors (buttons, links)
+    if action_type == "click":
+        # Extract key words from prompt for better matching
+        prompt_words = prompt_lower.split()
+        key_words = []
+        
+        # Find important words (not common words)
+        common_words = {"the", "a", "an", "to", "in", "on", "at", "for", "of", "with", "click", "button", "link"}
+        for word in prompt_words:
+            if word not in common_words and len(word) > 2:
+                key_words.append(word)
+        
+        # Try tagContainsSelector with extracted words
+        if key_words:
+            # Prioritize important words (month, week, day, etc.)
+            priority_words = ["month", "week", "day", "year", "view", "login", "submit", "search"]
+            for word in key_words:
+                if word in priority_words:
+                    text_value = word.title()
+                    return {
+                        "type": "tagContainsSelector",
+                        "value": text_value,
+                        "case_sensitive": False
+                    }
+            # Use the most relevant word (usually the last meaningful word)
+            text_value = key_words[-1].title() if key_words else "Button"
+            return {
+                "type": "tagContainsSelector",
+                "value": text_value,
+                "case_sensitive": False
+            }
+        
+        # Fallback to action words
+        if keywords["action_words"]:
+            action_word = keywords["action_words"][0]
+            # Capitalize first letter for text matching
+            text_value = action_word.replace("_", " ").title()
+            return {
+                "type": "tagContainsSelector",
+                "value": text_value,
+                "case_sensitive": False
+            }
+        
+        # Try specific button types
+        if keywords["button_types"]:
+            btn_type = keywords["button_types"][0].replace("_", "-")
+            # Try data-testid first (most specific)
+            return {
+                "type": "attributeValueSelector",
+                "attribute": "data-testid",
+                "value": f"{btn_type}-button",
+                "case_sensitive": False
+            }
+        
+        # Try id attribute
+        if any(word in prompt_lower for word in ["button", "btn", "link"]):
+            # Extract key word from prompt
+            words = prompt_lower.split()
+            for word in words:
+                if len(word) > 3 and word not in ["the", "click", "button", "link"]:
+                    return {
+                        "type": "attributeValueSelector",
+                        "attribute": "id",
+                        "value": f"{word}-button",
+                        "case_sensitive": False
+                    }
+    
+    # For input fields
+    elif action_type == "type":
+        if keywords["form_fields"]:
+            field_type = keywords["form_fields"][0]
+            # Try name attribute first (most common for forms)
+            return {
+                "type": "attributeValueSelector",
+                "attribute": "name",
+                "value": field_type,
+                "case_sensitive": False
+            }
+        
+        # Try type attribute
+        if "email" in prompt_lower:
+            return {
+                "type": "attributeValueSelector",
+                "attribute": "type",
+                "value": "email",
+                "case_sensitive": False
+            }
+        elif "password" in prompt_lower:
+            return {
+                "type": "attributeValueSelector",
+                "attribute": "type",
+                "value": "password",
+                "case_sensitive": False
+            }
+    
+    # For search inputs
+    if "search" in prompt_lower or task_type == "search":
+        return {
+            "type": "attributeValueSelector",
+            "attribute": "type",
+            "value": "search",
+            "case_sensitive": False
+        }
+    
+    # Fallback: Use CSS selector with custom attribute
+    if task_type == "click":
+        return {
+            "type": "attributeValueSelector",
+            "attribute": "custom",
+            "value": "button:first-of-type, [role='button'], .btn, button",
+            "case_sensitive": False
+        }
+    elif task_type == "form_fill":
+        return {
+            "type": "attributeValueSelector",
+            "attribute": "custom",
+            "value": "input:first-of-type, input[type='text'], textarea:first-of-type",
+            "case_sensitive": False
+        }
+    else:
+        return {
+            "type": "attributeValueSelector",
+            "attribute": "custom",
+            "value": "button:first-of-type",
+            "case_sensitive": False
+        }
+
+
+def extract_text_from_prompt(prompt: str, task_type: str) -> str:
+    """Extract relevant text to type based on prompt context"""
+    prompt_lower = prompt.lower()
+    
+    # For form fields, extract example values
+    if "email" in prompt_lower:
+        return "test@example.com"
+    elif "password" in prompt_lower:
+        return "password123"
+    elif "name" in prompt_lower or "username" in prompt_lower:
+        return "testuser"
+    elif "phone" in prompt_lower:
+        return "1234567890"
+    elif "address" in prompt_lower:
+        return "123 Main St"
+    elif "date" in prompt_lower:
+        return "2024-01-01"
+    elif task_type == "search":
+        # Extract search query from prompt
+        words = prompt.split()
+        search_words = []
+        skip_next = False
+        for i, word in enumerate(words):
+            if skip_next:
+                skip_next = False
+                continue
+            if word.lower() in ["search", "find", "look", "for", "query"]:
+                if i + 1 < len(words):
+                    search_words.append(words[i + 1])
+                    skip_next = True
+            elif word.lower() not in ["click", "button", "the", "a", "an"]:
+                search_words.append(word)
+        if search_words:
+            return " ".join(search_words[:3])  # Max 3 words
+        return "test query"
+    
+    return "test"
+
+
+def convert_to_iwa_action(action: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Convert action from internal format to IWA BaseAction format.
+    
+    Maps:
+    - action_type: "click" -> type: "ClickAction"
+    - selector: CSS string -> selector: IWA Selector object
+    - duration -> time_seconds (for WaitAction)
+    - direction/amount -> up/down/left/right/value (for ScrollAction)
+    """
+    action_type = action.get("action_type", "")
+    
+    # Map action types to IWA format
+    type_map = {
+        "click": "ClickAction",
+        "type": "TypeAction",
+        "wait": "WaitAction",
+        "navigate": "NavigateAction",
+        "screenshot": "ScreenshotAction",
+        "scroll": "ScrollAction",
+        "key_press": "SendKeysIWAAction",
+    }
+    
+    iwa_type = type_map.get(action_type, "ClickAction")
+    result: Dict[str, Any] = {"type": iwa_type}
+    
+    # Handle selector conversion - support both Dict (smart selector) and string (CSS fallback)
+    if "selector" in action and action["selector"]:
+        if isinstance(action["selector"], dict):
+            # Already in IWA format (from smart selector)
+            result["selector"] = action["selector"]
+        else:
+            # CSS string - convert to IWA format
+            result["selector"] = {
+                "type": "attributeValueSelector",
+                "attribute": "custom",
+                "value": action["selector"],
+                "case_sensitive": False
+            }
+    
+    # Handle action-specific field mappings
+    if iwa_type == "WaitAction":
+        # Convert "duration" to "time_seconds"
+        if "duration" in action:
+            result["time_seconds"] = action["duration"]
+        elif "time_seconds" in action:
+            result["time_seconds"] = action["time_seconds"]
+    
+    elif iwa_type == "TypeAction":
+        # Copy text field
+        if "text" in action:
+            result["text"] = action["text"]
+        elif "value" in action:
+            result["text"] = action["value"]
+    
+    elif iwa_type == "NavigateAction":
+        # Copy URL
+        if "url" in action:
+            result["url"] = action["url"]
+    
+    elif iwa_type == "ScrollAction":
+        # Convert direction/amount to up/down/left/right/value
+        direction = action.get("direction", "down").lower()
+        amount = action.get("amount", None)
+        
+        if direction == "down":
+            result["down"] = True
+        elif direction == "up":
+            result["up"] = True
+        elif direction == "left":
+            result["left"] = True
+        elif direction == "right":
+            result["right"] = True
+        
+        if amount is not None:
+            result["value"] = amount
+    
+    elif iwa_type == "SendKeysIWAAction":
+        # Convert "key" to "keys"
+        if "key" in action:
+            result["keys"] = action["key"]
+        elif "keys" in action:
+            result["keys"] = action["keys"]
+    
+    elif iwa_type == "ClickAction":
+        # Copy x, y coordinates if present
+        if "x" in action:
+            result["x"] = action["x"]
+        if "y" in action:
+            result["y"] = action["y"]
+    
+    elif iwa_type == "ScreenshotAction":
+        # Copy optional fields
+        if "file_path" in action:
+            result["file_path"] = action["file_path"]
+        if "full_page" in action:
+            result["full_page"] = action["full_page"]
+    
+    return result
+
+
 class TaskClassifier:
-    """
-    Intelligent task classifier for IWA tasks
-    Categorizes tasks and provides specialized action generation
-    """
+    """Fast task classifier optimized for IWA patterns"""
     
-    # Task type patterns (enhanced for Dynamic Zero - handles D1-D4 variations)
+    # Optimized patterns - most common IWA task types first
     PATTERNS = {
-        "search": r"(search|find|look for|query|browse|filter|show details for|where|contains|equals|not equal|greater than|less than)",
-        "form_fill": r"(fill|submit|complete|form|input|register|authenticate|login|log in|sign in|sign up|update|edit|add|create|send|enter|type|book|reserve|select|choose|dropdown|guests|people|date|time|country|phone|name|email|password)",
-        "price_compare": r"(compare|price|cost|cheaper|expensive|discount|save|rating|duration|released|genre|director)",
-        "click": r"(click|select|choose|pick|tap|delete|remove|open|close|finalize|book|reserve|confirm|submit|post|comment)",
-        "extract": r"(extract|get|retrieve|copy|collect|scrape|show|display|view|details|information)",
-        "navigate": r"(go to|visit|open|access|navigate|contact page|scroll through|section titled)",
-        "scroll": r"(scroll|down|up|bottom|top|view more|direction|while ensuring)",
-        "checkout": r"(checkout|purchase|buy|add to cart|pay|logout|log out|sign out|finalize|complete purchase)"
+        "click": r"\b(click|select|choose|pick|tap|delete|remove|open|close|finalize|book|reserve|confirm|submit|post|comment|mark|flag|archive|star|favorite|switch|toggle|view|change|set)\b",
+        "form_fill": r"\b(fill|submit|complete|form|input|register|authenticate|login|log in|sign in|sign up|update|edit|add|create|send|enter|type|book|reserve|select|choose|dropdown|guests|people|date|time|country|phone|name|email|password|address|label)\b",
+        "search": r"\b(search|find|look for|query|browse|filter|show details for|where|contains|equals|not equal|greater than|less than)\b",
+        "navigate": r"\b(go to|visit|open|access|navigate|contact page|scroll through|section titled)\b",
+        "extract": r"\b(extract|get|retrieve|copy|collect|scrape|show|display|view|details|information)\b",
+        "checkout": r"\b(checkout|purchase|buy|add to cart|pay|logout|log out|sign out|finalize|complete purchase)\b",
     }
     
     @staticmethod
-    def classify_task(prompt: str) -> str:
-        """Classify task based on prompt keywords"""
+    def classify(prompt: str) -> str:
+        """Fast classification using regex"""
         prompt_lower = prompt.lower()
+        scores = {task_type: len(re.findall(pattern, prompt_lower)) 
+                 for task_type, pattern in TaskClassifier.PATTERNS.items()}
         
-        # Score each category
-        scores = {}
-        for task_type, pattern in TaskClassifier.PATTERNS.items():
-            matches = len(re.findall(pattern, prompt_lower))
-            scores[task_type] = matches
-        
-        # Return highest scoring category
-        if max(scores.values()) > 0:
+        max_score = max(scores.values()) if scores.values() else 0
+        if max_score > 0:
             return max(scores, key=scores.get)
         return "generic"
     
     @staticmethod
-    def generate_specialized_actions(task_type: str, url: str, prompt: str) -> List[Dict]:
-        """Generate specialized action sequences based on task type"""
-        
+    def generate_actions(task_type: str, url: str, prompt: str) -> List[Dict]:
+        """Generate smart, context-aware action sequences - optimized for IWA"""
         actions = []
         
-        # Navigate to URL first (if provided)
+        # Navigate first if URL provided
         if url and url.strip():
-            actions.append({
-                "action_type": "navigate",
-                "url": url
-            })
-            actions.append({
-                "action_type": "wait",
-                "duration": 1.5
-            })
-        else:
-            # If no URL, start with screenshot to see current state
-            actions.append({
-                "action_type": "screenshot"
-            })
-            actions.append({
-                "action_type": "wait",
-                "duration": 1.0
-            })
+            actions.append({"action_type": "navigate", "url": url})
+            # Adaptive wait based on task complexity
+            wait_time = 1.2 if task_type in ["form_fill", "checkout"] else 0.8
+            actions.append({"action_type": "wait", "duration": wait_time})
         
-        # Task-specific action templates
-        if task_type == "search":
-            # Dynamic Zero optimized: Handle text variations (D3), dynamic layouts (D1), real-time data (D2)
+        # Smart, context-aware action generation
+        if task_type == "click":
+            # Click tasks: smart selector + minimal actions
             actions.extend([
-                {"action_type": "screenshot"},  # Initial state
-                {"action_type": "wait", "duration": 0.5},
-                # Multiple fallback selectors for dynamic HTML structures (D1)
-                {"action_type": "click", "selector": "input[type='search'], input[type='text'][placeholder*='search' i], input[placeholder*='Search' i], .search-box, .search-input, [class*='search'], input[name*='search'], input[id*='search']"},
-                {"action_type": "wait", "duration": 0.3},
-                {"action_type": "screenshot"},  # Verify input field is focused
-                # Extract search query from prompt if possible, otherwise use generic
-                {"action_type": "type", "text": "search query"},
-                {"action_type": "wait", "duration": 0.2},
-                {"action_type": "key_press", "key": "Enter"},
-                {"action_type": "wait", "duration": 2},  # Wait for real-time data to load (D2)
-                {"action_type": "screenshot"},  # Verify search results
-                {"action_type": "wait", "duration": 0.5},  # Extra wait for dynamic content
-                {"action_type": "screenshot"}  # Final state
+                {"action_type": "screenshot"},
+                {"action_type": "wait", "duration": 0.2},  # Faster wait
+                {"action_type": "click", "selector": generate_smart_selector(prompt, task_type, "click")},
+                {"action_type": "wait", "duration": 0.8},  # Shorter wait for clicks
+                {"action_type": "screenshot"}
             ])
         
         elif task_type == "form_fill":
-            # Dynamic Zero optimized: Handle label variations (D3), dynamic forms (D1), pop-ups (D4)
-            actions.extend([
-                {"action_type": "screenshot"},  # Initial form state
-                {"action_type": "wait", "duration": 0.5},
-                # Multiple fallback selectors for dynamic form fields (D1, D3)
-                {"action_type": "click", "selector": "input:first-of-type, input[type='text'], input[type='email'], input[type='password'], input:not([type='hidden']), textarea:first-of-type"},
-                {"action_type": "wait", "duration": 0.3},
-                {"action_type": "screenshot"},  # Verify field is focused
-                {"action_type": "type", "text": "input_value"},
-                {"action_type": "wait", "duration": 0.3},
-                {"action_type": "screenshot"},  # Verify text was entered
-                # Multiple fallback selectors for submit button (D1, D3)
-                {"action_type": "click", "selector": "button[type='submit'], button[type='button'], .submit-btn, .submit, [class*='submit'], button:contains('Submit'), button:contains('Send'), [role='button'][aria-label*='submit' i]"},
-                {"action_type": "wait", "duration": 2},  # Wait for form submission
-                {"action_type": "screenshot"},  # Verify submission result
-                # Check for pop-ups or modals (D4)
-                {"action_type": "wait", "duration": 1},
-                {"action_type": "screenshot"}  # Final verification
-            ])
-        
-        elif task_type == "price_compare":
+            # Form fill: smart field detection + context-aware text
+            text_to_type = extract_text_from_prompt(prompt, task_type)
             actions.extend([
                 {"action_type": "screenshot"},
-                {"action_type": "scroll", "direction": "down", "amount": 3},
-                {"action_type": "wait", "duration": 1},
-                {"action_type": "screenshot"},
-                {"action_type": "scroll", "direction": "down", "amount": 3},
-                {"action_type": "wait", "duration": 1},
+                {"action_type": "wait", "duration": 0.3},
+                {"action_type": "click", "selector": generate_smart_selector(prompt, task_type, "type")},
+                {"action_type": "wait", "duration": 0.15},
+                {"action_type": "type", "text": text_to_type},
+                {"action_type": "wait", "duration": 0.15},
+                {"action_type": "click", "selector": generate_smart_selector(prompt, "submit", "click")},
+                {"action_type": "wait", "duration": 1.2},  # Longer for form submission
                 {"action_type": "screenshot"}
             ])
         
-        elif task_type == "click":
-            # Dynamic Zero D1-D4 optimized: Multiple fallback selectors, pop-up handling, verification screenshots
+        elif task_type == "search":
+            # Search: smart search input + extracted query
+            search_query = extract_text_from_prompt(prompt, task_type)
             actions.extend([
-                {"action_type": "screenshot"},  # Initial state
-                {"action_type": "wait", "duration": 0.5},
-                # Try multiple selector strategies for dynamic HTML (D1)
-                {"action_type": "click", "selector": "button:first-of-type, a.cta, [role='button'], button[type='button'], .btn, [class*='button'], [class*='btn']"},
-                {"action_type": "wait", "duration": 1},
-                {"action_type": "screenshot"},  # Verify click result
-                # Check for pop-ups (D4) - wait a bit longer for dynamic content
-                {"action_type": "wait", "duration": 0.5},
-                {"action_type": "screenshot"}  # Final verification
+                {"action_type": "screenshot"},
+                {"action_type": "wait", "duration": 0.2},
+                {"action_type": "click", "selector": generate_smart_selector(prompt, task_type, "type")},
+                {"action_type": "wait", "duration": 0.15},
+                {"action_type": "type", "text": search_query},
+                {"action_type": "wait", "duration": 0.15},
+                {"action_type": "key_press", "key": "Enter"},
+                {"action_type": "wait", "duration": 1.0},  # Wait for results
+                {"action_type": "screenshot"}
             ])
         
         elif task_type == "navigate":
-            # Dynamic Zero optimized: Handle dynamic layouts (D1), pop-ups (D4)
+            # Navigate: minimal actions
             if url and url.strip():
                 actions.extend([
-                    {"action_type": "navigate", "url": url},
-                    {"action_type": "wait", "duration": 2},  # Wait for page load
-                    {"action_type": "screenshot"},  # Initial page state
-                    {"action_type": "wait", "duration": 0.5},  # Wait for dynamic content (D2)
-                    {"action_type": "screenshot"},  # Verify page loaded
-                    # Check for pop-ups (D4)
-                    {"action_type": "wait", "duration": 1},
-                    {"action_type": "screenshot"}  # Final verification
+                    {"action_type": "wait", "duration": 0.8},
+                    {"action_type": "screenshot"}
                 ])
             else:
-                # If no URL provided, just take screenshot
-                actions.extend([
-                    {"action_type": "screenshot"},
-                    {"action_type": "wait", "duration": 1},
-                    {"action_type": "screenshot"}  # Second screenshot for verification
-                ])
+                actions.append({"action_type": "screenshot"})
         
         elif task_type == "extract":
+            # Extract: scroll to reveal content
             actions.extend([
                 {"action_type": "screenshot"},
-                {"action_type": "scroll", "direction": "down", "amount": 2},
-                {"action_type": "wait", "duration": 1},
-                {"action_type": "screenshot"},
-                {"action_type": "scroll", "direction": "down", "amount": 2},
-                {"action_type": "wait", "duration": 1},
-                {"action_type": "screenshot"}
-            ])
-        
-        elif task_type == "scroll":
-            actions.extend([
-                {"action_type": "screenshot"},
-                {"action_type": "scroll", "direction": "down", "amount": 5},
-                {"action_type": "wait", "duration": 1.5},
-                {"action_type": "screenshot"},
-                {"action_type": "scroll", "direction": "down", "amount": 5},
-                {"action_type": "wait", "duration": 1.5},
+                {"action_type": "scroll", "direction": "down", "amount": 3},  # More scroll
+                {"action_type": "wait", "duration": 0.4},
                 {"action_type": "screenshot"}
             ])
         
         elif task_type == "checkout":
+            # Checkout: smart cart/checkout detection
             actions.extend([
                 {"action_type": "screenshot"},
-                {"action_type": "click", "selector": "button[class*='cart'], .add-to-cart, .checkout"},
-                {"action_type": "wait", "duration": 1.5},
-                {"action_type": "screenshot"},
-                {"action_type": "scroll", "direction": "down", "amount": 2},
-                {"action_type": "wait", "duration": 1},
+                {"action_type": "click", "selector": generate_smart_selector(prompt, task_type, "click")},
+                {"action_type": "wait", "duration": 1.2},  # Longer for checkout
                 {"action_type": "screenshot"}
             ])
         
         else:  # generic
+            # Generic: minimal exploration
             actions.extend([
                 {"action_type": "screenshot"},
-                {"action_type": "wait", "duration": 1},
+                {"action_type": "wait", "duration": 0.3},
                 {"action_type": "scroll", "direction": "down", "amount": 2},
-                {"action_type": "wait", "duration": 1},
+                {"action_type": "wait", "duration": 0.3},
                 {"action_type": "screenshot"}
             ])
         
         return actions
 
 
-# Request caching to reduce AI calls
-class RequestCache:
-    """Simple in-memory cache for task solutions with thread-safety"""
-    
-    def __init__(self, max_size: int = 100, ttl: int = 3600):
-        self.cache = {}
-        self.max_size = max_size
-        self.ttl = ttl
-        self.lock = Lock()  # Thread-safe cache access
-    
-    def get_key(self, prompt: str, url: str) -> str:
-        """Generate cache key from prompt and URL"""
-        combined = f"{prompt}:{url}"
-        return hashlib.md5(combined.encode()).hexdigest()
-    
-    def get(self, prompt: str, url: str) -> Optional[List[Dict]]:
-        """Retrieve cached actions (thread-safe)"""
-        key = self.get_key(prompt, url)
-        with self.lock:
-            if key in self.cache:
-                cached, timestamp = self.cache[key]
-                if time.time() - timestamp < self.ttl:
-                    logger.info(f"Cache hit for task")
-                    return cached
-                else:
-                    del self.cache[key]
-        return None
-    
-    def set(self, prompt: str, url: str, actions: List[Dict]) -> None:
-        """Store actions in cache (thread-safe)"""
-        with self.lock:
-            if len(self.cache) >= self.max_size:
-                # Remove oldest entry
-                oldest_key = min(self.cache.keys(), key=lambda k: self.cache[k][1])
-                del self.cache[oldest_key]
-            
-            key = self.get_key(prompt, url)
-            self.cache[key] = (actions, time.time())
-        logger.debug(f"Cached actions for task")
-
-
-cache = RequestCache()
-
-
-# Retry logic with exponential backoff
-class RetryHandler:
-    """Handle retries with exponential backoff"""
-    
-    @staticmethod
-    async def call_with_retry(
-        coro_func,
-        max_retries: int = 3,
-        base_delay: float = 0.5
-    ):
-        """Execute async function with retry logic"""
-        import asyncio
-        for attempt in range(max_retries):
-            try:
-                return await coro_func()
-            except Exception as e:
-                if attempt == max_retries - 1:
-                    raise
-                delay = base_delay * (2 ** attempt)
-                logger.warning(f"Attempt {attempt + 1} failed, retrying in {delay}s: {str(e)}")
-                await asyncio.sleep(delay)
-
-
-
 @app.get("/")
 async def root():
-    """Root endpoint"""
-    return {
-        "service": "autoppia-miner",
-        "version": "0.1.0",
-        "status": "running"
-    }
+    return {"service": "iwa-miner", "version": "2.0.0", "status": "running"}
 
 
 @app.get("/health")
-async def health_check():
-    """Health check endpoint for Autoppia infrastructure"""
-    try:
-        w = get_worker()
-        health = await w.health_check()
-        return JSONResponse(content=health)
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Health check failed: {str(e)}")
-        raise HTTPException(status_code=503, detail="Service unhealthy")
-
-
-@app.get("/metadata")
-async def get_metadata():
-    """Get worker metadata"""
-    try:
-        w = get_worker()
-        metadata = w.get_metadata()
-        return JSONResponse(content=metadata)
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Failed to get metadata: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.post("/process")
-async def process_request(request_data: Dict[str, Any]):
-    """
-    Process a worker request
-    
-    Request body should contain:
-    - task: Task type (mine, process, generate)
-    - input_data: Input data for the task
-    - parameters: Optional additional parameters
-    """
-    try:
-        # Validate request
-        if "task" not in request_data:
-            raise HTTPException(status_code=400, detail="Missing 'task' field")
-        
-        # Create WorkerRequest
-        worker_request = WorkerRequest(
-            task=request_data["task"],
-            input_data=request_data.get("input_data"),
-            parameters=request_data.get("parameters")
-        )
-        
-        # Process request
-        w = get_worker()
-        response = await w.process(worker_request)
-        
-        # Return response
-        return JSONResponse(content=response.dict())
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error processing request: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-def _generate_default_actions(url: str, prompt: str) -> list:
-    """Generate default action sequence as fallback"""
-    actions = []
-    
-    if url and url.strip():
-        actions.append({
-            "action_type": "navigate",
-            "url": url
-        })
-        actions.append({
-            "action_type": "wait",
-            "duration": 2.0
-        })
-    else:
-        # If no URL, start with screenshot
-        actions.append({
-            "action_type": "screenshot"
-        })
-        actions.append({
-            "action_type": "wait",
-            "duration": 1.0
-        })
-    
-    actions.append({
-        "action_type": "screenshot"
-    })
-    
-    # Always ensure we have at least some actions
-    if len(actions) == 0:
-        actions = [
-            {"action_type": "screenshot"},
-            {"action_type": "wait", "duration": 1.0},
-            {"action_type": "screenshot"}
-        ]
-    
-    return actions
+async def health():
+    return {"status": "healthy", "version": "2.0.0"}
 
 
 @app.post("/solve_task")
 async def solve_task(request_data: Dict[str, Any]):
-    """
-    Enhanced solve_task endpoint with task classification and smart action generation
-    
-    Features:
-    - Task Classification (8 categories: search, form_fill, price_compare, etc.)
-    - Specialized Action Generation (templates per task type)
-    - Request Caching (reduces AI calls for similar tasks)
-    - Retry Logic (handles transient failures gracefully)
-    
-    Request format:
-    {
-        "id": "task_id",
-        "prompt": "Task description",
-        "url": "https://example.com",
-        "seed": 12345,
-        "web_project_name": "project_name",
-        "specifications": {...}
-    }
-    
-    Response format:
-    {
-        "task_id": "task_id",
-        "task_type": "search|form_fill|price_compare|click|extract|checkout|navigate|scroll|generic",
-        "actions": [...],
-        "success": true,
-        "cached": false,
-        "message": "..."
-    }
-    """
-    metrics.total_requests += 1
+    """Main IWA endpoint - optimized for speed"""
     start_time = time.time()
-    
-    # Log incoming request (for debugging InfiniteWeb Arena)
-    logger.info(f"🔵 INCOMING REQUEST: {json.dumps(request_data, indent=2)[:500]}")
     
     try:
         task_id = request_data.get("id", "unknown")
         prompt = request_data.get("prompt", "")
         url = request_data.get("url", "")
         
-        logger.info(f"📥 Received task: {task_id}")
-        logger.info(f"📝 Task prompt: {prompt[:200] if prompt else '(empty)'}...")
-        logger.info(f"🌐 Task URL: {url if url else '(empty)'}")
-        logger.info(f"📦 Full request data keys: {list(request_data.keys())}")
-        
-        # Handle InfiniteWeb Arena requests that may only have URL without prompt
+        # Handle missing prompt
         if not prompt:
-            if url:
-                # Generate a generic prompt based on URL for InfiniteWeb Arena
-                prompt = f"Navigate to {url} and explore the page"
-                logger.info(f"⚠️  No prompt provided, using generated prompt: {prompt}")
-            else:
-                # No prompt and no URL - use generic fallback
-                prompt = "Generic web task"
-                logger.warning(f"⚠️  No prompt or URL provided, using generic fallback")
+            prompt = f"Navigate to {url}" if url else "Generic web task"
         
-        # Step 1: Classify the task
-        task_type = TaskClassifier.classify_task(prompt)
-        metrics.by_type[task_type] += 1
-        logger.info(f"🏷️  Classified as: {task_type}")
-        logger.info(f"📊 Task classification complete, proceeding to action generation...")
+        # Classify and generate actions (fast path)
+        task_type = TaskClassifier.classify(prompt)
+        raw_actions = TaskClassifier.generate_actions(task_type, url, prompt)
         
-        # Step 2: Check cache first (fast path)
-        cached_actions = cache.get(prompt, url)
-        if cached_actions:
-            elapsed = time.time() - start_time
-            response = {
-                "id": task_id,  # Use 'id' to match InfiniteWeb Arena's expected format
-                "task_id": task_id,  # Keep for backward compatibility
-                "task_type": task_type,
-                "actions": cached_actions,
-                "success": True,
-                "cached": True,
-                "response_time_ms": f"{elapsed*1000:.0f}",
-                "message": f"✨ Cached solution with {len(cached_actions)} actions ({elapsed*1000:.0f}ms)"
-            }
-            metrics.total_success += 1
-            metrics.by_type_success[task_type] += 1
-            logger.info(f"✅ Task {task_id} cached hit: {len(cached_actions)} actions in {elapsed*1000:.0f}ms")
-            return JSONResponse(content=response)
-        
-        # Step 3: Try specialized template first (very fast, often works)
-        logger.info(f"🔧 Generating specialized actions for task type: {task_type}")
-        template_actions = TaskClassifier.generate_specialized_actions(task_type, url, prompt)
-        logger.info(f"📋 Template generated {len(template_actions)} actions")
-        
-        # Ensure we always have actions (fallback to default if template is empty)
-        if not template_actions or len(template_actions) == 0:
-            logger.warning(f"⚠️  Template returned empty actions, using default")
-            template_actions = _generate_default_actions(url, prompt)
-            logger.info(f"📋 Default actions generated: {len(template_actions)} actions")
-        
-        # Decide: use template only or also try AI?
-        # Use template if it's a high-confidence category or if we want speed
-        use_template_only = task_type in ["search", "form_fill", "checkout", "click"]
-        
-        actions = []
-        
-        if use_template_only:
-            # Fast path: use template directly
-            logger.info(f"⚡ Using template for high-confidence task type: {task_type}")
-            actions = template_actions
-        else:
-            # Try AI for better accuracy on complex tasks
-            logger.info(f"🤖 Attempting AI generation for task type: {task_type}")
-            
-            ai_prompt = f"""You are a web automation expert. Analyze this {task_type} task and generate optimized browser actions.
-
-Task: {prompt}
-URL: {url if url else 'Not specified'}
-
-Generate actions as a JSON array. Each action should have:
-- action_type: 'navigate', 'click', 'type', 'wait', 'screenshot', 'scroll', 'select', 'hover', 'key_press'
-- Additional fields based on action type
-
-Return ONLY valid JSON array, no markdown or explanation.
-Example: [
-  {{"action_type": "navigate", "url": "https://example.com"}},
-  {{"action_type": "wait", "duration": 2}},
-  {{"action_type": "screenshot"}}
-]"""
-            
-            try:
-                # Call worker with retry logic
-                async def ai_call():
-                    gen_request = WorkerRequest(
-                        task="generate",
-                        input_data={
-                            "prompt": ai_prompt,
-                            "max_tokens": 2000,
-                            "temperature": 0.3
-                        }
-                    )
-                    w = get_worker()
-                    return await w.process(gen_request)
-                
-                gen_response = await RetryHandler.call_with_retry(ai_call, max_retries=2)
-                
-                if gen_response.success and gen_response.result:
-                    try:
-                        generated_text = gen_response.result.get("generated_text", "")
-                        provider = gen_response.result.get("provider", "")
-                        
-                        # Skip parsing if this is a placeholder response
-                        if provider == "placeholder" or "Generated response for:" in generated_text:
-                            logger.warning(f"⚠️  Placeholder response detected, using template actions")
-                            actions = template_actions
-                        # Extract JSON from response
-                        elif "[" in generated_text and "]" in generated_text:
-                            json_start = generated_text.index("[")
-                            json_end = generated_text.rindex("]") + 1
-                            json_str = generated_text[json_start:json_end]
-                            ai_actions = json.loads(json_str)
-                            
-                            # Ensure all navigate actions use the correct URL
-                            for action in ai_actions:
-                                if action.get("action_type") == "navigate" and url:
-                                    action["url"] = url
-                            
-                            logger.info(f"✅ AI generated {len(ai_actions)} actions")
-                            actions = ai_actions
-                        else:
-                            logger.warning(f"⚠️  Could not parse AI response, using template")
-                            actions = template_actions
-                    except Exception as e:
-                        logger.warning(f"⚠️  Error parsing AI actions: {str(e)}, using template")
-                        actions = template_actions
-                else:
-                    logger.warning(f"⚠️  AI generation failed, using template")
-                    actions = template_actions
-            
-            except Exception as e:
-                logger.warning(f"⚠️  AI call failed: {str(e)}, using template")
-                actions = template_actions
-        
-        # Step 4: Ensure we have actions (final safety check)
-        if not actions or len(actions) == 0:
-            logger.warning(f"⚠️  No actions generated, using default fallback")
-            actions = _generate_default_actions(url, prompt)
-            logger.info(f"📋 Final fallback generated: {len(actions)} actions")
-        
-        # Final validation - this should NEVER be empty
-        if not actions or len(actions) == 0:
-            logger.error(f"❌ CRITICAL: Still no actions after all fallbacks! Creating emergency actions.")
-            actions = [
-                {"action_type": "screenshot"},
+        # Ensure we have actions
+        if not raw_actions:
+            raw_actions = [
+                {"action_type": "navigate", "url": url} if url else {"action_type": "screenshot"},
                 {"action_type": "wait", "duration": 1.0},
                 {"action_type": "screenshot"}
             ]
         
-        # Step 5: Cache the successful actions
-        cache.set(prompt, url, actions)
-        
-        # Final validation - ensure actions is a proper list
-        if not isinstance(actions, list):
-            logger.error(f"❌ CRITICAL: actions is not a list! Type: {type(actions)}, Value: {actions}")
-            actions = [
-                {"action_type": "screenshot"},
-                {"action_type": "wait", "duration": 1.0},
-                {"action_type": "screenshot"}
-            ]
-        
-        # Ensure all actions are dictionaries
-        validated_actions = []
-        for i, action in enumerate(actions):
-            if isinstance(action, dict):
-                validated_actions.append(action)
-            else:
-                logger.warning(f"⚠️  Action {i} is not a dict: {type(action)} - {action}")
-        
-        if len(validated_actions) == 0:
-            logger.error(f"❌ CRITICAL: All actions were invalid! Creating emergency actions.")
-            validated_actions = [
-                {"action_type": "screenshot"},
-                {"action_type": "wait", "duration": 1.0},
-                {"action_type": "screenshot"}
-            ]
-        
-        actions = validated_actions
+        # Convert actions to IWA format
+        iwa_actions = [convert_to_iwa_action(action) for action in raw_actions]
         
         elapsed = time.time() - start_time
-        # InfiniteWeb Arena expects 'id' field (not 'task_id') based on their request structure
-        response = {
-            "id": task_id,  # Use 'id' to match InfiniteWeb Arena's expected format
-            "task_id": task_id,  # Keep for backward compatibility
-            "task_type": task_type,
-            "actions": actions,  # Use validated actions
-            "success": True,
-            "cached": False,
-            "response_time_ms": f"{elapsed*1000:.0f}",
-            "message": f"✅ Task processed successfully with {len(actions)} actions ({elapsed*1000:.0f}ms)"
-        }
+        metrics.record(task_type, True)
         
-        # Log the actual response being sent
-        logger.info(f"✅ Task {task_id} completed: {len(actions)} actions in {elapsed*1000:.0f}ms [type: {task_type}]")
-        logger.info(f"📤 Returning response with {len(actions)} actions")
-        logger.info(f"🔵 OUTGOING RESPONSE (FULL): {json.dumps(response, indent=2)}")
-        logger.info(f"🔵 ACTIONS ARRAY: {json.dumps(actions, indent=2)}")
-        logger.debug(f"📤 Response actions preview: {[a.get('action_type', 'unknown') for a in actions[:3]]}...")
-        
-        metrics.total_success += 1
-        metrics.by_type_success[task_type] += 1
-        
-        # Log response details before sending
-        import json as json_lib
-        json_str = json_lib.dumps(response, ensure_ascii=False)
-        logger.info(f"🔵 JSON STRING LENGTH: {len(json_str)} bytes")
-        logger.info(f"🔵 ACTIONS IN JSON: {json_str.count('action_type')} action_type fields found")
-        logger.info(f"🔵 ACTIONS COUNT IN RESPONSE DICT: {len(response.get('actions', []))}")
-        logger.info(f"🔵 ACTIONS TYPE: {type(actions)}, IS LIST: {isinstance(actions, list)}, LEN: {len(actions) if isinstance(actions, list) else 'N/A'}")
-        
-        # Return using JSONResponse (FastAPI's built-in JSON serializer)
-        # This ensures proper JSON encoding and CORS headers
-        return JSONResponse(
-            content=response,
-            status_code=200,
-            headers={
-                "Access-Control-Allow-Origin": "*",
-                "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
-                "Access-Control-Allow-Headers": "Content-Type",
-            }
-        )
-        
-    except Exception as e:
-        logger.error(f"❌ Error solving task: {str(e)}")
-        task_id = request_data.get("id", "unknown") if isinstance(request_data, dict) else "unknown"
-        metrics.total_errors += 1
-        elapsed = time.time() - start_time
+        # Return IWA-compatible response format
         return JSONResponse(
             content={
-                "id": task_id,  # Use 'id' to match InfiniteWeb Arena's expected format
-                "task_id": task_id,  # Keep for backward compatibility
+                "actions": iwa_actions,  # IWA expects "actions" array
+                "web_agent_id": task_id,  # Optional but recommended
+                "recording": "",  # Optional
+                # Keep backward compatibility fields
+                "id": task_id,
+                "task_id": task_id,
+                "task_type": task_type,
+                "success": True,
+                "cached": False,
+                "response_time_ms": f"{elapsed*1000:.0f}",
+                "message": f"Task processed: {len(iwa_actions)} actions ({elapsed*1000:.0f}ms)"
+            },
+            status_code=200
+        )
+    
+    except Exception as e:
+        elapsed = time.time() - start_time
+        metrics.record("error", False)
+        log_error(f"Error: {str(e)}")
+        
+        return JSONResponse(
+            content={
+                "id": request_data.get("id", "unknown"),
+                "task_id": request_data.get("id", "unknown"),
                 "success": False,
                 "error": str(e),
                 "actions": [],
@@ -770,114 +603,24 @@ Example: [
         )
 
 
-# Catch-all endpoint to log any requests to unknown endpoints
-@app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"], include_in_schema=False)
-async def catch_all(path: str, request: Request):
-    """Catch-all endpoint to log any requests to unknown endpoints"""
-    logger.warning(f"⚠️  UNKNOWN ENDPOINT REQUEST: {request.method} /{path} from {request.client.host if request.client else 'unknown'}")
-    
-    # Try to read body if POST/PUT
-    if request.method in ["POST", "PUT"]:
-        try:
-            body = await request.body()
-            if body:
-                try:
-                    import json
-                    body_json = json.loads(body)
-                    logger.warning(f"⚠️  UNKNOWN ENDPOINT BODY: {json.dumps(body_json, indent=2)[:500]}")
-                except:
-                    logger.warning(f"⚠️  UNKNOWN ENDPOINT BODY (raw): {body[:200]}")
-        except:
-            pass
-    
-    return JSONResponse(
-        content={
-            "error": f"Unknown endpoint: /{path}",
-            "available_endpoints": ["/", "/health", "/metadata", "/metrics", "/solve_task", "/process"]
-        },
-        status_code=404
-        )
-
-
 @app.get("/metrics")
 async def get_metrics():
-    """Get worker metrics for monitoring with task type breakdown"""
-    import os
-    
-    # Get worker uptime
-    try:
-        start_time = float(os.getenv("WORKER_START_TIME", time.time()))
-        uptime_seconds = int(time.time() - start_time)
-        uptime_str = f"{uptime_seconds}s"
-    except:
-        uptime_str = "unknown"
-    
-    # Calculate success rate
-    total = metrics.total_requests
-    success_rate = (metrics.total_success / total * 100) if total > 0 else 0
-    
-    # Convert defaultdicts to regular dicts for JSON serialization
-    by_type_dict = dict(metrics.by_type)
-    by_type_success_dict = dict(metrics.by_type_success)
-    
-    # Calculate success rate per type
-    success_rate_by_type = {}
-    for task_type, count in by_type_dict.items():
-        success_count = by_type_success_dict.get(task_type, 0)
-        success_rate_by_type[task_type] = f"{(success_count / count * 100):.1f}%" if count > 0 else "0%"
-    
-    try:
-        w = get_worker()
-        worker_name = w.worker_name
-        worker_version = w.worker_version
-        chutes_configured = w.config.chutes_api_key is not None
-        capabilities = w.get_metadata().get("capabilities", [])
-    except HTTPException:
-        # Worker not initialized, return degraded metrics
-        worker_name = "autoppia-miner"
-        worker_version = "0.1.0"
-        chutes_configured = False
-        capabilities = []
-    
+    """Minimal metrics endpoint"""
     return {
-        "worker": worker_name,
-        "version": worker_version,
-        "status": "operational",
-        "uptime": uptime_str,
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-        "chutes_api_configured": chutes_configured,
-        "capabilities": capabilities,
-        "cache": {
-            "size": len(cache.cache),
-            "max_size": cache.max_size,
-            "ttl_seconds": cache.ttl
-        },
-        "requests": {
-            "total": metrics.total_requests,
-            "success": metrics.total_success,
-            "errors": metrics.total_errors,
-            "success_rate_percent": f"{success_rate:.1f}%"
-        },
-        "by_task_type": {
-            "request_count": by_type_dict,
-            "success_count": by_type_success_dict,
-            "success_rate_percent": success_rate_by_type
-        }
+        "total": metrics.total,
+        "success": metrics.success,
+        "success_rate": f"{(metrics.success / metrics.total * 100):.1f}%" if metrics.total > 0 else "0%",
+        "by_type": dict(metrics.by_type)
     }
 
 
 if __name__ == "__main__":
     import uvicorn
-    import os
-    
-    # Get port from environment variable (Railway/Render set this)
     port = int(os.getenv("PORT", 8080))
-    
-    # Run the API server
     uvicorn.run(
         "api:app",
         host="0.0.0.0",
         port=port,
-        log_level="info"
+        log_level="warning"  # Minimal logging
     )
 
