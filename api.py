@@ -308,13 +308,13 @@ class RequestCache:
     def set(self, prompt: str, url: str, actions: List[Dict]) -> None:
         """Store actions in cache (thread-safe)"""
         with self.lock:
-        if len(self.cache) >= self.max_size:
-            # Remove oldest entry
-            oldest_key = min(self.cache.keys(), key=lambda k: self.cache[k][1])
-            del self.cache[oldest_key]
-        
-        key = self.get_key(prompt, url)
-        self.cache[key] = (actions, time.time())
+            if len(self.cache) >= self.max_size:
+                # Remove oldest entry
+                oldest_key = min(self.cache.keys(), key=lambda k: self.cache[k][1])
+                del self.cache[oldest_key]
+            
+            key = self.get_key(prompt, url)
+            self.cache[key] = (actions, time.time())
         logger.debug(f"Cached actions for task")
 
 
