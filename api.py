@@ -330,6 +330,26 @@ async def health():
     return {"status": "healthy", "version": "1.0.0"}
 
 
+@app.get("/")
+async def root():
+    """Root endpoint for testing"""
+    return JSONResponse(
+        content={
+            "status": "online",
+            "version": "1.0.0",
+            "endpoints": {
+                "solve_task": "/solve_task",
+                "health": "/health"
+            }
+        },
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+            "Access-Control-Allow-Headers": "*",
+        }
+    )
+
+
 @app.options("/solve_task")
 async def solve_task_options():
     """Handle CORS preflight requests"""
