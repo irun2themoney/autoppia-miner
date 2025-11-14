@@ -60,6 +60,24 @@ python miner.py --wallet.name YOUR_WALLET --wallet.hotkey YOUR_HOTKEY --network 
 
 See [MINER_SETUP.md](./MINER_SETUP.md) for detailed miner setup instructions.
 
+### VPS Deployment (For InfiniteWeb Arena Testing)
+
+**Important**: Render deployments use Cloudflare which blocks direct IP access. For InfiniteWeb Arena testing (requires `ip:port` format), deploy to a VPS:
+
+```bash
+# On your VPS
+git clone https://github.com/irun2themoney/autoppia-miner.git
+cd autoppia-miner
+
+# Quick setup (automated)
+sudo ./deploy_api_vps.sh
+
+# OR manual setup
+# See DEPLOY_API_VPS.md for detailed instructions
+```
+
+See [DEPLOY_API_VPS.md](./DEPLOY_API_VPS.md) for complete VPS deployment guide.
+
 ## Configuration
 
 **Essential Environment Variables**:
@@ -228,6 +246,31 @@ Validator → Bittensor Network → Miner (miner.py) → HTTP API (api.py) → R
 4. **Earn Rewards**: Validators evaluate performance and distribute TAO rewards
 
 See [MINER_SETUP.md](./MINER_SETUP.md) for complete setup instructions.
+
+### Deploy Miner to DigitalOcean (Recommended)
+
+For 24/7 operation, deploy the miner to a VPS like DigitalOcean:
+
+```bash
+# SSH into your DigitalOcean droplet
+ssh root@YOUR_DROPLET_IP
+
+# Clone and deploy
+git clone https://github.com/irun2themoney/autoppia-miner.git
+cd autoppia-miner
+chmod +x deploy_miner_digitalocean.sh
+sudo ./deploy_miner_digitalocean.sh [wallet_name] [hotkey_name]
+```
+
+The script will:
+- ✅ Install all dependencies
+- ✅ Set up miner as systemd service (auto-restart)
+- ✅ Configure firewall for axon port (8091)
+- ✅ Start miner automatically
+
+See [DEPLOY_MINER_DIGITALOCEAN.md](./DEPLOY_MINER_DIGITALOCEAN.md) for complete guide.
+
+**Note**: The HTTP API can stay on Render. The miner just needs to point to it via `API_URL` in `.env`.
 
 ### Monitoring
 
