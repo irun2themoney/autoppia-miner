@@ -48,11 +48,11 @@ class AutoppiaMiner:
     
     def _load_config(self) -> bt.config:
         """Load Bittensor configuration"""
-        parser = bt.argument_parser()
-        parser.add_argument("--netuid", type=int, default=SUBNET_UID, help="Subnet UID")
-        parser.add_argument("--network", type=str, default=NETWORK, help="Network (finney, test)")
-        parser.add_argument("--api.url", type=str, default=API_URL, help="HTTP API URL")
-        return bt.config(parser)
+        # For bittensor 9.x, use bt.cli() to create config from command line args
+        config = bt.cli()
+        config.netuid = SUBNET_UID
+        config.network = NETWORK
+        return config
     
     async def process_task(self, synapse: bt.Synapse) -> bt.Synapse:
         """
@@ -211,8 +211,8 @@ class AutoppiaMiner:
 
 def main():
     """Main entry point"""
-    # Load config
-    config = bt.argument_parser().parse_args()
+    # Load config using bt.cli() for bittensor 9.x
+    config = bt.cli()
     config.netuid = SUBNET_UID
     config.network = NETWORK
     
