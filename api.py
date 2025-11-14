@@ -297,12 +297,12 @@ class RequestCache:
         key = self.get_key(prompt, url)
         with self.lock:
             if key in self.cache:
-            cached, timestamp = self.cache[key]
-            if time.time() - timestamp < self.ttl:
-                logger.info(f"Cache hit for task")
-                return cached
-            else:
-                del self.cache[key]
+                cached, timestamp = self.cache[key]
+                if time.time() - timestamp < self.ttl:
+                    logger.info(f"Cache hit for task")
+                    return cached
+                else:
+                    del self.cache[key]
         return None
     
     def set(self, prompt: str, url: str, actions: List[Dict]) -> None:
