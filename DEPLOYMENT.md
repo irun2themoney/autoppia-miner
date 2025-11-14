@@ -79,7 +79,7 @@ Type=simple
 User=root
 WorkingDirectory=/opt/autoppia-miner
 Environment="PATH=/opt/autoppia-miner/venv/bin"
-ExecStart=/opt/autoppia-miner/venv/bin/python3 /opt/autoppia-miner/api.py
+ExecStart=/opt/autoppia-miner/venv/bin/python3 -m api.server
 Restart=always
 RestartSec=10
 
