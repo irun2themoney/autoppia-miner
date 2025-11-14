@@ -660,18 +660,23 @@ Example: [
         metrics.total_success += 1
         metrics.by_type_success[task_type] += 1
         
-        # Return response - ensure it's properly serialized
-        # Use Response with explicit JSON encoding to ensure proper serialization
-        from fastapi import Response
+        # Log response details before sending
         import json as json_lib
         json_str = json_lib.dumps(response, ensure_ascii=False)
         logger.info(f"🔵 JSON STRING LENGTH: {len(json_str)} bytes")
         logger.info(f"🔵 ACTIONS IN JSON: {json_str.count('action_type')} action_type fields found")
+        logger.info(f"🔵 ACTIONS COUNT IN RESPONSE DICT: {len(response.get('actions', []))}")
         
-        return Response(
-            content=json_str,
-            media_type="application/json",
-            status_code=200
+        # Return using JSONResponse (FastAPI's built-in JSON serializer)
+        # This ensures proper JSON encoding and CORS headers
+        return JSONResponse(
+            content=response,
+            status_code=200,
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
+                "Access-Control-Allow-Headers": "Content-Type",
+            }
         )
         
     except Exception as e:
