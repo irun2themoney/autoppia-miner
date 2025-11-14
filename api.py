@@ -462,6 +462,9 @@ async def solve_task(request_data: Dict[str, Any]):
     metrics.total_requests += 1
     start_time = time.time()
     
+    # Log incoming request (for debugging InfiniteWeb Arena)
+    logger.info(f"🔵 INCOMING REQUEST: {json.dumps(request_data, indent=2)[:500]}")
+    
     try:
         task_id = request_data.get("id", "unknown")
         prompt = request_data.get("prompt", "")
@@ -651,14 +654,25 @@ Example: [
         # Log the actual response being sent
         logger.info(f"✅ Task {task_id} completed: {len(actions)} actions in {elapsed*1000:.0f}ms [type: {task_type}]")
         logger.info(f"📤 Returning response with {len(actions)} actions")
+        logger.info(f"🔵 OUTGOING RESPONSE: {json.dumps(response, indent=2)[:1000]}")
         logger.debug(f"📤 Response actions preview: {[a.get('action_type', 'unknown') for a in actions[:3]]}...")
-        logger.debug(f"📤 Full response: {json.dumps(response, indent=2)[:500]}...")
         
         metrics.total_success += 1
         metrics.by_type_success[task_type] += 1
         
         # Return response - ensure it's properly serialized
-        return JSONResponse(content=response, status_code=200)
+        # Use Response with explicit JSON encoding to ensure proper serialization
+        from fastapi import Response
+        import json as json_lib
+        json_str = json_lib.dumps(response, ensure_ascii=False)
+        logger.info(f"🔵 JSON STRING LENGTH: {len(json_str)} bytes")
+        logger.info(f"🔵 ACTIONS IN JSON: {json_str.count('action_type')} action_type fields found")
+        
+        return Response(
+            content=json_str,
+            media_type="application/json",
+            status_code=200
+        )
         
     except Exception as e:
         logger.error(f"❌ Error solving task: {str(e)}")
