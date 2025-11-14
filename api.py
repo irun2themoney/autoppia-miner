@@ -27,7 +27,7 @@ from dotenv import load_dotenv
 from worker import AutoppiaWorker, WorkerRequest
 
 try:
-    load_dotenv()
+load_dotenv()
 except Exception:
     pass  # Continue even if .env file can't be loaded
 
@@ -88,7 +88,7 @@ async def startup_event():
     try:
         # Create logs directory if it doesn't exist
         os.makedirs("logs", exist_ok=True)
-        worker = AutoppiaWorker()
+worker = AutoppiaWorker()
         logger.info("✅ Worker initialized successfully on startup")
     except Exception as e:
         logger.error(f"❌ Failed to initialize worker on startup: {str(e)}")
@@ -230,7 +230,7 @@ class TaskClassifier:
                 actions.extend([
                     {"action_type": "screenshot"},
                     {"action_type": "wait", "duration": 1}
-                ])
+            ])
         
         elif task_type == "extract":
             actions.extend([
@@ -296,26 +296,26 @@ class RequestCache:
         """Retrieve cached actions (thread-safe)"""
         key = self.get_key(prompt, url)
         with self.lock:
-            if key in self.cache:
-                cached, timestamp = self.cache[key]
-                if time.time() - timestamp < self.ttl:
-                    logger.info(f"Cache hit for task")
-                    return cached
-                else:
-                    del self.cache[key]
+        if key in self.cache:
+            cached, timestamp = self.cache[key]
+            if time.time() - timestamp < self.ttl:
+                logger.info(f"Cache hit for task")
+                return cached
+            else:
+                del self.cache[key]
         return None
     
     def set(self, prompt: str, url: str, actions: List[Dict]) -> None:
         """Store actions in cache (thread-safe)"""
         with self.lock:
-            if len(self.cache) >= self.max_size:
-                # Remove oldest entry
-                oldest_key = min(self.cache.keys(), key=lambda k: self.cache[k][1])
-                del self.cache[oldest_key]
-            
-            key = self.get_key(prompt, url)
-            self.cache[key] = (actions, time.time())
-            logger.debug(f"Cached actions for task")
+        if len(self.cache) >= self.max_size:
+            # Remove oldest entry
+            oldest_key = min(self.cache.keys(), key=lambda k: self.cache[k][1])
+            del self.cache[oldest_key]
+        
+        key = self.get_key(prompt, url)
+        self.cache[key] = (actions, time.time())
+        logger.debug(f"Cached actions for task")
 
 
 cache = RequestCache()
@@ -411,7 +411,7 @@ async def process_request(request_data: Dict[str, Any]):
         
         # Return response
         return JSONResponse(content=response.dict())
-    
+        
     except HTTPException:
         raise
     except Exception as e:
@@ -428,10 +428,10 @@ def _generate_default_actions(url: str, prompt: str) -> list:
             "action_type": "navigate",
             "url": url
         })
-        actions.append({
-            "action_type": "wait",
-            "duration": 2.0
-        })
+    actions.append({
+        "action_type": "wait",
+        "duration": 2.0
+    })
     else:
         # If no URL, start with screenshot
         actions.append({
@@ -500,22 +500,20 @@ async def solve_task(request_data: Dict[str, Any]):
         url = request_data.get("url", "")
         
         logger.info(f"📥 Received task: {task_id}")
-        logger.info(f"📝 Task prompt: {prompt[:200]}...")
+        logger.info(f"📝 Task prompt: {prompt[:200] if prompt else '(empty)'}...")
         logger.info(f"🌐 Task URL: {url if url else '(empty)'}")
         logger.info(f"📦 Full request data keys: {list(request_data.keys())}")
         
+        # Handle InfiniteWeb Arena requests that may only have URL without prompt
         if not prompt:
-            logger.warning(f"❌ Task {task_id} has no prompt")
-            metrics.total_errors += 1
-            return JSONResponse(
-                content={
-                    "task_id": task_id,
-                    "success": False,
-                    "error": "No prompt provided",
-                    "actions": []
-                },
-                status_code=400
-            )
+            if url:
+                # Generate a generic prompt based on URL for InfiniteWeb Arena
+                prompt = f"Navigate to {url} and explore the page"
+                logger.info(f"⚠️  No prompt provided, using generated prompt: {prompt}")
+            else:
+                # No prompt and no URL - use generic fallback
+                prompt = "Generic web task"
+                logger.warning(f"⚠️  No prompt or URL provided, using generic fallback")
         
         # Step 1: Classify the task
         task_type = TaskClassifier.classify_task(prompt)
@@ -751,7 +749,7 @@ async def catch_all(path: str, request: Request):
             "available_endpoints": ["/", "/health", "/metadata", "/metrics", "/solve_task", "/process"]
         },
         status_code=404
-    )
+        )
 
 
 @app.get("/metrics")
