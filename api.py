@@ -296,7 +296,7 @@ class RequestCache:
         """Retrieve cached actions (thread-safe)"""
         key = self.get_key(prompt, url)
         with self.lock:
-        if key in self.cache:
+            if key in self.cache:
             cached, timestamp = self.cache[key]
             if time.time() - timestamp < self.ttl:
                 logger.info(f"Cache hit for task")
