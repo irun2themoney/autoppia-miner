@@ -681,7 +681,8 @@ Example: [
         # Log the actual response being sent
         logger.info(f"✅ Task {task_id} completed: {len(actions)} actions in {elapsed*1000:.0f}ms [type: {task_type}]")
         logger.info(f"📤 Returning response with {len(actions)} actions")
-        logger.info(f"🔵 OUTGOING RESPONSE: {json.dumps(response, indent=2)[:1000]}")
+        logger.info(f"🔵 OUTGOING RESPONSE (FULL): {json.dumps(response, indent=2)}")
+        logger.info(f"🔵 ACTIONS ARRAY: {json.dumps(actions, indent=2)}")
         logger.debug(f"📤 Response actions preview: {[a.get('action_type', 'unknown') for a in actions[:3]]}...")
         
         metrics.total_success += 1
@@ -693,6 +694,7 @@ Example: [
         logger.info(f"🔵 JSON STRING LENGTH: {len(json_str)} bytes")
         logger.info(f"🔵 ACTIONS IN JSON: {json_str.count('action_type')} action_type fields found")
         logger.info(f"🔵 ACTIONS COUNT IN RESPONSE DICT: {len(response.get('actions', []))}")
+        logger.info(f"🔵 ACTIONS TYPE: {type(actions)}, IS LIST: {isinstance(actions, list)}, LEN: {len(actions) if isinstance(actions, list) else 'N/A'}")
         
         # Return using JSONResponse (FastAPI's built-in JSON serializer)
         # This ensures proper JSON encoding and CORS headers
