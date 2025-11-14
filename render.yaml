@@ -1,0 +1,22 @@
+# Render deployment configuration
+# NOTE: This project is deployed on DigitalOcean
+# To disable Render builds, delete this service in Render dashboard
+# Or set autoDeploy: false in Render service settings
+
+services:
+  - type: web
+    name: autoppia-miner-api
+    env: python
+    # Build command for modular structure
+    buildCommand: pip install -r requirements.txt
+    # Start command for modular structure
+    startCommand: python3 -m api.server
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.10"
+      - key: API_HOST
+        value: "0.0.0.0"
+      - key: API_PORT
+        value: "8080"
+    # Health check
+    healthCheckPath: /health
