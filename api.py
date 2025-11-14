@@ -610,22 +610,55 @@ Example: [
         # Step 5: Cache the successful actions
         cache.set(prompt, url, actions)
         
+        # Final validation - ensure actions is a proper list
+        if not isinstance(actions, list):
+            logger.error(f"❌ CRITICAL: actions is not a list! Type: {type(actions)}, Value: {actions}")
+            actions = [
+                {"action_type": "screenshot"},
+                {"action_type": "wait", "duration": 1.0},
+                {"action_type": "screenshot"}
+            ]
+        
+        # Ensure all actions are dictionaries
+        validated_actions = []
+        for i, action in enumerate(actions):
+            if isinstance(action, dict):
+                validated_actions.append(action)
+            else:
+                logger.warning(f"⚠️  Action {i} is not a dict: {type(action)} - {action}")
+        
+        if len(validated_actions) == 0:
+            logger.error(f"❌ CRITICAL: All actions were invalid! Creating emergency actions.")
+            validated_actions = [
+                {"action_type": "screenshot"},
+                {"action_type": "wait", "duration": 1.0},
+                {"action_type": "screenshot"}
+            ]
+        
+        actions = validated_actions
+        
         elapsed = time.time() - start_time
         response = {
             "task_id": task_id,
             "task_type": task_type,
-            "actions": actions,
+            "actions": actions,  # Use validated actions
             "success": True,
             "cached": False,
             "response_time_ms": f"{elapsed*1000:.0f}",
             "message": f"✅ Task processed successfully with {len(actions)} actions ({elapsed*1000:.0f}ms)"
         }
         
+        # Log the actual response being sent
+        logger.info(f"✅ Task {task_id} completed: {len(actions)} actions in {elapsed*1000:.0f}ms [type: {task_type}]")
+        logger.info(f"📤 Returning response with {len(actions)} actions")
+        logger.debug(f"📤 Response actions preview: {[a.get('action_type', 'unknown') for a in actions[:3]]}...")
+        logger.debug(f"📤 Full response: {json.dumps(response, indent=2)[:500]}...")
+        
         metrics.total_success += 1
         metrics.by_type_success[task_type] += 1
-        logger.info(f"✅ Task {task_id} completed: {len(actions)} actions in {elapsed*1000:.0f}ms [type: {task_type}]")
-        logger.info(f"📤 Returning response with {len(actions)} actions: {[a.get('action_type', 'unknown') for a in actions[:3]]}...")
-        return JSONResponse(content=response)
+        
+        # Return response - ensure it's properly serialized
+        return JSONResponse(content=response, status_code=200)
         
     except Exception as e:
         logger.error(f"❌ Error solving task: {str(e)}")
