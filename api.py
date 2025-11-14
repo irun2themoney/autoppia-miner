@@ -428,10 +428,10 @@ def _generate_default_actions(url: str, prompt: str) -> list:
             "action_type": "navigate",
             "url": url
         })
-    actions.append({
-        "action_type": "wait",
-        "duration": 2.0
-    })
+        actions.append({
+            "action_type": "wait",
+            "duration": 2.0
+        })
     else:
         # If no URL, start with screenshot
         actions.append({
