@@ -5,12 +5,12 @@ Complete guide for deploying your Autoppia Bittensor miner to DigitalOcean for 2
 ## Architecture Overview
 
 ```
-Validator → Bittensor Network → Your Miner (DigitalOcean) → HTTP API (Render) → Response
+Validator → Bittensor Network → Your Miner (DigitalOcean) → HTTP API (DigitalOcean) → Response
 ```
 
 **What runs where:**
-- ✅ **HTTP API** (`api.py`) → Runs on Render (already deployed)
-- ✅ **Bittensor Miner** (`miner.py`) → Runs on DigitalOcean (this guide)
+- ✅ **HTTP API** (`api.py`) → Runs on DigitalOcean VPS (port 8080)
+- ✅ **Bittensor Miner** (`miner.py`) → Runs on DigitalOcean VPS (port 8091)
 
 ## Prerequisites
 

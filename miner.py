@@ -14,14 +14,15 @@ import bittensor as bt
 import httpx
 
 try:
-    load_dotenv()
+load_dotenv()
 except Exception:
     pass  # Continue even if .env file can't be loaded
 
 # Subnet configuration
 SUBNET_UID = 36  # Autoppia Web Agents subnet
 NETWORK = "finney"  # Mainnet
-API_URL = os.getenv("API_URL", "https://autoppia-miner.onrender.com")
+# Default to DigitalOcean VPS IP (can be overridden via .env)
+API_URL = os.getenv("API_URL", "http://134.199.203.133:8080")
 API_TIMEOUT = 30.0
 
 
@@ -40,7 +41,8 @@ class AutoppiaMiner:
         self.axon = None
         self.api_client = httpx.AsyncClient(
             base_url=API_URL,
-            timeout=API_TIMEOUT
+            timeout=API_TIMEOUT,
+            limits=httpx.Limits(max_keepalive_connections=10, max_connections=20)
         )
         
         logger.info(f"🔧 Initializing Autoppia Miner")
@@ -61,55 +63,92 @@ class AutoppiaMiner:
         """
         Process a task from a validator
         Forwards the request to the HTTP API and returns the response
+        
+        This method handles the Autoppia protocol synapse structure:
+        - Input: prompt, url, task_id, seed, web_project_name, specifications
+        - Output: actions, success, task_type, message
         """
         try:
-            logger.info(f"📥 Received task from validator: {synapse.dendrite.hotkey}")
+            validator_hotkey = getattr(synapse.dendrite, 'hotkey', 'unknown')
+            logger.info(f"📥 Received task from validator: {validator_hotkey}")
             
-            # Prepare request for HTTP API
+            # Extract all possible fields from synapse (Autoppia protocol)
+            prompt = getattr(synapse, "prompt", "")
+            url = getattr(synapse, "url", "")
+            task_id = getattr(synapse, "task_id", None) or getattr(synapse, "id", None) or f"bt_{int(time.time())}")
+            
+            # Validate required fields
+            if not prompt:
+                logger.warning("⚠️  No prompt provided in synapse")
+                prompt = "Generic task"
+            
+            # Prepare request for HTTP API (matches Autoppia spec)
             task_data = {
-                "id": getattr(synapse, "task_id", f"bt_{int(time.time())}"),
-                "prompt": getattr(synapse, "prompt", ""),
-                "url": getattr(synapse, "url", ""),
+                "id": task_id,
+                "prompt": prompt,
+                "url": url or "",
             }
             
-            # Add optional fields if present
-            if hasattr(synapse, "seed"):
+            # Add optional fields if present (Autoppia protocol extensions)
+            if hasattr(synapse, "seed") and synapse.seed is not None:
                 task_data["seed"] = synapse.seed
-            if hasattr(synapse, "web_project_name"):
+            if hasattr(synapse, "web_project_name") and synapse.web_project_name:
                 task_data["web_project_name"] = synapse.web_project_name
-            if hasattr(synapse, "specifications"):
+            if hasattr(synapse, "specifications") and synapse.specifications:
                 task_data["specifications"] = synapse.specifications
             
             logger.debug(f"Task data: {json.dumps(task_data, indent=2)}")
             
-            # Call HTTP API
-            response = await self.api_client.post(
-                "/solve_task",
-                json=task_data
+            # Call HTTP API with timeout
+            try:
+                response = await asyncio.wait_for(
+                    self.api_client.post("/solve_task", json=task_data),
+                    timeout=API_TIMEOUT
             )
+            except asyncio.TimeoutError:
+                logger.error(f"❌ API timeout after {API_TIMEOUT}s")
+                synapse.actions = []
+                synapse.success = False
+                synapse.task_type = "error"
+                synapse.message = f"API timeout after {API_TIMEOUT}s"
+                return synapse
             
             if response.status_code == 200:
                 result = response.json()
-                logger.info(f"✅ Task processed successfully: {result.get('task_type', 'unknown')}")
+                task_type = result.get("task_type", "generic")
+                actions = result.get("actions", [])
+                success = result.get("success", False)
                 
-                # Set response fields on synapse
-                synapse.actions = result.get("actions", [])
-                synapse.success = result.get("success", False)
-                synapse.task_type = result.get("task_type", "generic")
-                synapse.message = result.get("message", "Task completed")
+                logger.info(f"✅ Task processed: {task_type} with {len(actions)} actions (success: {success})")
+                
+                # Set response fields on synapse (Autoppia protocol)
+                synapse.actions = actions
+                synapse.success = success
+                synapse.task_type = task_type
+                synapse.message = result.get("message", "Task completed successfully")
                 
                 return synapse
             else:
-                logger.error(f"❌ API error: {response.status_code} - {response.text}")
+                error_text = response.text[:200] if response.text else "No error message"
+                logger.error(f"❌ API error: {response.status_code} - {error_text}")
                 synapse.actions = []
                 synapse.success = False
+                synapse.task_type = "error"
                 synapse.message = f"API error: {response.status_code}"
                 return synapse
                 
-        except Exception as e:
-            logger.error(f"❌ Error processing task: {str(e)}")
+        except httpx.RequestError as e:
+            logger.error(f"❌ Network error calling API: {str(e)}")
             synapse.actions = []
             synapse.success = False
+            synapse.task_type = "error"
+            synapse.message = f"Network error: {str(e)}"
+            return synapse
+        except Exception as e:
+            logger.error(f"❌ Unexpected error processing task: {str(e)}", exc_info=True)
+            synapse.actions = []
+            synapse.success = False
+            synapse.task_type = "error"
             synapse.message = f"Error: {str(e)}"
             return synapse
     
@@ -203,11 +242,11 @@ class AutoppiaMiner:
             s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             s.settimeout(2)  # Short timeout
             try:
-                s.connect(("8.8.8.8", 80))
-                ip = s.getsockname()[0]
-                s.close()
+            s.connect(("8.8.8.8", 80))
+            ip = s.getsockname()[0]
+            s.close()
                 if ip:
-                    return ip
+            return ip
             except socket.timeout:
                 pass
             except Exception:

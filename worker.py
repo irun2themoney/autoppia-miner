@@ -85,15 +85,32 @@ class AutoppiaWorker:
         # Initialize HTTP client for Chutes API
         self.chutes_client = None
         if self.config.chutes_api_key:
+            # Try different authentication formats for Chutes API
+            # Format 1: Bearer token (standard)
+            # Format 2: API key in header (alternative)
+            api_key = self.config.chutes_api_key.strip()
+            
+            # Check if API key looks like it might need different format
+            # Chutes API keys sometimes start with 'cpk_' and may need different auth
+            if api_key.startswith("cpk_"):
+                # Try API key format
+                headers = {
+                    "X-API-Key": api_key,
+                    "Content-Type": "application/json"
+                }
+            else:
+                # Try Bearer token format
+                headers = {
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json"
+                }
+            
             self.chutes_client = httpx.AsyncClient(
                 base_url=self.config.chutes_api_url,
-                headers={
-                    "Authorization": f"Bearer {self.config.chutes_api_key}",
-                    "Content-Type": "application/json"
-                },
+                headers=headers,
                 timeout=30.0
             )
-            logger.info("Chutes API client initialized")
+            logger.info(f"Chutes API client initialized with base URL: {self.config.chutes_api_url}")
         
         logger.info(f"Initializing {self.worker_name} v{self.worker_version}")
         logger.info(f"Worker configuration loaded: model={self.config.model}")
@@ -379,11 +396,14 @@ class AutoppiaWorker:
                     payload.update(request.parameters)
                 
                 # Try different Chutes API endpoints
-                # First, try the standard chat completions endpoint
+                # Chutes API may use different endpoint structures
                 endpoints_to_try = [
-                    "/v1/chat/completions",
-                    "/chat/completions",
-                    "/api/v1/chat/completions"
+                    "/v1/chat/completions",  # OpenAI-compatible format
+                    "/chat/completions",  # Direct format
+                    "/api/v1/chat/completions",  # API-prefixed format
+                    "/api/chat/completions",  # Alternative API format
+                    "/completions",  # Minimal format
+                    "/generate"  # Alternative endpoint name
                 ]
                 
                 response = None
@@ -485,11 +505,13 @@ class AutoppiaWorker:
         # Test Chutes API connection if configured
         if self.chutes_client and self.config.chutes_api_key:
             try:
-                # Simple health check - try to ping the API
-                response = await self.chutes_client.get("/health", timeout=5.0)
-                health_status["chutes_api_status"] = "connected" if response.status_code == 200 else "error"
+                # Test with a simple models endpoint or just verify client is ready
+                # Chutes API doesn't have a /health endpoint, so we just verify configuration
+                health_status["chutes_api_status"] = "configured"
             except Exception as e:
                 health_status["chutes_api_status"] = f"error: {str(e)}"
+        else:
+            health_status["chutes_api_status"] = "not_configured"
         
         return health_status
     

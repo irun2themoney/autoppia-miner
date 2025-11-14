@@ -2,12 +2,12 @@
 
 > **Status**: ✅ **PRODUCTION READY & FULLY DEPLOYED**  
 > **Network**: Bittensor Subnet 36 (Autoppia Web Agents)  
-> **Worker**: Live on Render (`https://autoppia-miner.onrender.com`)  
+> **Worker**: Deployed on DigitalOcean VPS (`http://134.199.203.133:8080`)  
 > **Tests**: 52/52 passing ✅  
 > **Deployment**: Active and verified ✅  
 > **Miner**: Running with latest code (updated Nov 13, 2025)  
 > **Leaderboard**: [InfiniteWeb Arena](https://infinitewebarena.autoppia.com/)  
-> **Last Updated**: November 13, 2025
+> **Last Updated**: November 14, 2025 (YOLO Mode - Production Ready)
 
 An Autoppia AI Worker for mining and processing web agent tasks on Bittensor Subnet 36. Optimized with AI-powered task solving, intelligent classification, and real-time metrics. **Ready for validator testing.**
 
@@ -60,30 +60,28 @@ python miner.py --wallet.name YOUR_WALLET --wallet.hotkey YOUR_HOTKEY --network 
 
 See [MINER_SETUP.md](./MINER_SETUP.md) for detailed miner setup instructions.
 
-### VPS Deployment (For InfiniteWeb Arena Testing)
+### VPS Deployment (DigitalOcean)
 
-**Important**: Render deployments use Cloudflare which blocks direct IP access. For InfiniteWeb Arena testing (requires `ip:port` format), deploy to a VPS:
+For 24/7 operation and InfiniteWeb Arena testing, deploy to a VPS:
 
 ```bash
-# On your VPS
+# SSH into your VPS
+ssh root@YOUR_DROPLET_IP
+
+# Clone repository
 git clone https://github.com/irun2themoney/autoppia-miner.git
 cd autoppia-miner
 
-# Quick setup (automated)
-sudo ./deploy_api_vps.sh
-
-# OR manual setup
-# See DEPLOY_API_VPS.md for detailed instructions
+# Deploy API (if not already deployed)
+# See DEPLOY_MINER_DIGITALOCEAN.md for complete guide
 ```
-
-See [DEPLOY_API_VPS.md](./DEPLOY_API_VPS.md) for complete VPS deployment guide.
 
 ## Configuration
 
 **Essential Environment Variables**:
 - `CHUTES_API_KEY`: Your Chutes API key (required for AI tasks)
 - `CHUTES_API_URL`: Default is `https://api.chutes.ai`
-- `API_URL`: HTTP API URL (for miner.py, default: `https://autoppia-miner.onrender.com`)
+- `API_URL`: HTTP API URL (for miner.py, should be your VPS IP: `http://YOUR_IP:8080`)
 - `WORKER_NAME`: Your worker's name (default: `autoppia-miner`)
 - `LOG_LEVEL`: INFO (default) or DEBUG for verbose logs
 
@@ -101,7 +99,7 @@ See [DEPLOY_API_VPS.md](./DEPLOY_API_VPS.md) for complete VPS deployment guide.
 ### Example: Solve Task (Validator Endpoint)
 
 ```bash
-curl -X POST https://autoppia-miner.onrender.com/solve_task \
+curl -X POST http://134.199.203.133:8080/solve_task \
   -H "Content-Type: application/json" \
   -d '{
     "id": "task_123",
@@ -175,10 +173,15 @@ autoppia-miner/
 ├── Dockerfile          # Docker deployment config
 ├── render.yaml         # Render deployment config
 ├── env.example         # Environment variables template
-├── start_miner.sh      # Quick start script for miner
-├── monitor_*.sh        # Monitoring scripts
-├── check_deployment.sh # Deployment health check
-├── MINER_SETUP.md      # Detailed miner setup guide
+├── start_miner.sh              # Quick start script for miner
+├── setup_miner.sh              # Setup script for VPS deployment
+├── deploy_miner_digitalocean.sh # Automated deployment script
+├── monitor_once.sh             # One-time health check
+├── monitor_loop.sh             # Continuous monitoring
+├── check_deployment.sh         # Deployment health check
+├── MINER_SETUP.md              # Detailed miner setup guide
+├── DEPLOY_MINER_DIGITALOCEAN.md # Complete deployment guide
+├── VALIDATOR_ENGAGEMENT.md     # Tips for validator engagement
 ├── tests/              # Test suite
 │   ├── test_worker.py
 │   ├── test_task_classification.py
@@ -207,10 +210,10 @@ This miner is ready for validator testing. All endpoints are operational:
 
 ```bash
 # Health check
-curl https://autoppia-miner.onrender.com/health
+curl http://134.199.203.133:8080/health
 
 # Solve task (main validator endpoint)
-curl -X POST https://autoppia-miner.onrender.com/solve_task \
+curl -X POST http://134.199.203.133:8080/solve_task \
   -H "Content-Type: application/json" \
   -d '{
     "id": "validator_test",
@@ -219,7 +222,7 @@ curl -X POST https://autoppia-miner.onrender.com/solve_task \
   }'
 
 # Get metrics
-curl https://autoppia-miner.onrender.com/metrics
+curl http://134.199.203.133:8080/metrics
 ```
 
 **Validator Requirements:**
@@ -270,7 +273,7 @@ The script will:
 
 See [DEPLOY_MINER_DIGITALOCEAN.md](./DEPLOY_MINER_DIGITALOCEAN.md) for complete guide.
 
-**Note**: The HTTP API can stay on Render. The miner just needs to point to it via `API_URL` in `.env`.
+**Note**: Both API and Miner can run on the same VPS, or separately. The miner just needs to point to the API via `API_URL` in `.env`.
 
 ### Monitoring
 

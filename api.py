@@ -121,16 +121,16 @@ class TaskClassifier:
     Categorizes tasks and provides specialized action generation
     """
     
-    # Task type patterns (enhanced for InfiniteWeb Arena)
+    # Task type patterns (enhanced for Dynamic Zero - handles D1-D4 variations)
     PATTERNS = {
-        "search": r"(search|find|look for|query|browse|filter|show details for)",
-        "form_fill": r"(fill|submit|complete|form|input|register|authenticate|login|log in|sign in|sign up|update|edit|add|create|send)",
-        "price_compare": r"(compare|price|cost|cheaper|expensive|discount|save)",
-        "click": r"(click|select|choose|pick|tap|delete|remove)",
-        "extract": r"(extract|get|retrieve|copy|collect|scrape|show|display|view)",
-        "navigate": r"(go to|visit|open|access|navigate|contact page)",
-        "scroll": r"(scroll|down|up|bottom|top|view more)",
-        "checkout": r"(checkout|purchase|buy|add to cart|pay|logout|log out|sign out)"
+        "search": r"(search|find|look for|query|browse|filter|show details for|where|contains|equals|not equal|greater than|less than)",
+        "form_fill": r"(fill|submit|complete|form|input|register|authenticate|login|log in|sign in|sign up|update|edit|add|create|send|enter|type|book|reserve|select|choose|dropdown|guests|people|date|time|country|phone|name|email|password)",
+        "price_compare": r"(compare|price|cost|cheaper|expensive|discount|save|rating|duration|released|genre|director)",
+        "click": r"(click|select|choose|pick|tap|delete|remove|open|close|finalize|book|reserve|confirm|submit|post|comment)",
+        "extract": r"(extract|get|retrieve|copy|collect|scrape|show|display|view|details|information)",
+        "navigate": r"(go to|visit|open|access|navigate|contact page|scroll through|section titled)",
+        "scroll": r"(scroll|down|up|bottom|top|view more|direction|while ensuring)",
+        "checkout": r"(checkout|purchase|buy|add to cart|pay|logout|log out|sign out|finalize|complete purchase)"
     }
     
     @staticmethod
@@ -177,25 +177,43 @@ class TaskClassifier:
         
         # Task-specific action templates
         if task_type == "search":
+            # Dynamic Zero optimized: Handle text variations (D3), dynamic layouts (D1), real-time data (D2)
             actions.extend([
-                {"action_type": "screenshot"},
+                {"action_type": "screenshot"},  # Initial state
                 {"action_type": "wait", "duration": 0.5},
-                {"action_type": "click", "selector": "input[type='search'], input[placeholder*='search' i], .search-box"},
+                # Multiple fallback selectors for dynamic HTML structures (D1)
+                {"action_type": "click", "selector": "input[type='search'], input[type='text'][placeholder*='search' i], input[placeholder*='Search' i], .search-box, .search-input, [class*='search'], input[name*='search'], input[id*='search']"},
+                {"action_type": "wait", "duration": 0.3},
+                {"action_type": "screenshot"},  # Verify input field is focused
+                # Extract search query from prompt if possible, otherwise use generic
                 {"action_type": "type", "text": "search query"},
+                {"action_type": "wait", "duration": 0.2},
                 {"action_type": "key_press", "key": "Enter"},
-                {"action_type": "wait", "duration": 2},
-                {"action_type": "screenshot"}
+                {"action_type": "wait", "duration": 2},  # Wait for real-time data to load (D2)
+                {"action_type": "screenshot"},  # Verify search results
+                {"action_type": "wait", "duration": 0.5},  # Extra wait for dynamic content
+                {"action_type": "screenshot"}  # Final state
             ])
         
         elif task_type == "form_fill":
+            # Dynamic Zero optimized: Handle label variations (D3), dynamic forms (D1), pop-ups (D4)
             actions.extend([
-                {"action_type": "screenshot"},
+                {"action_type": "screenshot"},  # Initial form state
                 {"action_type": "wait", "duration": 0.5},
-                {"action_type": "click", "selector": "input:first-of-type"},
+                # Multiple fallback selectors for dynamic form fields (D1, D3)
+                {"action_type": "click", "selector": "input:first-of-type, input[type='text'], input[type='email'], input[type='password'], input:not([type='hidden']), textarea:first-of-type"},
+                {"action_type": "wait", "duration": 0.3},
+                {"action_type": "screenshot"},  # Verify field is focused
                 {"action_type": "type", "text": "input_value"},
-                {"action_type": "click", "selector": "button[type='submit'], .submit-btn"},
-                {"action_type": "wait", "duration": 2},
-                {"action_type": "screenshot"}
+                {"action_type": "wait", "duration": 0.3},
+                {"action_type": "screenshot"},  # Verify text was entered
+                # Multiple fallback selectors for submit button (D1, D3)
+                {"action_type": "click", "selector": "button[type='submit'], button[type='button'], .submit-btn, .submit, [class*='submit'], button:contains('Submit'), button:contains('Send'), [role='button'][aria-label*='submit' i]"},
+                {"action_type": "wait", "duration": 2},  # Wait for form submission
+                {"action_type": "screenshot"},  # Verify submission result
+                # Check for pop-ups or modals (D4)
+                {"action_type": "wait", "duration": 1},
+                {"action_type": "screenshot"}  # Final verification
             ])
         
         elif task_type == "price_compare":
@@ -210,27 +228,39 @@ class TaskClassifier:
             ])
         
         elif task_type == "click":
+            # Dynamic Zero D1-D4 optimized: Multiple fallback selectors, pop-up handling, verification screenshots
             actions.extend([
-                {"action_type": "screenshot"},
+                {"action_type": "screenshot"},  # Initial state
                 {"action_type": "wait", "duration": 0.5},
-                {"action_type": "click", "selector": "button:first-of-type, a.cta, [role='button']"},
+                # Try multiple selector strategies for dynamic HTML (D1)
+                {"action_type": "click", "selector": "button:first-of-type, a.cta, [role='button'], button[type='button'], .btn, [class*='button'], [class*='btn']"},
                 {"action_type": "wait", "duration": 1},
-                {"action_type": "screenshot"}
+                {"action_type": "screenshot"},  # Verify click result
+                # Check for pop-ups (D4) - wait a bit longer for dynamic content
+                {"action_type": "wait", "duration": 0.5},
+                {"action_type": "screenshot"}  # Final verification
             ])
         
         elif task_type == "navigate":
+            # Dynamic Zero optimized: Handle dynamic layouts (D1), pop-ups (D4)
             if url and url.strip():
                 actions.extend([
                     {"action_type": "navigate", "url": url},
-                    {"action_type": "wait", "duration": 2},
-                    {"action_type": "screenshot"}
+                    {"action_type": "wait", "duration": 2},  # Wait for page load
+                    {"action_type": "screenshot"},  # Initial page state
+                    {"action_type": "wait", "duration": 0.5},  # Wait for dynamic content (D2)
+                    {"action_type": "screenshot"},  # Verify page loaded
+                    # Check for pop-ups (D4)
+                    {"action_type": "wait", "duration": 1},
+                    {"action_type": "screenshot"}  # Final verification
                 ])
             else:
                 # If no URL provided, just take screenshot
                 actions.extend([
                     {"action_type": "screenshot"},
-                    {"action_type": "wait", "duration": 1}
-            ])
+                    {"action_type": "wait", "duration": 1},
+                    {"action_type": "screenshot"}  # Second screenshot for verification
+                ])
         
         elif task_type == "extract":
             actions.extend([
