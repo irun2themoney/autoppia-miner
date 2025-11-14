@@ -262,8 +262,16 @@ async def solve_task(request_data: Dict[str, Any]):
                 "actions": iwa_actions,
                 "web_agent_id": task_id,
                 "recording": "",
+                # Additional fields for compatibility
+                "id": task_id,
+                "task_id": task_id,
             },
-            status_code=200
+            status_code=200,
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+                "Access-Control-Allow-Headers": "*",
+            }
         )
     
     except Exception as e:
