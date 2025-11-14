@@ -7,7 +7,8 @@ echo "║                                                              ║"
 echo "╚══════════════════════════════════════════════════════════════╝"
 echo ""
 
-BASE_URL="https://autoppia-miner.onrender.com"
+# Using DigitalOcean deployment
+BASE_URL="http://134.199.203.133:8080"
 ERRORS=0
 WARNINGS=0
 

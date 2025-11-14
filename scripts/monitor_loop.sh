@@ -4,7 +4,8 @@
 # Run with: ./monitor_loop.sh [iterations]
 # Example: ./monitor_loop.sh 10  (runs 10 times)
 
-BASE_URL="https://autoppia-miner.onrender.com"
+# Using DigitalOcean deployment
+BASE_URL="http://134.199.203.133:8080"
 REFRESH_INTERVAL=5
 ITERATIONS=${1:-999999}  # Default to many iterations, or specify a number
 

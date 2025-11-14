@@ -3,7 +3,8 @@
 # Single snapshot monitoring script for Autoppia Miner
 # No keyboard shortcuts needed - just shows current status
 
-BASE_URL="https://autoppia-miner.onrender.com"
+# Using DigitalOcean deployment
+BASE_URL="http://134.199.203.133:8080"
 
 clear
 echo "╔══════════════════════════════════════════════════════════════╗"

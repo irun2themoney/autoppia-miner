@@ -1,22 +1,23 @@
 # Render deployment configuration
-# NOTE: This project is deployed on DigitalOcean
-# To disable Render builds, delete this service in Render dashboard
-# Or set autoDeploy: false in Render service settings
+# DISABLED: This project is deployed on DigitalOcean, not Render
+# 
+# To completely remove Render:
+# 1. Go to https://dashboard.render.com
+# 2. Find your "autoppia-miner" service
+# 3. Click "Settings" → "Delete Service"
+#
+# This file exists only to prevent build errors if Render is still connected.
+# You can safely delete this file after removing the Render service.
 
 services:
   - type: web
     name: autoppia-miner-api
     env: python
-    # Build command for modular structure
-    buildCommand: pip install -r requirements.txt
-    # Start command for modular structure
-    startCommand: python3 -m api.server
+    # Disabled - using DigitalOcean instead
+    buildCommand: echo "This service is disabled. Using DigitalOcean deployment."
+    startCommand: echo "This service is disabled. Using DigitalOcean deployment."
     envVars:
-      - key: PYTHON_VERSION
-        value: "3.10"
-      - key: API_HOST
-        value: "0.0.0.0"
-      - key: API_PORT
-        value: "8080"
-    # Health check
-    healthCheckPath: /health
+      - key: DISABLED
+        value: "true"
+    # Disable auto-deploy
+    autoDeploy: false
