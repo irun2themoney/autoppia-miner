@@ -54,29 +54,107 @@ def extract_keywords(prompt: str) -> Dict[str, List[str]]:
     return {"actions": action_keywords, "targets": target_keywords}
 
 
-def generate_smart_selector(prompt: str) -> Dict[str, Any]:
-    """Generate smart selector based on prompt - multiple strategies for robustness"""
+def generate_selector_strategies(prompt: str) -> List[Dict[str, Any]]:
+    """
+    Generate multiple selector strategies with fallbacks.
+    Returns list of selectors to try in order - if first fails, try next.
+    IWA uses dynamic environments (D1-D4), so we need multiple strategies.
+    """
+    prompt_lower = prompt.lower()
+    strategies = []
+    
+    # Calendar view selectors - multiple strategies
+    if "month" in prompt_lower or "month view" in prompt_lower:
+        # Strategy 1: Exact text "Month" (most common)
+        strategies.append(create_selector("tagContainsSelector", "Month", case_sensitive=False))
+        # Strategy 2: Try "Monthly" (alternative text)
+        strategies.append(create_selector("tagContainsSelector", "Monthly", case_sensitive=False))
+        # Strategy 3: Try "Month View" (full phrase)
+        strategies.append(create_selector("tagContainsSelector", "Month View", case_sensitive=False))
+        # Strategy 4: Try attribute selectors (data-testid, aria-label)
+        strategies.append(create_selector("attributeValueSelector", "month", attribute="data-testid", case_sensitive=False))
+        strategies.append(create_selector("attributeValueSelector", "month", attribute="aria-label", case_sensitive=False))
+        # Strategy 5: Generic button fallback
+        strategies.append(create_selector("attributeValueSelector", "button", attribute="custom", case_sensitive=False))
+        return strategies
+    
+    if "week" in prompt_lower or "week view" in prompt_lower:
+        # Strategy 1: Exact text "Week"
+        strategies.append(create_selector("tagContainsSelector", "Week", case_sensitive=False))
+        # Strategy 2: Try "Weekly"
+        strategies.append(create_selector("tagContainsSelector", "Weekly", case_sensitive=False))
+        # Strategy 3: Try "Week View"
+        strategies.append(create_selector("tagContainsSelector", "Week View", case_sensitive=False))
+        # Strategy 4: Attribute selectors
+        strategies.append(create_selector("attributeValueSelector", "week", attribute="data-testid", case_sensitive=False))
+        strategies.append(create_selector("attributeValueSelector", "week", attribute="aria-label", case_sensitive=False))
+        # Strategy 5: Generic fallback
+        strategies.append(create_selector("attributeValueSelector", "button", attribute="custom", case_sensitive=False))
+        return strategies
+    
+    if "day" in prompt_lower or "day view" in prompt_lower:
+        strategies.append(create_selector("tagContainsSelector", "Day", case_sensitive=False))
+        strategies.append(create_selector("tagContainsSelector", "Daily", case_sensitive=False))
+        strategies.append(create_selector("tagContainsSelector", "Day View", case_sensitive=False))
+        strategies.append(create_selector("attributeValueSelector", "day", attribute="data-testid", case_sensitive=False))
+        strategies.append(create_selector("attributeValueSelector", "button", attribute="custom", case_sensitive=False))
+        return strategies
+    
+    # Generic click targets
     keywords = extract_keywords(prompt)
+    
+    # Priority words
+    priority_words = ["month", "week", "day", "year", "view"]
+    for word in priority_words:
+        if word in prompt_lower:
+            strategies.append(create_selector("tagContainsSelector", word.title(), case_sensitive=False))
+            break
+    
+    # Try target keywords
+    if keywords["targets"]:
+        target = keywords["targets"][0].title()
+        strategies.append(create_selector("tagContainsSelector", target, case_sensitive=False))
+    
+    # Try action keywords
+    if keywords["actions"]:
+        action = keywords["actions"][0].title()
+        strategies.append(create_selector("tagContainsSelector", action, case_sensitive=False))
+    
+    # Fallback: generic button selector
+    if not strategies:
+        strategies.append(create_selector("attributeValueSelector", "button:first-of-type", attribute="custom", case_sensitive=False))
+    
+    return strategies
+
+
+def generate_smart_selector(prompt: str) -> Dict[str, Any]:
+    """
+    Generate smart selector with multiple strategies for robustness.
+    IWA uses dynamic environments (D1-D4), so we need flexible selectors.
+    """
     prompt_lower = prompt.lower()
     
-    # Calendar view selectors - use flexible text matching
-    if "month" in prompt_lower:
-        # Try multiple text variations - tagContainsSelector is case-insensitive
+    # Calendar view selectors - try multiple strategies
+    if "month" in prompt_lower or "month view" in prompt_lower:
+        # Strategy 1: Text matching (most common)
+        # tagContainsSelector matches text content, case-insensitive
         # This will match "Month", "month", "Monthly", "Month View", etc.
         return create_selector("tagContainsSelector", "Month", case_sensitive=False)
     
-    if "week" in prompt_lower:
-        # Try multiple text variations
+    if "week" in prompt_lower or "week view" in prompt_lower:
+        # Strategy 1: Text matching
         return create_selector("tagContainsSelector", "Week", case_sensitive=False)
     
-    if "day" in prompt_lower:
+    if "day" in prompt_lower or "day view" in prompt_lower:
         return create_selector("tagContainsSelector", "Day", case_sensitive=False)
+    
+    # Generic click targets - try text first, then attributes
+    keywords = extract_keywords(prompt)
     
     # Priority: specific target words (month, week, etc.)
     priority_words = ["month", "week", "day", "year", "view"]
     for word in priority_words:
         if word in prompt_lower:
-            # Use capitalized version for better matching
             return create_selector("tagContainsSelector", word.title(), case_sensitive=False)
     
     # Try target keywords
@@ -110,12 +188,28 @@ def generate_actions(prompt: str, url: str) -> List[Dict[str, Any]]:
     if any(w in prompt_lower for w in ["click", "select", "choose", "switch", "toggle", "view"]):
         # Click task - wait for elements to be ready
         # For calendar views, elements might need more time to render
-        actions.append({"action_type": "wait", "duration": 0.8})  # Longer wait for dynamic content
+        actions.append({"action_type": "wait", "duration": 1.0})  # Wait for dynamic content to stabilize
+        
+        # Generate multiple selector strategies for robustness
+        selector_strategies = generate_selector_strategies(prompt)
+        
+        # Try primary selector first
         actions.append({
             "action_type": "click",
-            "selector": generate_smart_selector(prompt)
+            "selector": selector_strategies[0]
         })
-        actions.append({"action_type": "wait", "duration": 2.0})  # Even longer wait for view change
+        actions.append({"action_type": "wait", "duration": 0.3})  # Short wait to check if click worked
+        
+        # Add fallback selectors (try 2-3 most likely alternatives)
+        # If first selector fails, these will be tried
+        for selector in selector_strategies[1:3]:  # Try up to 2 fallbacks
+            actions.append({
+                "action_type": "click",
+                "selector": selector
+            })
+            actions.append({"action_type": "wait", "duration": 0.3})
+        
+        actions.append({"action_type": "wait", "duration": 2.5})  # Final wait for view change
         actions.append({"action_type": "screenshot"})
     
     elif any(w in prompt_lower for w in ["type", "enter", "fill", "input"]):
