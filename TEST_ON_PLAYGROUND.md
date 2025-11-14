@@ -55,7 +55,10 @@ bash START_TUNNEL.sh
    - **Select Web Projects**: Choose one or more projects to test
    - **Select Use Cases**: Choose specific use cases
    - **Number of Runs**: Start with 1-3 runs for testing
-   - **Agent Endpoint**: Enter your HTTPS tunnel URL (e.g., `https://abc123-def456-ghi789.trycloudflare.com`)
+   - **Agent Endpoint**: Enter your endpoint in one of these formats:
+     - Domain only: `abc123-def456-ghi789.trycloudflare.com` (no https://)
+     - Or IP:port: `134.199.203.133:8080` (if using direct HTTP)
+     - Note: Try domain first, if that doesn't work, use IP:port format
 
 3. **Click "Run Benchmark"**
 
