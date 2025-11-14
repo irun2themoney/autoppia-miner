@@ -92,16 +92,16 @@ class TaskClassifier:
     Categorizes tasks and provides specialized action generation
     """
     
-    # Task type patterns
+    # Task type patterns (enhanced for InfiniteWeb Arena)
     PATTERNS = {
-        "search": r"(search|find|look for|query|browse)",
-        "form_fill": r"(fill|submit|complete|form|input|register)",
+        "search": r"(search|find|look for|query|browse|filter|show details for)",
+        "form_fill": r"(fill|submit|complete|form|input|register|authenticate|login|log in|sign in|sign up|update|edit|add|create|send)",
         "price_compare": r"(compare|price|cost|cheaper|expensive|discount|save)",
-        "click": r"(click|select|choose|pick|tap)",
-        "extract": r"(extract|get|retrieve|copy|collect|scrape)",
-        "navigate": r"(go to|visit|open|access|navigate)",
+        "click": r"(click|select|choose|pick|tap|delete|remove)",
+        "extract": r"(extract|get|retrieve|copy|collect|scrape|show|display|view)",
+        "navigate": r"(go to|visit|open|access|navigate|contact page)",
         "scroll": r"(scroll|down|up|bottom|top|view more)",
-        "checkout": r"(checkout|purchase|buy|add to cart|pay)"
+        "checkout": r"(checkout|purchase|buy|add to cart|pay|logout|log out|sign out)"
     }
     
     @staticmethod
@@ -126,8 +126,8 @@ class TaskClassifier:
         
         actions = []
         
-        # Navigate to URL first
-        if url:
+        # Navigate to URL first (if provided)
+        if url and url.strip():
             actions.append({
                 "action_type": "navigate",
                 "url": url
@@ -135,6 +135,15 @@ class TaskClassifier:
             actions.append({
                 "action_type": "wait",
                 "duration": 1.5
+            })
+        else:
+            # If no URL, start with screenshot to see current state
+            actions.append({
+                "action_type": "screenshot"
+            })
+            actions.append({
+                "action_type": "wait",
+                "duration": 1.0
             })
         
         # Task-specific action templates
@@ -181,11 +190,18 @@ class TaskClassifier:
             ])
         
         elif task_type == "navigate":
-            actions.extend([
-                {"action_type": "navigate", "url": url},
-                {"action_type": "wait", "duration": 2},
-                {"action_type": "screenshot"}
-            ])
+            if url and url.strip():
+                actions.extend([
+                    {"action_type": "navigate", "url": url},
+                    {"action_type": "wait", "duration": 2},
+                    {"action_type": "screenshot"}
+                ])
+            else:
+                # If no URL provided, just take screenshot
+                actions.extend([
+                    {"action_type": "screenshot"},
+                    {"action_type": "wait", "duration": 1}
+                ])
         
         elif task_type == "extract":
             actions.extend([
@@ -378,20 +394,36 @@ def _generate_default_actions(url: str, prompt: str) -> list:
     """Generate default action sequence as fallback"""
     actions = []
     
-    if url:
+    if url and url.strip():
         actions.append({
             "action_type": "navigate",
             "url": url
         })
-    
-    actions.append({
-        "action_type": "wait",
-        "duration": 2.0
-    })
+        actions.append({
+            "action_type": "wait",
+            "duration": 2.0
+        })
+    else:
+        # If no URL, start with screenshot
+        actions.append({
+            "action_type": "screenshot"
+        })
+        actions.append({
+            "action_type": "wait",
+            "duration": 1.0
+        })
     
     actions.append({
         "action_type": "screenshot"
     })
+    
+    # Always ensure we have at least some actions
+    if len(actions) == 0:
+        actions = [
+            {"action_type": "screenshot"},
+            {"action_type": "wait", "duration": 1.0},
+            {"action_type": "screenshot"}
+        ]
     
     return actions
 
@@ -479,9 +511,14 @@ async def solve_task(request_data: Dict[str, Any]):
         logger.info(f"🔧 Generating specialized actions for task type: {task_type}")
         template_actions = TaskClassifier.generate_specialized_actions(task_type, url, prompt)
         
+        # Ensure we always have actions (fallback to default if template is empty)
+        if not template_actions or len(template_actions) == 0:
+            logger.warning(f"⚠️  Template returned empty actions, using default")
+            template_actions = _generate_default_actions(url, prompt)
+        
         # Decide: use template only or also try AI?
         # Use template if it's a high-confidence category or if we want speed
-        use_template_only = task_type in ["search", "form_fill", "checkout"]
+        use_template_only = task_type in ["search", "form_fill", "checkout", "click"]
         
         actions = []
         
@@ -551,7 +588,12 @@ Example: [
                 logger.warning(f"⚠️  AI call failed: {str(e)}, using template")
                 actions = template_actions
         
-        # Step 4: Cache the successful actions
+        # Step 4: Ensure we have actions (final safety check)
+        if not actions or len(actions) == 0:
+            logger.warning(f"⚠️  No actions generated, using default fallback")
+            actions = _generate_default_actions(url, prompt)
+        
+        # Step 5: Cache the successful actions
         cache.set(prompt, url, actions)
         
         elapsed = time.time() - start_time
