@@ -3,6 +3,7 @@
 ## Key Articles & Documentation
 
 ### Autoppia/IWA Core Resources
+- **Autoppia Docs**: https://luxit.gitbook.io/autoppia-docs ⭐
 - **IWA Home**: https://infinitewebarena.autoppia.com/home
 - **IWA Playground**: https://infinitewebarena.autoppia.com/playground
 - **Round 3 Results**: https://infinitewebarena.autoppia.com/subnet36/rounds/round_3?validator=validator-83
