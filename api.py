@@ -88,7 +88,7 @@ async def startup_event():
     try:
         # Create logs directory if it doesn't exist
         os.makedirs("logs", exist_ok=True)
-worker = AutoppiaWorker()
+        worker = AutoppiaWorker()
         logger.info("✅ Worker initialized successfully on startup")
     except Exception as e:
         logger.error(f"❌ Failed to initialize worker on startup: {str(e)}")
