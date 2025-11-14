@@ -62,15 +62,11 @@ echo "⚙️  Step 5: Setting up environment..."
 if [ ! -f ".env" ]; then
     cp env.example .env
     echo "✅ Created .env file"
-    echo ""
-    echo "⚠️  IMPORTANT: You need to configure your .env file"
-    echo "   Run: nano .env"
-    echo "   Set:"
-    echo "   - CHUTES_API_KEY=your_key_here"
-    echo "   - API_URL=https://autoppia-miner.onrender.com (or your API endpoint)"
-    echo ""
-    read -p "Press Enter after you've configured .env..."
 fi
+
+# Update API_URL to use localhost (API runs on same droplet)
+sed -i "s|API_URL=.*|API_URL=http://localhost:8080|" .env
+echo "✅ Configured API_URL=http://localhost:8080"
 
 echo ""
 echo "🔐 Step 6: Checking wallet setup..."
@@ -114,17 +110,42 @@ fi
 echo ""
 echo "🔥 Step 8: Configuring firewall..."
 ufw allow 22/tcp
-ufw allow $AXON_PORT/tcp
+ufw allow 8080/tcp  # API port
+ufw allow $AXON_PORT/tcp  # Axon port
 ufw --force enable
-echo "✅ Firewall configured (SSH: 22, Axon: $AXON_PORT)"
+echo "✅ Firewall configured (SSH: 22, API: 8080, Axon: $AXON_PORT)"
 
 echo ""
-echo "⚙️  Step 9: Creating systemd service..."
+echo "⚙️  Step 9: Creating API service..."
 WORK_DIR=$(pwd)
+cat > /etc/systemd/system/autoppia-api.service << EOF
+[Unit]
+Description=Autoppia API Server
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=$WORK_DIR
+Environment="PATH=/usr/bin:/usr/local/bin"
+Environment="PYTHONUNBUFFERED=1"
+ExecStart=/usr/bin/python3 $WORK_DIR/api.py
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+echo ""
+echo "⚙️  Step 10: Creating miner service..."
 cat > /etc/systemd/system/autoppia-miner.service << EOF
 [Unit]
 Description=Autoppia Bittensor Miner
-After=network.target
+After=network.target autoppia-api.service
+Requires=autoppia-api.service
 
 [Service]
 Type=simple
@@ -143,19 +164,39 @@ WantedBy=multi-user.target
 EOF
 
 echo ""
-echo "🚀 Step 10: Starting miner service..."
+echo "🚀 Step 11: Starting services..."
 systemctl daemon-reload
+
+# Start API first
+echo "   Starting API service..."
+systemctl enable autoppia-api
+systemctl start autoppia-api
+sleep 3
+
+# Check API is running
+if systemctl is-active --quiet autoppia-api; then
+    echo "✅ API service is running!"
+else
+    echo "❌ API service failed to start. Checking logs..."
+    journalctl -u autoppia-api -n 30
+    echo ""
+    echo "⚠️  Please check the logs above and fix any issues."
+    exit 1
+fi
+
+# Start miner
+echo "   Starting miner service..."
 systemctl enable autoppia-miner
 systemctl start autoppia-miner
 
 echo ""
-echo "⏳ Waiting for service to start..."
+echo "⏳ Waiting for services to start..."
 sleep 5
 
 if systemctl is-active --quiet autoppia-miner; then
     echo "✅ Miner service is running!"
 else
-    echo "❌ Service failed to start. Checking logs..."
+    echo "❌ Miner service failed to start. Checking logs..."
     journalctl -u autoppia-miner -n 30
     echo ""
     echo "⚠️  Please check the logs above and fix any issues."
@@ -169,21 +210,25 @@ echo "║        ✅ MINER DEPLOYMENT COMPLETE! ✅                        ║"
 echo "║                                                              ║"
 echo "╚══════════════════════════════════════════════════════════════╝"
 echo ""
-echo "📋 Your Miner Configuration:"
+echo "📋 Your Configuration:"
 echo "   IP: $DROPLET_IP"
+echo "   API Port: 8080"
 echo "   Axon Port: $AXON_PORT"
 echo "   Wallet: $WALLET_NAME"
 echo "   Hotkey: $HOTKEY_NAME"
 echo "   Network: $NETWORK"
 echo ""
-echo "🌐 Miner Endpoint:"
-echo "   $DROPLET_IP:$AXON_PORT"
+echo "🌐 Endpoints:"
+echo "   API: http://$DROPLET_IP:8080"
+echo "   Miner Axon: $DROPLET_IP:$AXON_PORT"
 echo ""
 echo "📝 Useful Commands:"
-echo "   View logs: journalctl -u autoppia-miner -f"
-echo "   Check status: systemctl status autoppia-miner"
-echo "   Restart: systemctl restart autoppia-miner"
-echo "   Stop: systemctl stop autoppia-miner"
+echo "   API logs: journalctl -u autoppia-api -f"
+echo "   Miner logs: journalctl -u autoppia-miner -f"
+echo "   API status: systemctl status autoppia-api"
+echo "   Miner status: systemctl status autoppia-miner"
+echo "   Restart API: systemctl restart autoppia-api"
+echo "   Restart Miner: systemctl restart autoppia-miner"
 echo ""
 echo "🔍 Check Miner Status:"
 echo "   btcli wallet overview --netuid 36 --wallet.name $WALLET_NAME --wallet.hotkey $HOTKEY_NAME"
@@ -191,13 +236,19 @@ echo ""
 echo "🔥 IMPORTANT: Configure DigitalOcean Firewall:"
 echo "   1. Go to: https://cloud.digitalocean.com/networking/firewalls"
 echo "   2. Create/Edit firewall"
-echo "   3. Add rule: Custom TCP ($AXON_PORT) - Allow from All IPv4"
+echo "   3. Add rules:"
+echo "      - Custom TCP (8080) - Allow from All IPv4 (for API)"
+echo "      - Custom TCP ($AXON_PORT) - Allow from All IPv4 (for Miner)"
 echo "   4. Apply to your droplet"
 echo ""
-echo "✅ Your miner is now running 24/7 and will:"
-echo "   - Connect to Bittensor subnet 36"
-echo "   - Receive validator requests"
-echo "   - Forward tasks to your API (configured in .env)"
+echo "✅ Your services are now running 24/7:"
+echo "   - API server on port 8080 (processes IWA tasks)"
+echo "   - Miner connected to Bittensor subnet 36"
+echo "   - Miner forwards validator requests to local API"
 echo "   - Earn TAO rewards based on performance"
+echo ""
+echo "🧪 Test your API:"
+echo "   curl http://localhost:8080/health"
+echo "   curl http://$DROPLET_IP:8080/health"
 echo ""
 
