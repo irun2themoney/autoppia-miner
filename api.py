@@ -526,7 +526,8 @@ async def solve_task(request_data: Dict[str, Any]):
         if cached_actions:
             elapsed = time.time() - start_time
             response = {
-                "task_id": task_id,
+                "id": task_id,  # Use 'id' to match InfiniteWeb Arena's expected format
+                "task_id": task_id,  # Keep for backward compatibility
                 "task_type": task_type,
                 "actions": cached_actions,
                 "success": True,
@@ -668,8 +669,10 @@ Example: [
         actions = validated_actions
         
         elapsed = time.time() - start_time
+        # InfiniteWeb Arena expects 'id' field (not 'task_id') based on their request structure
         response = {
-            "task_id": task_id,
+            "id": task_id,  # Use 'id' to match InfiniteWeb Arena's expected format
+            "task_id": task_id,  # Keep for backward compatibility
             "task_type": task_type,
             "actions": actions,  # Use validated actions
             "success": True,
