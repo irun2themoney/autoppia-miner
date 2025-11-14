@@ -330,6 +330,21 @@ async def health():
     return {"status": "healthy", "version": "1.0.0"}
 
 
+@app.options("/solve_task")
+async def solve_task_options():
+    """Handle CORS preflight requests"""
+    return JSONResponse(
+        content={},
+        status_code=200,
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+            "Access-Control-Allow-Headers": "*",
+            "Access-Control-Max-Age": "600",
+        }
+    )
+
+
 @app.post("/solve_task")
 async def solve_task(request_data: Dict[str, Any]):
     """
