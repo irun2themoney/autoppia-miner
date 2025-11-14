@@ -562,7 +562,27 @@ async def solve_task(request_data: Dict[str, Any]):
             ]
         
         # Convert actions to IWA format
-        iwa_actions = [convert_to_iwa_action(action) for action in raw_actions]
+        iwa_actions = []
+        for action in raw_actions:
+            try:
+                converted = convert_to_iwa_action(action)
+                iwa_actions.append(converted)
+            except Exception as conv_err:
+                # Log conversion error but continue
+                print(f"⚠️  Action conversion error: {conv_err}")
+                print(f"   Action: {action}")
+                # Add fallback action
+                iwa_actions.append({
+                    "type": "ScreenshotAction"
+                })
+        
+        # CRITICAL: Ensure we always have at least one action
+        # Empty actions cause playground to show "No actions recorded"
+        if not iwa_actions:
+            print("⚠️  No actions generated, adding fallback")
+            iwa_actions = [
+                {"type": "ScreenshotAction"}
+            ]
         
         elapsed = time.time() - start_time
         metrics.record(task_type, True)
