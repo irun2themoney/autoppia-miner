@@ -99,7 +99,7 @@ Type=simple
 User=root
 WorkingDirectory=/opt/autoppia-miner
 Environment="PATH=/opt/autoppia-miner/venv/bin"
-ExecStart=/opt/autoppia-miner/venv/bin/python3 /opt/autoppia-miner/miner.py --wallet.name default --wallet.hotkey default --network finney --axon.port 8091
+ExecStart=/opt/autoppia-miner/venv/bin/python3 -m miner.miner --wallet.name default --wallet.hotkey default --network finney --axon.port 8091
 Restart=always
 RestartSec=10
 
