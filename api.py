@@ -19,7 +19,7 @@ from typing import Dict, Any, Optional, List
 from datetime import datetime, timezone
 from collections import defaultdict
 from threading import Lock
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
@@ -47,6 +47,35 @@ app.add_middleware(
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
 )
+
+# Add request logging middleware to catch all requests
+@app.middleware("http")
+async def log_requests(request, call_next):
+    """Log all incoming requests for debugging"""
+    import time
+    start_time = time.time()
+    
+    # Log request details
+    logger.info(f"🌐 REQUEST: {request.method} {request.url.path} from {request.client.host if request.client else 'unknown'}")
+    
+    # Read request body if it's a POST request
+    if request.method == "POST":
+        body = await request.body()
+        if body:
+            try:
+                import json
+                body_json = json.loads(body)
+                logger.info(f"📦 REQUEST BODY: {json.dumps(body_json, indent=2)[:500]}")
+            except:
+                logger.info(f"📦 REQUEST BODY (raw): {body[:200]}")
+    
+    response = await call_next(request)
+    
+    # Log response details
+    process_time = time.time() - start_time
+    logger.info(f"📤 RESPONSE: {request.method} {request.url.path} -> {response.status_code} ({process_time*1000:.0f}ms)")
+    
+    return response
 
 # Initialize worker (deferred to startup to handle initialization errors gracefully)
 worker = None
@@ -694,6 +723,35 @@ Example: [
             },
             status_code=500
         )
+
+
+# Catch-all endpoint to log any requests to unknown endpoints
+@app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"], include_in_schema=False)
+async def catch_all(path: str, request: Request):
+    """Catch-all endpoint to log any requests to unknown endpoints"""
+    logger.warning(f"⚠️  UNKNOWN ENDPOINT REQUEST: {request.method} /{path} from {request.client.host if request.client else 'unknown'}")
+    
+    # Try to read body if POST/PUT
+    if request.method in ["POST", "PUT"]:
+        try:
+            body = await request.body()
+            if body:
+                try:
+                    import json
+                    body_json = json.loads(body)
+                    logger.warning(f"⚠️  UNKNOWN ENDPOINT BODY: {json.dumps(body_json, indent=2)[:500]}")
+                except:
+                    logger.warning(f"⚠️  UNKNOWN ENDPOINT BODY (raw): {body[:200]}")
+        except:
+            pass
+    
+    return JSONResponse(
+        content={
+            "error": f"Unknown endpoint: /{path}",
+            "available_endpoints": ["/", "/health", "/metadata", "/metrics", "/solve_task", "/process"]
+        },
+        status_code=404
+    )
 
 
 @app.get("/metrics")
