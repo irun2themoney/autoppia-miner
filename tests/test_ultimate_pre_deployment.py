@@ -10,14 +10,25 @@ import time
 import asyncio
 from typing import Dict, Any
 import sys
-sys.path.insert(0, '/Users/illfaded2022/Desktop/WORKSPACE/autoppia-miner')
+import os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from api import TaskClassifier, RequestCache, RetryHandler, app
+from api import TaskClassifier, RequestCache, RetryHandler, app, worker, startup_event
 from worker import AutoppiaWorker
 from fastapi.testclient import TestClient
 
 
 client = TestClient(app)
+
+# Ensure worker is initialized for tests
+import asyncio
+async def init_worker():
+    await startup_event()
+
+try:
+    asyncio.run(init_worker())
+except:
+    pass  # Worker may already be initialized
 
 
 class TestUltimatePreDeployment:

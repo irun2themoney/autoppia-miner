@@ -13,7 +13,10 @@ from dotenv import load_dotenv
 import bittensor as bt
 import httpx
 
-load_dotenv()
+try:
+    load_dotenv()
+except Exception:
+    pass  # Continue even if .env file can't be loaded
 
 # Subnet configuration
 SUBNET_UID = 36  # Autoppia Web Agents subnet
@@ -139,10 +142,14 @@ class AutoppiaMiner:
             logger.info(f"🚀 Starting miner (UID: {uid})")
             
             # Create axon (server that receives validator requests)
+            # Use getattr for safe access to config attributes
+            axon_port = getattr(self.config.axon, 'port', 8091) if hasattr(self.config, 'axon') else 8091
+            axon_ip = (getattr(self.config.axon, 'ip', None) if hasattr(self.config, 'axon') else None) or self._get_external_ip()
+            
             self.axon = bt.axon(
                 wallet=self.wallet,
-                port=self.config.axon.port,
-                ip=self.config.axon.ip or self._get_external_ip(),
+                port=axon_port,
+                ip=axon_ip,
             )
             
             # Attach forward function
@@ -160,13 +167,15 @@ class AutoppiaMiner:
             logger.info("✅ Miner serving on network!")
             
             # Update metagraph periodically
-            last_block = self.metagraph.block
+            last_block = 0
             while True:
                 try:
                     # Update metagraph every 100 blocks
+                    # Refresh metagraph first to get current block info
+                    self.metagraph = self.subtensor.metagraph(SUBNET_UID)
                     current_block = self.metagraph.block
+                    
                     if current_block - last_block >= 100:
-                        self.metagraph = self.subtensor.metagraph(SUBNET_UID)
                         last_block = current_block
                         logger.info(f"📊 Metagraph updated (block: {current_block}, miners: {len(self.metagraph.hotkeys)})")
                     
@@ -187,26 +196,32 @@ class AutoppiaMiner:
             await self.api_client.aclose()
     
     def _get_external_ip(self) -> str:
-        """Get external IP address"""
+        """Get external IP address - non-blocking with timeout"""
         try:
-            # Try to get external IP from API
-            import httpx
-            response = httpx.get("https://api.ipify.org", timeout=5)
-            if response.status_code == 200:
-                return response.text.strip()
+            # Try to get external IP from API using non-blocking socket
+            import socket
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.settimeout(2)  # Short timeout
+            try:
+                s.connect(("8.8.8.8", 80))
+                ip = s.getsockname()[0]
+                s.close()
+                if ip:
+                    return ip
+            except socket.timeout:
+                pass
+            except Exception:
+                pass
+            finally:
+                try:
+                    s.close()
+                except Exception:
+                    pass
         except Exception:
             pass
         
-        try:
-            # Fallback to local IP
-            import socket
-            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            s.connect(("8.8.8.8", 80))
-            ip = s.getsockname()[0]
-            s.close()
-            return ip
-        except Exception:
-            return "0.0.0.0"  # Let Bittensor auto-detect
+        # Fallback to localhost - let Bittensor auto-detect external IP
+        return "0.0.0.0"
 
 
 def main():

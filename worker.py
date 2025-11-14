@@ -13,8 +13,11 @@ from pydantic import BaseModel, Field
 from dotenv import load_dotenv
 import httpx
 
-# Load environment variables
-load_dotenv()
+# Load environment variables (with error handling for missing/permission issues)
+try:
+    load_dotenv()
+except Exception as e:
+    pass  # Continue even if .env file can't be loaded
 
 
 class WorkerConfig(BaseModel):
@@ -128,12 +131,19 @@ class AutoppiaWorker:
             return "simple"
     
     async def _get_model_for_task(self, prompt: str, input_data: Optional[Dict[str, Any]] = None) -> str:
-        """Select the best model based on task complexity"""
+        """Select the best model based on task complexity with fallback"""
         if not self.config.use_model_routing:
             return self.config.model
         
         complexity = self._detect_task_complexity(prompt, input_data)
         model = self.config.models.get(complexity, self.config.model)
+        
+        # Validate model is available, fallback to default if not
+        # In production, you could test availability here
+        if not model or model.strip() == "":
+            logger.warning(f"Invalid model for complexity {complexity}, using default")
+            model = self.config.model
+        
         logger.info(f"Task complexity: {complexity} → Using model: {model}")
         
         return model
@@ -384,7 +394,8 @@ class AutoppiaWorker:
                         logger.info(f"Trying Chutes API endpoint: {endpoint}")
                         response = await self.chutes_client.post(
                             endpoint,
-                            json=payload
+                            json=payload,
+                            timeout=10.0  # Explicit timeout to prevent hanging
                         )
                         if response.status_code == 200:
                             break

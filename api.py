@@ -18,6 +18,7 @@ import asyncio
 from typing import Dict, Any, Optional, List
 from datetime import datetime, timezone
 from collections import defaultdict
+from threading import Lock
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -25,7 +26,10 @@ from loguru import logger
 from dotenv import load_dotenv
 from worker import AutoppiaWorker, WorkerRequest
 
-load_dotenv()
+try:
+    load_dotenv()
+except Exception:
+    pass  # Continue even if .env file can't be loaded
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -44,8 +48,30 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Initialize worker
-worker = AutoppiaWorker()
+# Initialize worker (deferred to startup to handle initialization errors gracefully)
+worker = None
+
+
+@app.on_event("startup")
+async def startup_event():
+    """Initialize worker on startup"""
+    global worker
+    try:
+        # Create logs directory if it doesn't exist
+        os.makedirs("logs", exist_ok=True)
+        worker = AutoppiaWorker()
+        logger.info("✅ Worker initialized successfully on startup")
+    except Exception as e:
+        logger.error(f"❌ Failed to initialize worker on startup: {str(e)}")
+        logger.error("Application will run in degraded mode")
+        # Don't raise - allow app to start but return errors on worker-dependent endpoints
+
+
+def get_worker():
+    """Get worker instance with safety check"""
+    if worker is None:
+        raise HTTPException(status_code=503, detail="Worker not initialized. Please try again.")
+    return worker
 
 # Request tracking for metrics
 class RequestMetrics:
@@ -154,6 +180,13 @@ class TaskClassifier:
                 {"action_type": "screenshot"}
             ])
         
+        elif task_type == "navigate":
+            actions.extend([
+                {"action_type": "navigate", "url": url},
+                {"action_type": "wait", "duration": 2},
+                {"action_type": "screenshot"}
+            ])
+        
         elif task_type == "extract":
             actions.extend([
                 {"action_type": "screenshot"},
@@ -162,6 +195,17 @@ class TaskClassifier:
                 {"action_type": "screenshot"},
                 {"action_type": "scroll", "direction": "down", "amount": 2},
                 {"action_type": "wait", "duration": 1},
+                {"action_type": "screenshot"}
+            ])
+        
+        elif task_type == "scroll":
+            actions.extend([
+                {"action_type": "screenshot"},
+                {"action_type": "scroll", "direction": "down", "amount": 5},
+                {"action_type": "wait", "duration": 1.5},
+                {"action_type": "screenshot"},
+                {"action_type": "scroll", "direction": "down", "amount": 5},
+                {"action_type": "wait", "duration": 1.5},
                 {"action_type": "screenshot"}
             ])
         
@@ -190,12 +234,13 @@ class TaskClassifier:
 
 # Request caching to reduce AI calls
 class RequestCache:
-    """Simple in-memory cache for task solutions"""
+    """Simple in-memory cache for task solutions with thread-safety"""
     
     def __init__(self, max_size: int = 100, ttl: int = 3600):
         self.cache = {}
         self.max_size = max_size
         self.ttl = ttl
+        self.lock = Lock()  # Thread-safe cache access
     
     def get_key(self, prompt: str, url: str) -> str:
         """Generate cache key from prompt and URL"""
@@ -203,27 +248,29 @@ class RequestCache:
         return hashlib.md5(combined.encode()).hexdigest()
     
     def get(self, prompt: str, url: str) -> Optional[List[Dict]]:
-        """Retrieve cached actions"""
+        """Retrieve cached actions (thread-safe)"""
         key = self.get_key(prompt, url)
-        if key in self.cache:
-            cached, timestamp = self.cache[key]
-            if time.time() - timestamp < self.ttl:
-                logger.info(f"Cache hit for task")
-                return cached
-            else:
-                del self.cache[key]
+        with self.lock:
+            if key in self.cache:
+                cached, timestamp = self.cache[key]
+                if time.time() - timestamp < self.ttl:
+                    logger.info(f"Cache hit for task")
+                    return cached
+                else:
+                    del self.cache[key]
         return None
     
     def set(self, prompt: str, url: str, actions: List[Dict]) -> None:
-        """Store actions in cache"""
-        if len(self.cache) >= self.max_size:
-            # Remove oldest entry
-            oldest_key = min(self.cache.keys(), key=lambda k: self.cache[k][1])
-            del self.cache[oldest_key]
-        
-        key = self.get_key(prompt, url)
-        self.cache[key] = (actions, time.time())
-        logger.debug(f"Cached actions for task")
+        """Store actions in cache (thread-safe)"""
+        with self.lock:
+            if len(self.cache) >= self.max_size:
+                # Remove oldest entry
+                oldest_key = min(self.cache.keys(), key=lambda k: self.cache[k][1])
+                del self.cache[oldest_key]
+            
+            key = self.get_key(prompt, url)
+            self.cache[key] = (actions, time.time())
+            logger.debug(f"Cached actions for task")
 
 
 cache = RequestCache()
@@ -267,8 +314,11 @@ async def root():
 async def health_check():
     """Health check endpoint for Autoppia infrastructure"""
     try:
-        health = await worker.health_check()
+        w = get_worker()
+        health = await w.health_check()
         return JSONResponse(content=health)
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Health check failed: {str(e)}")
         raise HTTPException(status_code=503, detail="Service unhealthy")
@@ -278,8 +328,11 @@ async def health_check():
 async def get_metadata():
     """Get worker metadata"""
     try:
-        metadata = worker.get_metadata()
+        w = get_worker()
+        metadata = w.get_metadata()
         return JSONResponse(content=metadata)
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to get metadata: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -308,11 +361,14 @@ async def process_request(request_data: Dict[str, Any]):
         )
         
         # Process request
-        response = await worker.process(worker_request)
+        w = get_worker()
+        response = await w.process(worker_request)
         
         # Return response
         return JSONResponse(content=response.dict())
-        
+    
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error processing request: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -464,7 +520,8 @@ Example: [
                             "temperature": 0.3
                         }
                     )
-                    return await worker.process(gen_request)
+                    w = get_worker()
+                    return await w.process(gen_request)
                 
                 gen_response = await RetryHandler.call_with_retry(ai_call, max_retries=2)
                 
@@ -557,14 +614,27 @@ async def get_metrics():
         success_count = by_type_success_dict.get(task_type, 0)
         success_rate_by_type[task_type] = f"{(success_count / count * 100):.1f}%" if count > 0 else "0%"
     
+    try:
+        w = get_worker()
+        worker_name = w.worker_name
+        worker_version = w.worker_version
+        chutes_configured = w.config.chutes_api_key is not None
+        capabilities = w.get_metadata().get("capabilities", [])
+    except HTTPException:
+        # Worker not initialized, return degraded metrics
+        worker_name = "autoppia-miner"
+        worker_version = "0.1.0"
+        chutes_configured = False
+        capabilities = []
+    
     return {
-        "worker": worker.worker_name,
-        "version": worker.worker_version,
+        "worker": worker_name,
+        "version": worker_version,
         "status": "operational",
         "uptime": uptime_str,
         "timestamp": datetime.now(timezone.utc).isoformat(),
-        "chutes_api_configured": worker.config.chutes_api_key is not None,
-        "capabilities": worker.get_metadata().get("capabilities", []),
+        "chutes_api_configured": chutes_configured,
+        "capabilities": capabilities,
         "cache": {
             "size": len(cache.cache),
             "max_size": cache.max_size,

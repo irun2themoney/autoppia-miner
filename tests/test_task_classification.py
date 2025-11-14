@@ -11,7 +11,8 @@ from unittest.mock import AsyncMock, patch, MagicMock
 
 # Import the classes we're testing
 import sys
-sys.path.insert(0, '/Users/illfaded2022/Desktop/WORKSPACE/autoppia-miner')
+import os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from api import TaskClassifier, RequestCache, RetryHandler
 
