@@ -600,13 +600,24 @@ Example: [
                 if gen_response.success and gen_response.result:
                     try:
                         generated_text = gen_response.result.get("generated_text", "")
+                        provider = gen_response.result.get("provider", "")
                         
+                        # Skip parsing if this is a placeholder response
+                        if provider == "placeholder" or "Generated response for:" in generated_text:
+                            logger.warning(f"⚠️  Placeholder response detected, using template actions")
+                            actions = template_actions
                         # Extract JSON from response
-                        if "[" in generated_text and "]" in generated_text:
+                        elif "[" in generated_text and "]" in generated_text:
                             json_start = generated_text.index("[")
                             json_end = generated_text.rindex("]") + 1
                             json_str = generated_text[json_start:json_end]
                             ai_actions = json.loads(json_str)
+                            
+                            # Ensure all navigate actions use the correct URL
+                            for action in ai_actions:
+                                if action.get("action_type") == "navigate" and url:
+                                    action["url"] = url
+                            
                             logger.info(f"✅ AI generated {len(ai_actions)} actions")
                             actions = ai_actions
                         else:
