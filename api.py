@@ -468,8 +468,9 @@ async def solve_task(request_data: Dict[str, Any]):
         url = request_data.get("url", "")
         
         logger.info(f"📥 Received task: {task_id}")
-        logger.debug(f"Task prompt: {prompt[:100]}...")
-        logger.debug(f"Task URL: {url}")
+        logger.info(f"📝 Task prompt: {prompt[:200]}...")
+        logger.info(f"🌐 Task URL: {url if url else '(empty)'}")
+        logger.info(f"📦 Full request data keys: {list(request_data.keys())}")
         
         if not prompt:
             logger.warning(f"❌ Task {task_id} has no prompt")
@@ -488,6 +489,7 @@ async def solve_task(request_data: Dict[str, Any]):
         task_type = TaskClassifier.classify_task(prompt)
         metrics.by_type[task_type] += 1
         logger.info(f"🏷️  Classified as: {task_type}")
+        logger.info(f"📊 Task classification complete, proceeding to action generation...")
         
         # Step 2: Check cache first (fast path)
         cached_actions = cache.get(prompt, url)
@@ -510,11 +512,13 @@ async def solve_task(request_data: Dict[str, Any]):
         # Step 3: Try specialized template first (very fast, often works)
         logger.info(f"🔧 Generating specialized actions for task type: {task_type}")
         template_actions = TaskClassifier.generate_specialized_actions(task_type, url, prompt)
+        logger.info(f"📋 Template generated {len(template_actions)} actions")
         
         # Ensure we always have actions (fallback to default if template is empty)
         if not template_actions or len(template_actions) == 0:
             logger.warning(f"⚠️  Template returned empty actions, using default")
             template_actions = _generate_default_actions(url, prompt)
+            logger.info(f"📋 Default actions generated: {len(template_actions)} actions")
         
         # Decide: use template only or also try AI?
         # Use template if it's a high-confidence category or if we want speed
@@ -592,6 +596,16 @@ Example: [
         if not actions or len(actions) == 0:
             logger.warning(f"⚠️  No actions generated, using default fallback")
             actions = _generate_default_actions(url, prompt)
+            logger.info(f"📋 Final fallback generated: {len(actions)} actions")
+        
+        # Final validation - this should NEVER be empty
+        if not actions or len(actions) == 0:
+            logger.error(f"❌ CRITICAL: Still no actions after all fallbacks! Creating emergency actions.")
+            actions = [
+                {"action_type": "screenshot"},
+                {"action_type": "wait", "duration": 1.0},
+                {"action_type": "screenshot"}
+            ]
         
         # Step 5: Cache the successful actions
         cache.set(prompt, url, actions)
@@ -610,6 +624,7 @@ Example: [
         metrics.total_success += 1
         metrics.by_type_success[task_type] += 1
         logger.info(f"✅ Task {task_id} completed: {len(actions)} actions in {elapsed*1000:.0f}ms [type: {task_type}]")
+        logger.info(f"📤 Returning response with {len(actions)} actions: {[a.get('action_type', 'unknown') for a in actions[:3]]}...")
         return JSONResponse(content=response)
         
     except Exception as e:
