@@ -11,13 +11,13 @@ API_URL="http://localhost:8080"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "Test 1: Login Task (with prompt, no URL)"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-curl -X POST ${API_URL}/solve_task \
+curl -s -X POST ${API_URL}/solve_task \
   -H "Content-Type: application/json" \
   -d '{
     "id": "test-login-001",
     "prompt": "First, authenticate with username testuser and password password123 to log in successfully.",
     "url": ""
-  }' 2>&1 | python3 -m json.tool
+  }' | python3 -m json.tool
 
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
