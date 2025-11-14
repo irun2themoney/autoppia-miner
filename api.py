@@ -109,12 +109,13 @@ def generate_actions(prompt: str, url: str) -> List[Dict[str, Any]]:
     # Determine task type and generate actions
     if any(w in prompt_lower for w in ["click", "select", "choose", "switch", "toggle", "view"]):
         # Click task - wait for elements to be ready
-        actions.append({"action_type": "wait", "duration": 0.5})  # Wait for page to stabilize
+        # For calendar views, elements might need more time to render
+        actions.append({"action_type": "wait", "duration": 0.8})  # Longer wait for dynamic content
         actions.append({
             "action_type": "click",
             "selector": generate_smart_selector(prompt)
         })
-        actions.append({"action_type": "wait", "duration": 1.5})  # Longer wait after click for view change
+        actions.append({"action_type": "wait", "duration": 2.0})  # Even longer wait for view change
         actions.append({"action_type": "screenshot"})
     
     elif any(w in prompt_lower for w in ["type", "enter", "fill", "input"]):
