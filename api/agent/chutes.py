@@ -15,6 +15,7 @@ from ..actions.selectors import create_selector
 from ..utils.task_parser import TaskParser
 from ..utils.action_validator import ActionValidator
 from ..utils.action_sequencer import ActionSequencer
+from ..utils.action_optimizer import ActionOptimizer
 from ..utils.metrics import metrics
 from config.settings import settings
 import os
@@ -46,10 +47,11 @@ class ChutesAgent(BaseAgent):
         self._response_cache: Dict[str, tuple] = {}  # {cache_key: (actions, timestamp)}
         self._cache_ttl = 300  # Cache for 5 minutes
         
-        # Task parsing, validation, and sequencing
+        # Task parsing, validation, sequencing, and optimization
         self.task_parser = TaskParser()
         self.action_validator = ActionValidator()
         self.action_sequencer = ActionSequencer()
+        self.action_optimizer = ActionOptimizer()
         
         # Try alternative API URL formats if default doesn't work
         self.alternative_urls = [
@@ -489,6 +491,7 @@ JSON only, no other text:"""
             # Optimize action sequence
             iwa_actions = self.action_sequencer.optimize_sequence(iwa_actions)
             iwa_actions = self.action_sequencer.add_smart_waits(iwa_actions)
+            iwa_actions = self.action_optimizer.optimize(iwa_actions)
             
             logging.info(f"Returning {len(iwa_actions)} optimized actions")
             

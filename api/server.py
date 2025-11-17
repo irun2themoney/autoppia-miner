@@ -26,24 +26,32 @@ app.include_router(router)
 @app.get("/health")
 async def health():
     """Health check endpoint"""
-    from ..utils.metrics import metrics
     import os
     agent_type = os.getenv("AGENT_TYPE", settings.agent_type)
     
-    # Include basic metrics in health check
-    metrics_data = metrics.get_metrics()
-    
-    return {
-        "status": "healthy",
-        "version": "1.0.0",
-        "agent_type": agent_type,
-        "metrics": {
-            "total_requests": metrics_data["total_requests"],
-            "success_rate": metrics_data["success_rate"],
-            "cache_hit_rate": metrics_data["cache_hit_rate"],
-            "avg_response_time": round(metrics_data["avg_response_time"], 3),
+    try:
+        from ..utils.metrics import metrics
+        # Include basic metrics in health check
+        metrics_data = metrics.get_metrics()
+        
+        return {
+            "status": "healthy",
+            "version": "1.0.0",
+            "agent_type": agent_type,
+            "metrics": {
+                "total_requests": metrics_data["total_requests"],
+                "success_rate": metrics_data["success_rate"],
+                "cache_hit_rate": metrics_data["cache_hit_rate"],
+                "avg_response_time": round(metrics_data["avg_response_time"], 3),
+            }
         }
-    }
+    except Exception:
+        # Fallback if metrics not available
+        return {
+            "status": "healthy",
+            "version": "1.0.0",
+            "agent_type": agent_type,
+        }
 
 
 @app.get("/")
