@@ -97,11 +97,14 @@ class AutoppiaMiner:
     
     async def run(self):
         """Start miner"""
+        print("Starting miner...", flush=True)
         # Setup logging
         bt.logging.set_config(
             config=bt.logging.config()
         )
         bt.logging.set_debug(settings.log_level == "DEBUG")
+        print("Logging configured", flush=True)
+        bt.logging.info("Miner starting up...")
         
         # Check registration
         if not self.check_registration():
