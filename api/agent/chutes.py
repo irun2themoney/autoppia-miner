@@ -17,36 +17,25 @@ class ChutesAgent(BaseAgent):
     
     def __init__(self):
         self.api_key = os.getenv("CHUTES_API_KEY", "")
-        # Chutes API endpoint (discovered through testing)
-        self.api_url = os.getenv("CHUTES_API_URL", "https://api.chutes.ai/chat/completions")
+        # Chutes API endpoint - use /v1/chat/completions (correct endpoint)
+        self.api_url = os.getenv("CHUTES_API_URL", "https://api.chutes.ai/v1/chat/completions")
         self.client = httpx.AsyncClient(timeout=30.0)
         
         if not self.api_key:
             raise ValueError("CHUTES_API_KEY not set in environment")
         
-        # Extract chute ID from API key if present (format: cpk_...)
-        # The API key might contain routing information
-        self.chute_id = None
-        if self.api_key.startswith("cpk_"):
-            # Try to extract identifier from key
-            parts = self.api_key.split(".")
-            if len(parts) > 0:
-                self.chute_id = parts[0].replace("cpk_", "")
-        
         # Try alternative API URL formats if default doesn't work
         self.alternative_urls = [
-            f"https://api.chutes.ai/v1/chat/completions",
-            f"https://api.chutes.ai/completions",
+            "https://api.chutes.ai/chat/completions",  # Fallback
         ]
     
     async def _call_llm(self, prompt: str, system_prompt: str = None) -> str:
         """Call Chutes API for LLM completion"""
-        # Try different auth header formats
-        headers_configs = [
-            {"X-API-Key": self.api_key, "Content-Type": "application/json"},
-            {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"},
-            {"api-key": self.api_key, "Content-Type": "application/json"},
-        ]
+        # Use X-API-Key header (confirmed working format)
+        headers = {
+            "X-API-Key": self.api_key,
+            "Content-Type": "application/json"
+        }
         
         messages = []
         if system_prompt:
@@ -69,24 +58,49 @@ class ChutesAgent(BaseAgent):
             }
         ]
         
-        # Try different URLs and auth formats
+        # Try different URLs and payload formats
         urls_to_try = [self.api_url] + self.alternative_urls
         
         last_error = None
-        for headers in headers_configs:
-            for url in urls_to_try:
-                for payload in payloads:
-                    try:
-                        response = await self.client.post(
+        for url in urls_to_try:
+            for payload in payloads:
+                try:
+                    response = await self.client.post(
+                        url,
+                        headers=headers,
+                        json=payload,
+                        timeout=30.0
+                    )
+                    
+                    if response.status_code == 200:
+                        result = response.json()
+                        # Try different response formats
+                        content = (
+                            result.get("choices", [{}])[0].get("message", {}).get("content") or
+                            result.get("text") or
+                            result.get("response") or
+                            result.get("content")
+                        )
+                        if content:
+                            return content
+                    elif response.status_code == 401:
+                        last_error = f"Authentication failed - check API key (endpoint: {url})"
+                        continue  # Try next URL
+                    elif response.status_code == 404:
+                        continue  # Try next URL
+                    elif response.status_code == 429:
+                        # Rate limited - wait and retry once, then raise to trigger fallback
+                        import asyncio
+                        await asyncio.sleep(2)
+                        # Retry once
+                        retry_response = await self.client.post(
                             url,
                             headers=headers,
                             json=payload,
                             timeout=30.0
                         )
-                        
-                        if response.status_code == 200:
-                            result = response.json()
-                            # Try different response formats
+                        if retry_response.status_code == 200:
+                            result = retry_response.json()
                             content = (
                                 result.get("choices", [{}])[0].get("message", {}).get("content") or
                                 result.get("text") or
@@ -95,25 +109,21 @@ class ChutesAgent(BaseAgent):
                             )
                             if content:
                                 return content
-                        elif response.status_code == 401:
-                            continue  # Try next auth format
-                        elif response.status_code == 404:
-                            continue  # Try next URL
-                        elif response.status_code == 429:
-                            # Rate limited but endpoint works - wait and retry once
-                            import asyncio
-                            await asyncio.sleep(1)
-                            continue
-                        else:
-                            last_error = f"API error {response.status_code}: {response.text[:200]}"
-                            continue
+                        # If still rate limited, raise to trigger fallback
+                        raise Exception(f"Rate limited - Chutes API quota exceeded. Falling back to template agent.")
+                    else:
+                        last_error = f"API error {response.status_code}: {response.text[:200]}"
+                        continue
                             
-                    except httpx.TimeoutException:
-                        last_error = "Request timeout"
-                        continue
-                    except Exception as e:
-                        last_error = str(e)
-                        continue
+                except httpx.TimeoutException:
+                    last_error = "Request timeout"
+                    continue
+                except Exception as e:
+                    # Re-raise rate limit errors to trigger fallback
+                    if "Rate limited" in str(e):
+                        raise
+                    last_error = str(e)
+                    continue
         
         raise Exception(f"Failed to call Chutes API after trying all endpoints: {last_error}")
     
