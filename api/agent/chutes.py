@@ -8,6 +8,7 @@ import json
 import time
 import asyncio
 import hashlib
+import re
 from functools import lru_cache
 from .base import BaseAgent
 from ..actions.converter import convert_to_iwa_action
@@ -16,6 +17,7 @@ from ..utils.task_parser import TaskParser
 from ..utils.action_validator import ActionValidator
 from ..utils.action_sequencer import ActionSequencer
 from ..utils.action_optimizer import ActionOptimizer
+from ..utils.error_recovery import ErrorRecovery
 from ..utils.metrics import metrics
 from config.settings import settings
 import os
@@ -47,11 +49,12 @@ class ChutesAgent(BaseAgent):
         self._response_cache: Dict[str, tuple] = {}  # {cache_key: (actions, timestamp)}
         self._cache_ttl = 300  # Cache for 5 minutes
         
-        # Task parsing, validation, sequencing, and optimization
+        # Task parsing, validation, sequencing, optimization, and error recovery
         self.task_parser = TaskParser()
         self.action_validator = ActionValidator()
         self.action_sequencer = ActionSequencer()
         self.action_optimizer = ActionOptimizer()
+        self.error_recovery = ErrorRecovery(max_retries=2)
         
         # Try alternative API URL formats if default doesn't work
         self.alternative_urls = [
