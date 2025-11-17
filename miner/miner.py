@@ -105,9 +105,12 @@ class AutoppiaMiner:
         bt.logging.set_debug(settings.log_level == "DEBUG")
         print("Logging configured", flush=True)
         bt.logging.info("Miner starting up...")
+        print("About to check registration...", flush=True)
         
         # Check registration
+        print("Calling check_registration()...", flush=True)
         if not self.check_registration():
+            print("Registration check returned False", flush=True)
             bt.logging.error("❌ Miner not registered on subnet 36!")
             bt.logging.error(f"Hotkey: {self.wallet.hotkey.ss58_address}")
             bt.logging.error("Register with: btcli wallet register --netuid 36")
