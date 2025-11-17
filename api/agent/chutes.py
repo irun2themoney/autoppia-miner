@@ -216,33 +216,17 @@ class ChutesAgent(BaseAgent):
         
         raise Exception(f"Failed to call Chutes API after trying all endpoints: {last_error}")
     
-    def _get_cache_key(self, prompt: str, url: str) -> str:
-        """Generate cache key for prompt+url"""
-        key_string = f"{prompt}|{url}"
-        return hashlib.md5(key_string.encode()).hexdigest()
+    def _get_cached_response(self, prompt: str, url: str) -> Optional[List[Dict[str, Any]]]:
+        """Get cached response if available"""
+        cached = self._response_cache.get(prompt, url)
+        if cached:
+            import logging
+            logging.info(f"Using cached response for task")
+        return cached
     
-    def _get_cached_response(self, cache_key: str) -> Optional[List[Dict[str, Any]]]:
-        """Get cached response if available and not expired"""
-        if cache_key in self._response_cache:
-            actions, timestamp = self._response_cache[cache_key]
-            if time.time() - timestamp < self._cache_ttl:
-                import logging
-                logging.info(f"Using cached response for task")
-                return actions
-            else:
-                # Expired, remove from cache
-                del self._response_cache[cache_key]
-        return None
-    
-    def _cache_response(self, cache_key: str, actions: List[Dict[str, Any]]):
+    def _cache_response(self, prompt: str, url: str, actions: List[Dict[str, Any]]):
         """Cache response for future use"""
-        self._response_cache[cache_key] = (actions, time.time())
-        # Limit cache size (keep last 100 entries)
-        if len(self._response_cache) > 100:
-            # Remove oldest entry
-            oldest_key = min(self._response_cache.keys(), 
-                           key=lambda k: self._response_cache[k][1])
-            del self._response_cache[oldest_key]
+        self._response_cache.set(prompt, url, actions)
     
     async def _generate_actions_with_llm(self, prompt: str, url: str, parsed_task: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
         """Use LLM to generate action sequence with caching"""
