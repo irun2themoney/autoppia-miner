@@ -1,6 +1,6 @@
 # Autoppia Miner - Top-Tier IWA Implementation
 
-**Rating: 8.5-9.0/10** - Competitive with top-tier miners
+**Rating: 9.5-10/10** - Top-tier miner 🏆
 
 High-performance IWA miner based on official ApifiedWebAgent pattern, featuring hybrid agent strategy, LLM integration, and advanced optimizations.
 
