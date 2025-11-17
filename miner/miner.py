@@ -133,17 +133,29 @@ class AutoppiaMiner:
         print("Getting external IP...", flush=True)
         try:
             # Try to get external IP from metagraph or use local IP
-            external_ip = self.metagraph.axons[self.uid].ip if self.uid is not None and self.uid < len(self.metagraph.axons) else "0.0.0.0"
+            print(f"Checking metagraph.axons, UID: {self.uid}, axons length: {len(self.metagraph.axons) if hasattr(self.metagraph, 'axons') else 'N/A'}", flush=True)
+            if self.uid is not None and hasattr(self.metagraph, 'axons') and self.uid < len(self.metagraph.axons):
+                external_ip = self.metagraph.axons[self.uid].ip
+                print(f"Got IP from metagraph: {external_ip}", flush=True)
+            else:
+                external_ip = "0.0.0.0"
+                print("Using 0.0.0.0, will try system method", flush=True)
+            
             if external_ip == "0.0.0.0" or not external_ip:
                 # Fallback: try to get from system
+                print("Getting IP from system...", flush=True)
                 import socket
                 s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
                 s.connect(("8.8.8.8", 80))
                 external_ip = s.getsockname()[0]
                 s.close()
+                print(f"Got IP from system: {external_ip}", flush=True)
         except Exception as e:
+            print(f"Error getting external IP: {e}", flush=True)
             bt.logging.warning(f"Could not get external IP: {e}, using 0.0.0.0")
             external_ip = "0.0.0.0"
+        
+        print(f"Final external IP: {external_ip}", flush=True)
         
         # Create axon with metadata
         self.axon = bt.axon(
