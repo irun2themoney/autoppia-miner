@@ -126,9 +126,11 @@ class AutoppiaMiner:
             bt.logging.error("Register with: btcli wallet register --netuid 36")
             return
         
+        print(f"✅ Miner registered! UID: {self.uid}", flush=True)
         bt.logging.info(f"✅ Miner registered! UID: {self.uid}")
         
         # Get external IP for axon
+        print("Getting external IP...", flush=True)
         try:
             # Try to get external IP from metagraph or use local IP
             external_ip = self.metagraph.axons[self.uid].ip if self.uid is not None and self.uid < len(self.metagraph.axons) else "0.0.0.0"
