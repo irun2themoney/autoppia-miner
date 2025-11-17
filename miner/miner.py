@@ -158,31 +158,42 @@ class AutoppiaMiner:
         print(f"Final external IP: {external_ip}", flush=True)
         
         # Create axon with metadata
+        print("Creating axon...", flush=True)
         self.axon = bt.axon(
             wallet=self.wallet,
             port=self.config.axon.port,
             ip=external_ip,
         )
+        print("Axon created", flush=True)
         
         # Attach forward function
+        print("Attaching forward function...", flush=True)
         self.axon.attach(
             forward_fn=self.process_task,
         )
+        print("Forward function attached", flush=True)
         
         # Start axon
+        print("Starting axon...", flush=True)
         self.axon.start()
+        print(f"✅ Axon started on {external_ip}:{self.config.axon.port}", flush=True)
         bt.logging.info(f"✅ Axon started on {external_ip}:{self.config.axon.port}")
         
         # Serve axon to network (CRITICAL - this is what was missing!)
+        print("Serving axon to network...", flush=True)
         try:
             self.subtensor.serve_axon(
                 netuid=settings.subnet_uid,
                 axon=self.axon,
             )
+            print("✅ Axon served to subtensor network!", flush=True)
             bt.logging.info("✅ Axon served to subtensor network!")
         except Exception as e:
+            print(f"❌ Failed to serve axon: {e}", flush=True)
             bt.logging.error(f"❌ Failed to serve axon: {e}")
             bt.logging.error("Validators will not be able to discover your miner!")
+            import traceback
+            traceback.print_exc()
             return
         
         # Periodic metagraph sync and axon re-serving
