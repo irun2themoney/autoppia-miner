@@ -12,6 +12,8 @@ from functools import lru_cache
 from .base import BaseAgent
 from ..actions.converter import convert_to_iwa_action
 from ..actions.selectors import create_selector
+from ..utils.task_parser import TaskParser
+from ..utils.action_validator import ActionValidator
 from config.settings import settings
 import os
 
@@ -41,6 +43,10 @@ class ChutesAgent(BaseAgent):
         # Response caching to reduce API calls
         self._response_cache: Dict[str, tuple] = {}  # {cache_key: (actions, timestamp)}
         self._cache_ttl = 300  # Cache for 5 minutes
+        
+        # Task parsing and validation
+        self.task_parser = TaskParser()
+        self.action_validator = ActionValidator()
         
         # Try alternative API URL formats if default doesn't work
         self.alternative_urls = [
@@ -352,29 +358,52 @@ JSON only, no other text:"""
         prompt: str, 
         url: str
     ) -> List[Dict[str, Any]]:
-        """Solve task using Chutes LLM"""
+        """Solve task using Chutes LLM with validation and error handling"""
         import logging
         try:
+            # Parse task to extract information
+            parsed_task = self.task_parser.parse_task(prompt, url)
             logging.info(f"Using Chutes LLM (model: {self.model}) for task: {prompt[:50]}...")
+            
+            # Use parsed URL if extracted
+            task_url = parsed_task.get("url") or url
+            
             # Generate actions using LLM
-            raw_actions = await self._generate_actions_with_llm(prompt, url)
+            raw_actions = await self._generate_actions_with_llm(prompt, task_url)
             
             logging.info(f"Chutes LLM generated {len(raw_actions)} actions")
             
-            # Convert to IWA format
+            # Convert to IWA format and fix common issues
             iwa_actions = []
             for action in raw_actions:
+                # Fix common issues first
+                action = self.action_validator.fix_common_issues(action)
+                # Convert to IWA format
                 iwa_action = convert_to_iwa_action(action)
                 iwa_actions.append(iwa_action)
             
-            # Ensure non-empty
-            if not iwa_actions:
+            # Validate actions
+            valid_actions, errors = self.action_validator.validate_actions(iwa_actions)
+            
+            if errors:
+                logging.warning(f"Action validation found {len(errors)} errors: {errors[:3]}")
+            
+            # Use valid actions, or fallback if none valid
+            if valid_actions:
+                iwa_actions = valid_actions
+            elif iwa_actions:
+                # If we have actions but validation failed, log and use them anyway
+                logging.warning(f"Using actions despite validation errors")
+            else:
+                # No valid actions, ensure non-empty
                 iwa_actions = [{"type": "ScreenshotAction"}]
             
+            logging.info(f"Returning {len(iwa_actions)} validated actions")
             return iwa_actions
             
         except Exception as e:
             # Fallback to template agent on error
+            import logging
             error_msg = str(e)
             if "Rate limited" in error_msg or "429" in error_msg:
                 logging.warning(f"Chutes API rate limited, using template fallback")
