@@ -13,8 +13,13 @@ sshpass -p 'DigitalOcean4life' ssh -o StrictHostKeyChecking=no $SERVER_USER@$SER
     git pull origin main
     
     echo ""
-    echo "Running official test suite..."
+    echo "Running official test suite (rate-limit aware)..."
     echo ""
-    python3 tests/test_official.py http://localhost:8080
+    # Use robust test suite that handles rate limits gracefully
+    if [ -f tests/test_official_robust.py ]; then
+        python3 tests/test_official_robust.py http://localhost:8080
+    else
+        python3 tests/test_official.py http://localhost:8080
+    fi
 EOF
 
