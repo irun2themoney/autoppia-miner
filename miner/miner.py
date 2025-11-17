@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 import bittensor as bt
 import httpx
 from config.settings import settings
+from .protocol import StartRoundSynapse, TaskSynapse
 
 load_dotenv()
 
@@ -64,9 +65,26 @@ class AutoppiaMiner:
             traceback.print_exc()
             return False
     
-    async def process_task(self, synapse: bt.Synapse) -> bt.Synapse:
-        """Process validator request"""
+    async def process_start_round(self, synapse: StartRoundSynapse) -> StartRoundSynapse:
+        """Handle StartRoundSynapse - acknowledge round start"""
         try:
+            bt.logging.info(f"StartRoundSynapse received: round_id={synapse.round_id}, task_type={synapse.task_type}")
+            synapse.success = True
+            synapse.message = "Round started successfully"
+        except Exception as e:
+            synapse.success = False
+            synapse.message = f"Error: {e}"
+            bt.logging.error(f"Error processing StartRoundSynapse: {e}")
+        return synapse
+    
+    async def process_task(self, synapse: bt.Synapse) -> bt.Synapse:
+        """Process validator request - handles both TaskSynapse and generic Synapse"""
+        try:
+            # Handle StartRoundSynapse separately
+            if isinstance(synapse, StartRoundSynapse):
+                return await self.process_start_round(synapse)
+            
+            # Handle TaskSynapse or generic synapse
             # Extract task data from synapse
             task_id = getattr(synapse, "id", None) or getattr(synapse, "task_id", None) or "unknown"
             prompt = getattr(synapse, "prompt", "")
@@ -92,6 +110,13 @@ class AutoppiaMiner:
                 synapse.actions = result.get("actions", [])
                 synapse.success = True
                 synapse.task_type = "generic"
+                
+                # Set additional fields if TaskSynapse
+                if isinstance(synapse, TaskSynapse):
+                    synapse.web_agent_id = result.get("web_agent_id", task_id)
+                    synapse.recording = result.get("recording", "")
+                    synapse.task_id = result.get("task_id", task_id)
+                
                 bt.logging.info(f"Task {task_id} processed successfully, {len(synapse.actions)} actions generated")
             else:
                 synapse.actions = []
@@ -102,6 +127,8 @@ class AutoppiaMiner:
             synapse.actions = []
             synapse.success = False
             bt.logging.error(f"Error processing task: {e}")
+            import traceback
+            traceback.print_exc()
         
         return synapse
     
@@ -166,12 +193,24 @@ class AutoppiaMiner:
         )
         print("Axon created", flush=True)
         
-        # Attach forward function
+        # Attach forward function - handles all synapse types
         print("Attaching forward function...", flush=True)
         self.axon.attach(
             forward_fn=self.process_task,
         )
         print("Forward function attached", flush=True)
+        
+        # Register synapse types with axon (if supported)
+        # This helps validators know what synapse types we support
+        try:
+            # Try to register synapse types
+            if hasattr(self.axon, 'attach_synapse'):
+                self.axon.attach_synapse(StartRoundSynapse, self.process_start_round)
+                self.axon.attach_synapse(TaskSynapse, self.process_task)
+                print("Synapse types registered", flush=True)
+        except Exception as e:
+            # Not critical if not supported
+            bt.logging.debug(f"Could not register synapse types: {e}")
         
         # Start axon
         print("Starting axon...", flush=True)
