@@ -29,9 +29,12 @@ class ChutesAgent(BaseAgent):
             raise ValueError("CHUTES_API_KEY not set in environment")
         
         # Rate limiting: Track last request time to avoid hitting per-minute limits
+        # Chutes API has strict per-minute limits (likely 10-20 req/min based on testing)
         self.last_request_time = 0
-        self.min_request_interval = 1.0  # Minimum 1 second between requests (60 req/min max)
+        self.min_request_interval = 3.0  # Minimum 3 seconds between requests (20 req/min max)
         self._rate_limit_lock = asyncio.Lock()
+        self.consecutive_429_errors = 0  # Track consecutive rate limit errors
+        self.last_429_time = 0  # Track when we last got a 429
         
         # Try alternative API URL formats if default doesn't work
         self.alternative_urls = [
@@ -42,8 +45,21 @@ class ChutesAgent(BaseAgent):
         """Enforce rate limiting to avoid 429 errors"""
         async with self._rate_limit_lock:
             current_time = time.time()
-            time_since_last = current_time - self.last_request_time
             
+            # If we've been getting 429 errors, wait longer
+            if self.consecutive_429_errors > 0:
+                time_since_last_429 = current_time - self.last_429_time
+                # Wait at least 60 seconds after a 429 error
+                if time_since_last_429 < 60:
+                    wait_time = 60 - time_since_last_429
+                    import logging
+                    logging.info(f"Waiting {wait_time:.1f}s after rate limit error...")
+                    await asyncio.sleep(wait_time)
+                    # Reset counter after waiting
+                    self.consecutive_429_errors = 0
+            
+            # Normal rate limiting between requests
+            time_since_last = current_time - self.last_request_time
             if time_since_last < self.min_request_interval:
                 wait_time = self.min_request_interval - time_since_last
                 await asyncio.sleep(wait_time)
@@ -126,10 +142,18 @@ class ChutesAgent(BaseAgent):
                     elif response.status_code == 404:
                         continue  # Try next URL
                     elif response.status_code == 429:
-                        # Rate limited - wait longer and retry once, then raise to trigger fallback
-                        # This suggests we hit per-minute/per-second rate limits (not daily quota)
-                        await asyncio.sleep(5)  # Wait 5 seconds before retry
-                        # Retry once
+                        # Rate limited - track this and wait much longer
+                        self.consecutive_429_errors += 1
+                        self.last_429_time = time.time()
+                        
+                        # If we've hit multiple 429s, wait even longer (exponential backoff)
+                        wait_time = min(60 * (2 ** min(self.consecutive_429_errors - 1, 3)), 300)  # Max 5 minutes
+                        
+                        import logging
+                        logging.warning(f"Chutes API rate limited (429). Waiting {wait_time}s before retry (attempt {self.consecutive_429_errors})...")
+                        await asyncio.sleep(wait_time)
+                        
+                        # Retry once after waiting
                         retry_response = await self.client.post(
                             url,
                             headers=headers,
@@ -145,11 +169,14 @@ class ChutesAgent(BaseAgent):
                                 result.get("content")
                             )
                             if content:
-                                # Update rate limit to be more conservative after hitting 429
-                                self.min_request_interval = max(self.min_request_interval, 2.0)
+                                # Reset error counter on success
+                                self.consecutive_429_errors = 0
+                                # Update rate limit to be more conservative
+                                self.min_request_interval = max(self.min_request_interval, 5.0)
                                 return content
-                        # If still rate limited, raise to trigger fallback
-                        raise Exception(f"Rate limited - Chutes API per-minute limit exceeded. Falling back to template agent.")
+                        
+                        # If still rate limited after waiting, raise to trigger fallback
+                        raise Exception(f"Rate limited - Chutes API per-minute limit exceeded after {wait_time}s wait. Falling back to template agent.")
                     else:
                         last_error = f"API error {response.status_code}: {response.text[:200]}"
                         continue
