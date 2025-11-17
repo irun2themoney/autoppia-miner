@@ -3,7 +3,7 @@ from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import Dict, Any, List, Optional
-from ..utils.feedback_loop import FeedbackLoop
+from api.utils.feedback_loop import FeedbackLoop
 
 router = APIRouter()
 feedback_loop = FeedbackLoop()

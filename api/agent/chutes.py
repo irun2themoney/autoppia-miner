@@ -510,14 +510,69 @@ JSON only, no other text:"""
             
             logging.info(f"Chutes LLM generated {len(raw_actions)} actions")
             
-            # Convert to IWA format and fix common issues
+            # Convert to IWA format and enhance selectors
             iwa_actions = []
             for action in raw_actions:
-                # Fix common issues first
-                action = self.action_validator.fix_common_issues(action)
-                # Convert to IWA format
+                action_type = action.get("type", "")
+                
+                # Enhance selectors for ClickAction with visual and feedback-based strategies
+                if action_type == "ClickAction" and action.get("selector"):
+                    original_selector = action["selector"]
+                    
+                    # Get base enhanced selectors
+                    enhanced = self.selector_enhancer.enhance_selector(
+                        original_selector,
+                        prompt,
+                        "click"
+                    )
+                    
+                    # Add visual/contextual selectors
+                    if original_selector.get("value"):
+                        visual_selectors = self.visual_selector_gen.generate_priority_selectors(
+                            original_selector.get("value"),
+                            "button"
+                        )
+                        # Merge visual selectors at the beginning (higher priority)
+                        enhanced = visual_selectors[:3] + enhanced
+                    
+                    # Enhance with context
+                    enhanced = self.visual_selector_gen.enhance_with_context(
+                        enhanced,
+                        prompt,
+                        url
+                    )
+                    
+                    # Get feedback-based best selectors
+                    feedback_selectors = self.feedback_loop.get_best_selector_strategy("button", {})
+                    if feedback_selectors:
+                        # Prepend feedback-based selectors (highest priority)
+                        enhanced = feedback_selectors[:2] + enhanced
+                    
+                    # Use first selector, but keep enhanced list for fallback
+                    action["selector"] = enhanced[0] if enhanced else original_selector
+                    # Store enhanced selectors for potential retry
+                    action["_enhanced_selectors"] = enhanced[1:] if len(enhanced) > 1 else []
+                
+                # Enhance selectors for TypeAction (form fields)
+                elif action_type == "TypeAction" and action.get("selector"):
+                    selector_value = action["selector"].get("value", "").lower()
+                    form_field_patterns = self.selector_enhancer.FORM_FIELD_PATTERNS
+                    for field_type, patterns in form_field_patterns.items():
+                        if any(pattern in selector_value for pattern in patterns):
+                            field_selectors = self.selector_enhancer.get_form_field_selectors(field_type)
+                            if field_selectors:
+                                action["selector"] = field_selectors[0]
+                                action["_enhanced_selectors"] = field_selectors[1:]
+                            break
+                
+                # Fix common issues
+                if action_type == "ClickAction" and not action.get("selector"):
+                    # Add default selector if missing
+                    action["selector"] = create_selector("tagContainsSelector", "button", case_sensitive=False)
+                
                 iwa_action = convert_to_iwa_action(action)
-                iwa_actions.append(iwa_action)
+                if iwa_action:
+                    iwa_actions.append(iwa_action)
             
             # Validate actions
             valid_actions, errors = self.action_validator.validate_actions(iwa_actions)
