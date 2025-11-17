@@ -18,6 +18,7 @@ from ..utils.action_validator import ActionValidator
 from ..utils.action_sequencer import ActionSequencer
 from ..utils.action_optimizer import ActionOptimizer
 from ..utils.error_recovery import ErrorRecovery
+from ..utils.selector_enhancer import SelectorEnhancer
 from ..utils.metrics import metrics
 from config.settings import settings
 import os
@@ -45,16 +46,17 @@ class ChutesAgent(BaseAgent):
         self.consecutive_429_errors = 0  # Track consecutive rate limit errors
         self.last_429_time = 0  # Track when we last got a 429
         
-        # Response caching to reduce API calls
-        self._response_cache: Dict[str, tuple] = {}  # {cache_key: (actions, timestamp)}
-        self._cache_ttl = 300  # Cache for 5 minutes
+        # Response caching to reduce API calls (using smart cache)
+        from ..utils.smart_cache import SmartCache
+        self._response_cache = SmartCache(max_size=100, ttl=300)  # 5 minute TTL
         
-        # Task parsing, validation, sequencing, optimization, and error recovery
+        # Task parsing, validation, sequencing, optimization, error recovery, and selector enhancement
         self.task_parser = TaskParser()
         self.action_validator = ActionValidator()
         self.action_sequencer = ActionSequencer()
         self.action_optimizer = ActionOptimizer()
         self.error_recovery = ErrorRecovery(max_retries=2)
+        self.selector_enhancer = SelectorEnhancer()
         
         # Try alternative API URL formats if default doesn't work
         self.alternative_urls = [
@@ -246,8 +248,7 @@ class ChutesAgent(BaseAgent):
         """Use LLM to generate action sequence with caching"""
         
         # Check cache first
-        cache_key = self._get_cache_key(prompt, url)
-        cached_actions = self._get_cached_response(cache_key)
+        cached_actions = self._get_cached_response(prompt, url)
         if cached_actions:
             metrics.record_cache_hit()
             return cached_actions
@@ -352,7 +353,46 @@ Output:
   {{"type": "ClickAction", "selector": {{"type": "tagContainsSelector", "value": "Submit", "case_sensitive": false}}}},
   {{"type": "WaitAction", "time_seconds": 1.0}},
   {{"type": "ScreenshotAction"}}
-]"""
+]
+
+Example 4 - Search task:
+Input: "Search for 'python tutorial'"
+Output:
+[
+  {{"type": "NavigateAction", "url": "{parsed_task.get('url') or url}"}},
+  {{"type": "WaitAction", "time_seconds": 1.5}},
+  {{"type": "ScreenshotAction"}},
+  {{"type": "TypeAction", "selector": {{"type": "attributeValueSelector", "value": "search", "attribute": "name", "case_sensitive": false}}, "text": "python tutorial"}},
+  {{"type": "WaitAction", "time_seconds": 0.5}},
+  {{"type": "ClickAction", "selector": {{"type": "tagContainsSelector", "value": "Search", "case_sensitive": false}}}},
+  {{"type": "WaitAction", "time_seconds": 2.0}},
+  {{"type": "ScreenshotAction"}}
+]
+
+Example 5 - Multi-step task:
+Input: "Click on the calendar, then select the month view"
+Output:
+[
+  {{"type": "NavigateAction", "url": "{parsed_task.get('url') or url}"}},
+  {{"type": "WaitAction", "time_seconds": 1.5}},
+  {{"type": "ScreenshotAction"}},
+  {{"type": "ClickAction", "selector": {{"type": "tagContainsSelector", "value": "Calendar", "case_sensitive": false}}}},
+  {{"type": "WaitAction", "time_seconds": 1.0}},
+  {{"type": "ScreenshotAction"}},
+  {{"type": "ClickAction", "selector": {{"type": "tagContainsSelector", "value": "Month", "case_sensitive": false}}}},
+  {{"type": "WaitAction", "time_seconds": 1.0}},
+  {{"type": "ScreenshotAction"}}
+]
+
+CRITICAL RULES:
+1. ALWAYS start with NavigateAction if URL is provided
+2. ALWAYS take ScreenshotAction after navigation (wait 1.5s first)
+3. ALWAYS take ScreenshotAction after important actions (clicks, form submissions)
+4. Use WaitAction between actions (0.3-0.5s for typing, 1.0-2.0s for clicks)
+5. Use multiple selector strategies for ClickAction (fallback chain)
+6. Extract credentials/text from prompt and use in TypeAction
+7. Keep actions logical and sequential
+8. Return ONLY valid JSON array, no explanations"""
         
         # Build enhanced prompt with extracted information
         prompt_parts = [f"Task: {prompt}"]
@@ -436,7 +476,7 @@ JSON only, no other text:"""
                 actions = [actions]
             
             # Cache the response
-            self._cache_response(cache_key, actions)
+            self._cache_response(prompt, url, actions)
             
             return actions
             
