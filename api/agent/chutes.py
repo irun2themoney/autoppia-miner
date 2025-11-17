@@ -229,11 +229,19 @@ Generate a sequence of browser actions to complete this task. Return ONLY valid 
             
         except json.JSONDecodeError as e:
             # Fallback to template if LLM returns invalid JSON
+            import logging
+            logging.warning(f"Chutes LLM returned invalid JSON, falling back to template: {e}")
             from .template import TemplateAgent
             template_agent = TemplateAgent()
             return await template_agent.solve_task("", prompt, url)
         except Exception as e:
             # Fallback to template on error
+            import logging
+            error_msg = str(e)
+            if "Rate limited" in error_msg or "429" in error_msg:
+                logging.warning(f"Chutes API rate limited, falling back to template agent")
+            else:
+                logging.warning(f"Chutes API error, falling back to template: {error_msg}")
             from .template import TemplateAgent
             template_agent = TemplateAgent()
             return await template_agent.solve_task("", prompt, url)
@@ -245,9 +253,13 @@ Generate a sequence of browser actions to complete this task. Return ONLY valid 
         url: str
     ) -> List[Dict[str, Any]]:
         """Solve task using Chutes LLM"""
+        import logging
         try:
+            logging.info(f"Using Chutes LLM (model: {self.model}) for task: {prompt[:50]}...")
             # Generate actions using LLM
             raw_actions = await self._generate_actions_with_llm(prompt, url)
+            
+            logging.info(f"Chutes LLM generated {len(raw_actions)} actions")
             
             # Convert to IWA format
             iwa_actions = []
@@ -263,6 +275,11 @@ Generate a sequence of browser actions to complete this task. Return ONLY valid 
             
         except Exception as e:
             # Fallback to template agent on error
+            error_msg = str(e)
+            if "Rate limited" in error_msg or "429" in error_msg:
+                logging.warning(f"Chutes API rate limited, using template fallback")
+            else:
+                logging.warning(f"Chutes API error, using template fallback: {error_msg}")
             from .template import TemplateAgent
             template_agent = TemplateAgent()
             return await template_agent.solve_task(task_id, prompt, url)
