@@ -2,11 +2,13 @@
 Chutes API-powered LLM agent
 Uses Chutes API for intelligent task understanding and action generation
 """
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 import httpx
 import json
 import time
 import asyncio
+import hashlib
+from functools import lru_cache
 from .base import BaseAgent
 from ..actions.converter import convert_to_iwa_action
 from ..actions.selectors import create_selector
@@ -35,6 +37,10 @@ class ChutesAgent(BaseAgent):
         self._rate_limit_lock = asyncio.Lock()
         self.consecutive_429_errors = 0  # Track consecutive rate limit errors
         self.last_429_time = 0  # Track when we last got a 429
+        
+        # Response caching to reduce API calls
+        self._response_cache: Dict[str, tuple] = {}  # {cache_key: (actions, timestamp)}
+        self._cache_ttl = 300  # Cache for 5 minutes
         
         # Try alternative API URL formats if default doesn't work
         self.alternative_urls = [
@@ -105,8 +111,9 @@ class ChutesAgent(BaseAgent):
             {
                 "model": model,
                 "messages": messages,
-                "temperature": 0.3,  # Lower temperature for more deterministic actions
-                "max_tokens": 1000
+                "temperature": 0.2,  # Lower temperature for more deterministic, consistent actions
+                "max_tokens": 1500,  # Increased for more complex tasks
+                "top_p": 0.9,  # Nucleus sampling for better quality
             }
             for model in models_to_try
         ]
@@ -193,45 +200,108 @@ class ChutesAgent(BaseAgent):
         
         raise Exception(f"Failed to call Chutes API after trying all endpoints: {last_error}")
     
+    def _get_cache_key(self, prompt: str, url: str) -> str:
+        """Generate cache key for prompt+url"""
+        key_string = f"{prompt}|{url}"
+        return hashlib.md5(key_string.encode()).hexdigest()
+    
+    def _get_cached_response(self, cache_key: str) -> Optional[List[Dict[str, Any]]]:
+        """Get cached response if available and not expired"""
+        if cache_key in self._response_cache:
+            actions, timestamp = self._response_cache[cache_key]
+            if time.time() - timestamp < self._cache_ttl:
+                import logging
+                logging.info(f"Using cached response for task")
+                return actions
+            else:
+                # Expired, remove from cache
+                del self._response_cache[cache_key]
+        return None
+    
+    def _cache_response(self, cache_key: str, actions: List[Dict[str, Any]]):
+        """Cache response for future use"""
+        self._response_cache[cache_key] = (actions, time.time())
+        # Limit cache size (keep last 100 entries)
+        if len(self._response_cache) > 100:
+            # Remove oldest entry
+            oldest_key = min(self._response_cache.keys(), 
+                           key=lambda k: self._response_cache[k][1])
+            del self._response_cache[oldest_key]
+    
     async def _generate_actions_with_llm(self, prompt: str, url: str) -> List[Dict[str, Any]]:
-        """Use LLM to generate action sequence"""
+        """Use LLM to generate action sequence with caching"""
         
-        system_prompt = """You are a web automation expert. Generate a sequence of browser actions to complete the given task.
+        # Check cache first
+        cache_key = self._get_cache_key(prompt, url)
+        cached_actions = self._get_cached_response(cache_key)
+        if cached_actions:
+            return cached_actions
+        
+        system_prompt = """You are an expert web automation agent. Generate precise, efficient browser action sequences to complete tasks.
 
-Available action types:
-- NavigateAction: Navigate to a URL
-- ClickAction: Click an element (requires selector)
-- TypeAction: Type text into an input (requires selector and text)
-- WaitAction: Wait for a duration (requires time_seconds)
-- ScreenshotAction: Take a screenshot
-- ScrollAction: Scroll the page
+CRITICAL RULES:
+1. Always start with NavigateAction if URL is provided
+2. Add WaitAction (1-2 seconds) after navigation for page load
+3. Take ScreenshotAction after important state changes
+4. Use specific selectors - prefer tagContainsSelector for buttons/links, attributeValueSelector for inputs
+5. Add WaitAction (0.3-0.5s) between interactions for stability
+6. Be concise - only necessary actions, avoid redundant screenshots
 
-Selector types:
-- tagContainsSelector: Find element by text content (e.g., "Login", "Submit")
-- attributeValueSelector: Find element by attribute (e.g., name="username", type="password")
-- xpathSelector: XPath selector (use sparingly)
+ACTION TYPES:
+- NavigateAction: Navigate to URL (requires "url" field)
+- ClickAction: Click element (requires "selector" field)
+- TypeAction: Type text (requires "selector" and "text" fields)
+- WaitAction: Wait duration (requires "time_seconds" field, typically 0.3-2.0)
+- ScreenshotAction: Capture page state (no fields needed)
+- ScrollAction: Scroll page (optional "direction" and "pixels")
 
-Return actions as a JSON array. Each action should have:
-- type: Action type (e.g., "NavigateAction", "ClickAction")
-- selector: Selector object (if needed) with type, value, and optional attribute
-- text: Text to type (for TypeAction)
-- url: URL to navigate to (for NavigateAction)
-- time_seconds: Wait duration (for WaitAction)
+SELECTOR TYPES (in priority order):
+1. tagContainsSelector: Match visible text (e.g., "Login", "Submit", "Save")
+   - Best for: Buttons, links, labels
+   - Format: {"type": "tagContainsSelector", "value": "Login", "case_sensitive": false}
+   
+2. attributeValueSelector: Match HTML attributes
+   - Best for: Input fields, form elements
+   - Format: {"type": "attributeValueSelector", "value": "username", "attribute": "name", "case_sensitive": false}
+   - Common attributes: name, id, type, data-testid, aria-label
+   
+3. xpathSelector: XPath expression (use only if necessary)
+   - Format: {"type": "xpathSelector", "value": "//button[@type='submit']"}
 
-Example:
-[
-  {"type": "NavigateAction", "url": "https://example.com"},
-  {"type": "WaitAction", "time_seconds": 1.0},
-  {"type": "ScreenshotAction"},
-  {"type": "ClickAction", "selector": {"type": "tagContainsSelector", "value": "Login", "case_sensitive": false}}
-]
+SELECTOR STRATEGY:
+- For buttons/links: Use tagContainsSelector with button text
+- For inputs: Use attributeValueSelector with name/id/type
+- For forms: Try name attribute first, then type, then id
+- Always set case_sensitive: false unless exact case matters
 
-Be specific with selectors. Use multiple fallback strategies if needed."""
+TASK PATTERNS:
+- Login: Navigate → Wait → Screenshot → Type username → Type password → Click login → Wait → Screenshot
+- Form fill: Navigate → Wait → Screenshot → Type each field → Click submit → Wait → Screenshot
+- Click task: Navigate → Wait → Screenshot → Click target → Wait → Screenshot
+- Search: Navigate → Wait → Screenshot → Type in search box → Click search/submit → Wait → Screenshot
+
+EXTRACTION RULES:
+- Extract credentials from prompt: "username:user123" → username="user123"
+- Extract URLs: "navigate to https://example.com" → NavigateAction with that URL
+- Extract text to type: "type 'hello'" → TypeAction with text="hello"
+- Extract target elements: "click the login button" → ClickAction with selector for "Login"
+
+Return ONLY valid JSON array. No explanations, no markdown, just JSON."""
         
         user_prompt = f"""Task: {prompt}
 URL: {url}
 
-Generate a sequence of browser actions to complete this task. Return ONLY valid JSON array of actions, no other text."""
+Analyze the task and generate a precise action sequence. Extract any credentials, URLs, or text from the task description.
+
+Return ONLY a valid JSON array of actions. Example format:
+[
+  {{"type": "NavigateAction", "url": "{url}"}},
+  {{"type": "WaitAction", "time_seconds": 1.5}},
+  {{"type": "ScreenshotAction"}},
+  {{"type": "ClickAction", "selector": {{"type": "tagContainsSelector", "value": "Login", "case_sensitive": false}}}}
+]
+
+JSON only, no other text:"""
         
         try:
             llm_response = await self._call_llm(user_prompt, system_prompt)
@@ -251,6 +321,9 @@ Generate a sequence of browser actions to complete this task. Return ONLY valid 
             
             if not isinstance(actions, list):
                 actions = [actions]
+            
+            # Cache the response
+            self._cache_response(cache_key, actions)
             
             return actions
             
