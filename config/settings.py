@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     api_port: int = 8080
     
     # Agent Configuration
-    agent_type: str = "template"  # template, chutes, or browser-use
+    agent_type: str = "hybrid"  # template, chutes, hybrid, or browser-use
     llm_provider: Optional[str] = None  # openai, chutes, or None
     
     # Chutes API Configuration
