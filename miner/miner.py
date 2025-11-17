@@ -38,9 +38,15 @@ class AutoppiaMiner:
     def check_registration(self) -> bool:
         """Check if miner is registered"""
         try:
-            bt.logging.info("Syncing metagraph...")
-            # Sync metagraph first
-            self.metagraph = self.subtensor.metagraph(settings.subnet_uid)
+            print("Checking registration with existing metagraph...", flush=True)
+            # Use existing metagraph (already synced in __init__)
+            # Just refresh it if needed
+            if self.metagraph is None or len(self.metagraph.hotkeys) == 0:
+                print("Metagraph empty, syncing...", flush=True)
+                bt.logging.info("Syncing metagraph...")
+                self.metagraph = self.subtensor.metagraph(settings.subnet_uid)
+            
+            print(f"Metagraph has {len(self.metagraph.hotkeys)} hotkeys", flush=True)
             bt.logging.info(f"Metagraph synced. Total hotkeys: {len(self.metagraph.hotkeys)}")
             
             if self.wallet.hotkey.ss58_address not in self.metagraph.hotkeys:
@@ -48,10 +54,14 @@ class AutoppiaMiner:
                 return False
             
             self.uid = self.metagraph.hotkeys.index(self.wallet.hotkey.ss58_address)
+            print(f"Found UID: {self.uid}", flush=True)
             bt.logging.info(f"Found UID: {self.uid}")
             return self.uid is not None
         except Exception as e:
+            print(f"Error checking registration: {e}", flush=True)
             bt.logging.error(f"Error checking registration: {e}")
+            import traceback
+            traceback.print_exc()
             return False
     
     async def process_task(self, synapse: bt.Synapse) -> bt.Synapse:
