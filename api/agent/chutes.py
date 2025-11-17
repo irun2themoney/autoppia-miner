@@ -403,16 +403,34 @@ JSON only, no other text:"""
             
             # Extract JSON from response (handle markdown code blocks)
             llm_response = llm_response.strip()
+            
+            # Remove markdown code blocks
             if llm_response.startswith("```json"):
                 llm_response = llm_response[7:]
-            if llm_response.startswith("```"):
+            elif llm_response.startswith("```"):
                 llm_response = llm_response[3:]
             if llm_response.endswith("```"):
                 llm_response = llm_response[:-3]
             llm_response = llm_response.strip()
             
-            # Parse JSON
-            actions = json.loads(llm_response)
+            # Try to extract JSON if wrapped in text
+            json_start = llm_response.find("[")
+            json_end = llm_response.rfind("]") + 1
+            if json_start >= 0 and json_end > json_start:
+                llm_response = llm_response[json_start:json_end]
+            
+            # Parse JSON with better error handling
+            try:
+                actions = json.loads(llm_response)
+            except json.JSONDecodeError as e:
+                # Try to fix common JSON issues
+                # Remove trailing commas
+                llm_response = re.sub(r',\s*}', '}', llm_response)
+                llm_response = re.sub(r',\s*]', ']', llm_response)
+                try:
+                    actions = json.loads(llm_response)
+                except:
+                    raise json.JSONDecodeError(f"Failed to parse LLM response as JSON: {e}")
             
             if not isinstance(actions, list):
                 actions = [actions]
