@@ -2,22 +2,28 @@
 
 ## Current Model
 
-**Primary**: `gpt-4o-mini`
-**Fallback**: `gpt-4`, `gpt-3.5-turbo`
+**Primary**: `Qwen/Qwen2.5-7B-Instruct` ⭐ **FREE!**
+**Fallback**: Other Qwen models, then GPT models
 
-## Why gpt-4o-mini?
+## Why Qwen2.5-7B-Instruct?
 
-- **Fast**: Quick response times for real-time task processing
-- **Cost-effective**: Lower cost per request (important with 5000/day quota)
-- **Good enough**: Sufficient quality for web automation tasks
-- **Reliable**: Stable and well-tested
+- **FREE**: No cost per request! 🎉
+- **Good quality**: 7B parameter model, well-suited for web automation
+- **Fast**: Efficient inference
+- **Open source**: Apache 2.0 license, community supported
+- **Saves quota**: Free models don't count against paid quota limits
 
 ## Available Models
 
-Chutes API supports OpenAI-compatible models. Common options:
+Chutes API supports both free open-source models and paid models:
 
-### Recommended for Web Automation:
-- **`gpt-4o-mini`** ⭐ (Current) - Fast, cheap, good quality
+### FREE Models (Recommended!):
+- **`Qwen/Qwen2.5-7B-Instruct`** ⭐ (Current) - FREE, fast, good quality
+- **`Qwen/Qwen3-32B`** - FREE, better quality, larger model
+- **`Qwen/Qwen2.5-32B-Instruct`** - FREE, best quality Qwen
+
+### Paid Models:
+- **`gpt-4o-mini`** - Fast, cheap, good quality
 - **`gpt-4o`** - Better quality, slightly slower
 - **`gpt-4`** - Best quality, slower and more expensive
 - **`gpt-3.5-turbo`** - Fastest, lower quality
@@ -43,17 +49,20 @@ export CHUTES_MODEL=gpt-4o
 
 | Model | Speed | Quality | Cost | Best For |
 |-------|-------|---------|------|----------|
-| gpt-4o-mini | ⚡⚡⚡ | ⭐⭐⭐ | 💰 | **Current choice - balanced** |
-| gpt-4o | ⚡⚡ | ⭐⭐⭐⭐ | 💰💰 | Better quality needed |
-| gpt-4 | ⚡ | ⭐⭐⭐⭐⭐ | 💰💰💰 | Complex reasoning tasks |
-| gpt-3.5-turbo | ⚡⚡⚡ | ⭐⭐ | 💰 | Speed critical, quality less important |
+| **Qwen/Qwen2.5-7B-Instruct** | ⚡⚡⚡ | ⭐⭐⭐ | **FREE** | **⭐ CURRENT - Best value!** |
+| Qwen/Qwen3-32B | ⚡⚡ | ⭐⭐⭐⭐ | **FREE** | Better quality, still free |
+| Qwen/Qwen2.5-32B-Instruct | ⚡⚡ | ⭐⭐⭐⭐ | **FREE** | Best free option |
+| gpt-4o-mini | ⚡⚡⚡ | ⭐⭐⭐ | 💰 | Paid alternative |
+| gpt-4o | ⚡⚡ | ⭐⭐⭐⭐ | 💰💰 | Better quality (paid) |
+| gpt-4 | ⚡ | ⭐⭐⭐⭐⭐ | 💰💰💰 | Complex reasoning (paid) |
+| gpt-3.5-turbo | ⚡⚡⚡ | ⭐⭐ | 💰 | Speed critical (paid) |
 
 ## Recommendations
 
-- **Start with `gpt-4o-mini`** (current) - Good balance
-- **Upgrade to `gpt-4o`** if you need better task understanding
-- **Use `gpt-4`** only for complex tasks that require deep reasoning
-- **Monitor quota usage** - Better models use more quota
+- **Use `Qwen/Qwen2.5-7B-Instruct`** (current) - FREE and good quality! 🎉
+- **Upgrade to `Qwen/Qwen3-32B`** if you need better quality (still FREE!)
+- **Only use paid models** if free models don't meet your needs
+- **Save money** - Free models don't count against quota limits
 
 ## Testing Different Models
 

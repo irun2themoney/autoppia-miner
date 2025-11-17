@@ -21,8 +21,8 @@ class ChutesAgent(BaseAgent):
         self.api_key = os.getenv("CHUTES_API_KEY", "")
         # Chutes API endpoint - use /v1/chat/completions (correct endpoint)
         self.api_url = os.getenv("CHUTES_API_URL", "https://api.chutes.ai/v1/chat/completions")
-        # Model selection - default to gpt-4o-mini (fast, cost-effective)
-        self.model = os.getenv("CHUTES_MODEL", settings.chutes_model if hasattr(settings, 'chutes_model') else "gpt-4o-mini")
+        # Model selection - default to Qwen2.5-7B (FREE and good quality!)
+        self.model = os.getenv("CHUTES_MODEL", settings.chutes_model if hasattr(settings, 'chutes_model') else "Qwen/Qwen2.5-7B-Instruct")
         self.client = httpx.AsyncClient(timeout=30.0)
         
         if not self.api_key:
@@ -67,13 +67,21 @@ class ChutesAgent(BaseAgent):
         messages.append({"role": "user", "content": prompt})
         
         # Use configured model, with fallback options
-        # Chutes supports OpenAI-compatible models: gpt-4o-mini, gpt-4o, gpt-4, gpt-3.5-turbo
-        # Also supports: claude-3-5-sonnet, claude-3-opus, and others
+        # Chutes supports free models: Qwen/Qwen2.5-7B-Instruct, Qwen/Qwen3-32B
+        # Also supports OpenAI models: gpt-4o-mini, gpt-4o, gpt-4, gpt-3.5-turbo
         primary_model = self.model
-        fallback_models = ["gpt-4o-mini", "gpt-4", "gpt-3.5-turbo"] if primary_model not in ["gpt-4o-mini", "gpt-4", "gpt-3.5-turbo"] else ["gpt-4", "gpt-3.5-turbo"]
         
-        # Remove primary model from fallback list if it's already there
-        fallback_models = [m for m in fallback_models if m != primary_model]
+        # Smart fallback: prefer free models, then paid
+        free_models = ["Qwen/Qwen2.5-7B-Instruct", "Qwen/Qwen3-32B", "Qwen/Qwen2.5-32B-Instruct"]
+        paid_models = ["gpt-4o-mini", "gpt-4", "gpt-3.5-turbo"]
+        
+        # Build fallback list based on primary model
+        if any(free in primary_model for free in ["Qwen", "qwen"]):
+            # If using Qwen, fallback to other Qwen models, then paid
+            fallback_models = [m for m in free_models if m != primary_model] + paid_models
+        else:
+            # If using paid, fallback to free first (save money!), then other paid
+            fallback_models = free_models + [m for m in paid_models if m != primary_model]
         
         models_to_try = [primary_model] + fallback_models
         
