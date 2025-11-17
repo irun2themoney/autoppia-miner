@@ -14,6 +14,7 @@ from ..actions.converter import convert_to_iwa_action
 from ..actions.selectors import create_selector
 from ..utils.task_parser import TaskParser
 from ..utils.action_validator import ActionValidator
+from ..utils.action_sequencer import ActionSequencer
 from config.settings import settings
 import os
 
@@ -44,9 +45,10 @@ class ChutesAgent(BaseAgent):
         self._response_cache: Dict[str, tuple] = {}  # {cache_key: (actions, timestamp)}
         self._cache_ttl = 300  # Cache for 5 minutes
         
-        # Task parsing and validation
+        # Task parsing, validation, and sequencing
         self.task_parser = TaskParser()
         self.action_validator = ActionValidator()
+        self.action_sequencer = ActionSequencer()
         
         # Try alternative API URL formats if default doesn't work
         self.alternative_urls = [
@@ -294,14 +296,46 @@ EXTRACTION RULES:
 
 Return ONLY valid JSON array. No explanations, no markdown, just JSON."""
         
-        user_prompt = f"""Task: {prompt}
-URL: {url}
+        # Parse task to enhance prompt
+        parsed_task = self.task_parser.parse_task(prompt, url)
+        
+        # Build enhanced prompt with extracted information
+        prompt_parts = [f"Task: {prompt}"]
+        prompt_parts.append(f"URL: {parsed_task.get('url') or url}")
+        
+        # Add extracted information
+        if parsed_task.get("credentials"):
+            creds = parsed_task["credentials"]
+            if "username" in creds:
+                prompt_parts.append(f"Username: {creds['username']}")
+            if "password" in creds:
+                prompt_parts.append(f"Password: {creds['password']}")
+            if "email" in creds:
+                prompt_parts.append(f"Email: {creds['email']}")
+        
+        if parsed_task.get("text_to_type"):
+            prompt_parts.append(f"Text to type: '{parsed_task['text_to_type']}'")
+        
+        if parsed_task.get("target_element"):
+            prompt_parts.append(f"Target element: {parsed_task['target_element']}")
+        
+        # Add task type hints
+        if parsed_task.get("has_login"):
+            prompt_parts.append("Task type: Login required")
+        if parsed_task.get("has_form"):
+            prompt_parts.append("Task type: Form filling")
+        if parsed_task.get("has_search"):
+            prompt_parts.append("Task type: Search")
+        if parsed_task.get("has_modify"):
+            prompt_parts.append("Task type: Modification/Edit")
+        
+        user_prompt = "\n".join(prompt_parts) + f"""
 
-Analyze the task and generate a precise action sequence. Extract any credentials, URLs, or text from the task description.
+Analyze the task and generate a precise action sequence using the extracted information above.
 
 Return ONLY a valid JSON array of actions. Example format:
 [
-  {{"type": "NavigateAction", "url": "{url}"}},
+  {{"type": "NavigateAction", "url": "{parsed_task.get('url') or url}"}},
   {{"type": "WaitAction", "time_seconds": 1.5}},
   {{"type": "ScreenshotAction"}},
   {{"type": "ClickAction", "selector": {{"type": "tagContainsSelector", "value": "Login", "case_sensitive": false}}}}
@@ -398,7 +432,11 @@ JSON only, no other text:"""
                 # No valid actions, ensure non-empty
                 iwa_actions = [{"type": "ScreenshotAction"}]
             
-            logging.info(f"Returning {len(iwa_actions)} validated actions")
+            # Optimize action sequence
+            iwa_actions = self.action_sequencer.optimize_sequence(iwa_actions)
+            iwa_actions = self.action_sequencer.add_smart_waits(iwa_actions)
+            
+            logging.info(f"Returning {len(iwa_actions)} optimized actions")
             return iwa_actions
             
         except Exception as e:
