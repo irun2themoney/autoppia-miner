@@ -100,7 +100,7 @@ def test_response_time(base_url: str = "http://localhost:8080"):
         response = requests.post(
             f"{base_url}/solve_task",
             json=task,
-            timeout=30
+            timeout=60  # Increased timeout for rate-limited scenarios
         )
         elapsed = time.time() - start
         
@@ -126,7 +126,7 @@ def test_action_format(base_url: str = "http://localhost:8080"):
         response = requests.post(
             f"{base_url}/solve_task",
             json=task,
-            timeout=30
+            timeout=60  # Increased timeout for rate-limited scenarios
         )
         
         assert response.status_code == 200
