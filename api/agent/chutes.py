@@ -19,6 +19,8 @@ from ..utils.action_sequencer import ActionSequencer
 from ..utils.action_optimizer import ActionOptimizer
 from ..utils.error_recovery import ErrorRecovery
 from ..utils.selector_enhancer import SelectorEnhancer
+from ..utils.visual_selectors import VisualSelectorGenerator
+from ..utils.feedback_loop import FeedbackLoop
 from ..utils.metrics import metrics
 from config.settings import settings
 import os
@@ -50,13 +52,15 @@ class ChutesAgent(BaseAgent):
         from ..utils.smart_cache import SmartCache
         self._response_cache = SmartCache(max_size=100, ttl=300)  # 5 minute TTL
         
-        # Task parsing, validation, sequencing, optimization, error recovery, and selector enhancement
+        # Task parsing, validation, sequencing, optimization, error recovery, selector enhancement, and feedback
         self.task_parser = TaskParser()
         self.action_validator = ActionValidator()
         self.action_sequencer = ActionSequencer()
         self.action_optimizer = ActionOptimizer()
         self.error_recovery = ErrorRecovery(max_retries=2)
         self.selector_enhancer = SelectorEnhancer()
+        self.visual_selector_gen = VisualSelectorGenerator()
+        self.feedback_loop = FeedbackLoop()
         
         # Try alternative API URL formats if default doesn't work
         self.alternative_urls = [
@@ -544,6 +548,10 @@ JSON only, no other text:"""
             response_time = time.time() - start_time
             task_type = "login" if parsed_task.get("has_login") else "form" if parsed_task.get("has_form") else "click" if "click" in prompt.lower() else "generic"
             metrics.record_request(success=True, response_time=response_time, task_type=task_type)
+            
+            # Note: Feedback will be recorded when validator provides results
+            # For now, we assume success if actions are generated
+            # In production, this would be called after validator feedback
             
             return iwa_actions
             
