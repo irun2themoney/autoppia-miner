@@ -30,7 +30,7 @@ async def health():
     agent_type = os.getenv("AGENT_TYPE", settings.agent_type)
     
     try:
-        from ..utils.metrics import metrics
+        from api.utils.metrics import metrics
         # Include basic metrics in health check
         metrics_data = metrics.get_metrics()
         
@@ -45,7 +45,7 @@ async def health():
                 "avg_response_time": round(metrics_data["avg_response_time"], 3),
             }
         }
-    except Exception:
+    except Exception as e:
         # Fallback if metrics not available
         return {
             "status": "healthy",
