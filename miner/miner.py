@@ -91,10 +91,9 @@ class AutoppiaMiner:
         """Start miner"""
         # Setup logging
         bt.logging.set_config(
-            config=bt.logging.config(
-                level=settings.log_level
-            )
+            config=bt.logging.config()
         )
+        bt.logging.set_debug(settings.log_level == "DEBUG")
         
         # Check registration
         if not self.check_registration():
