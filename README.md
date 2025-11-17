@@ -227,11 +227,12 @@ bash scripts/CHECK_OVERNIGHT_ACTIVITY.sh
 All documentation is organized in the `docs/` directory. See `docs/README.md` for full index.
 
 **Key Documents:**
-- `docs/CURRENT_RATING.md` - Current rating and breakdown
-- `docs/COMPLIANCE_CHECK.md` - Compliance status
+- `docs/QUICK_START_GUIDE.md` - **START HERE** - Quick production guide
+- `docs/NEXT_STEPS_ROADMAP.md` - What to do next
+- `docs/CURRENT_RATING.md` - Current rating (9.5-10/10)
+- `docs/COMPETITIVE_ADVANTAGES.md` - Why this miner dominates
+- `docs/COMPLIANCE_STATUS.md` - Compliance verification
 - `docs/DEPLOYMENT.md` - Deployment guide
-- `docs/IMPROVEMENTS_SUMMARY.md` - Feature improvements
-- `docs/ROADMAP_TO_8.md` - Roadmap and future plans
 
 ## References
 
