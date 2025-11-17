@@ -5,6 +5,8 @@ Uses Chutes API for intelligent task understanding and action generation
 from typing import Dict, Any, List
 import httpx
 import json
+import time
+import asyncio
 from .base import BaseAgent
 from ..actions.converter import convert_to_iwa_action
 from ..actions.selectors import create_selector
@@ -24,13 +26,33 @@ class ChutesAgent(BaseAgent):
         if not self.api_key:
             raise ValueError("CHUTES_API_KEY not set in environment")
         
+        # Rate limiting: Track last request time to avoid hitting per-minute limits
+        self.last_request_time = 0
+        self.min_request_interval = 1.0  # Minimum 1 second between requests (60 req/min max)
+        self._rate_limit_lock = asyncio.Lock()
+        
         # Try alternative API URL formats if default doesn't work
         self.alternative_urls = [
             "https://api.chutes.ai/chat/completions",  # Fallback
         ]
     
+    async def _rate_limit(self):
+        """Enforce rate limiting to avoid 429 errors"""
+        async with self._rate_limit_lock:
+            current_time = time.time()
+            time_since_last = current_time - self.last_request_time
+            
+            if time_since_last < self.min_request_interval:
+                wait_time = self.min_request_interval - time_since_last
+                await asyncio.sleep(wait_time)
+            
+            self.last_request_time = time.time()
+    
     async def _call_llm(self, prompt: str, system_prompt: str = None) -> str:
         """Call Chutes API for LLM completion"""
+        # Enforce rate limiting to avoid 429 errors
+        await self._rate_limit()
+        
         # Use X-API-Key header (confirmed working format)
         headers = {
             "X-API-Key": self.api_key,
@@ -89,9 +111,9 @@ class ChutesAgent(BaseAgent):
                     elif response.status_code == 404:
                         continue  # Try next URL
                     elif response.status_code == 429:
-                        # Rate limited - wait and retry once, then raise to trigger fallback
-                        import asyncio
-                        await asyncio.sleep(2)
+                        # Rate limited - wait longer and retry once, then raise to trigger fallback
+                        # This suggests we hit per-minute/per-second rate limits (not daily quota)
+                        await asyncio.sleep(5)  # Wait 5 seconds before retry
                         # Retry once
                         retry_response = await self.client.post(
                             url,
@@ -108,9 +130,11 @@ class ChutesAgent(BaseAgent):
                                 result.get("content")
                             )
                             if content:
+                                # Update rate limit to be more conservative after hitting 429
+                                self.min_request_interval = max(self.min_request_interval, 2.0)
                                 return content
                         # If still rate limited, raise to trigger fallback
-                        raise Exception(f"Rate limited - Chutes API quota exceeded. Falling back to template agent.")
+                        raise Exception(f"Rate limited - Chutes API per-minute limit exceeded. Falling back to template agent.")
                     else:
                         last_error = f"API error {response.status_code}: {response.text[:200]}"
                         continue
