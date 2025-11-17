@@ -156,17 +156,32 @@ CHUTES_MODEL=Qwen/Qwen2.5-7B-Instruct  # Free model
 
 ## Testing
 
+### Official Testing (Pre-Deployment)
+
+**IMPORTANT**: Always test before deployment using official methods!
+
+#### 1. Run Official Test Suite
+```bash
+# Python test suite
+python3 tests/test_official.py
+
+# Or bash script
+bash scripts/test_official.sh
+```
+
+#### 2. Test on IWA Playground (Official Tool)
+1. Set up HTTPS tunnel (see `docs/SIMPLE_HTTPS.md`)
+2. Go to: https://infinitewebarena.autoppia.com/playground
+3. Enter your endpoint: `IP:PORT` (e.g., `134.199.203.133:8080`)
+4. Run benchmark and verify results
+
+**See**: `docs/OFFICIAL_TESTING_GUIDE.md` for complete testing procedures
+
 ### Local Testing
 
 ```bash
 python3 tests/test_api.py
 ```
-
-### IWA Playground Testing
-
-1. Set up HTTPS tunnel (see `docs/SIMPLE_HTTPS.md`)
-2. Go to: https://infinitewebarena.autoppia.com/playground
-3. Enter your HTTPS API URL
 
 ## Deployment
 
