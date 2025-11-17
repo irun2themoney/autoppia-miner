@@ -16,8 +16,12 @@ class Settings(BaseSettings):
     api_port: int = 8080
     
     # Agent Configuration
-    agent_type: str = "template"  # template or browser-use
-    llm_provider: Optional[str] = None  # openai or None
+    agent_type: str = "template"  # template, chutes, or browser-use
+    llm_provider: Optional[str] = None  # openai, chutes, or None
+    
+    # Chutes API Configuration
+    chutes_api_key: Optional[str] = None
+    chutes_api_url: str = "https://api.chutes.ai/v1/chat/completions"
     
     # Miner Configuration
     subnet_uid: int = 36

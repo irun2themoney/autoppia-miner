@@ -3,11 +3,24 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import Dict, Any, List
-from .agent.template import TemplateAgent
 from config.settings import settings
+import os
 
 router = APIRouter()
-agent = TemplateAgent()
+
+# Initialize agent based on configuration
+def get_agent():
+    """Get agent instance based on settings"""
+    agent_type = os.getenv("AGENT_TYPE", settings.agent_type).lower()
+    
+    if agent_type == "chutes":
+        from .agent.chutes import ChutesAgent
+        return ChutesAgent()
+    else:
+        from .agent.template import TemplateAgent
+        return TemplateAgent()
+
+agent = get_agent()
 
 
 class TaskRequest(BaseModel):
