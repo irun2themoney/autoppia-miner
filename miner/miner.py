@@ -37,14 +37,22 @@ class AutoppiaMiner:
     
     def check_registration(self) -> bool:
         """Check if miner is registered"""
-        # Sync metagraph first
-        self.metagraph = self.subtensor.metagraph(settings.subnet_uid)
-        
-        if self.wallet.hotkey.ss58_address not in self.metagraph.hotkeys:
+        try:
+            bt.logging.info("Syncing metagraph...")
+            # Sync metagraph first
+            self.metagraph = self.subtensor.metagraph(settings.subnet_uid)
+            bt.logging.info(f"Metagraph synced. Total hotkeys: {len(self.metagraph.hotkeys)}")
+            
+            if self.wallet.hotkey.ss58_address not in self.metagraph.hotkeys:
+                bt.logging.warning(f"Hotkey {self.wallet.hotkey.ss58_address} not found in metagraph")
+                return False
+            
+            self.uid = self.metagraph.hotkeys.index(self.wallet.hotkey.ss58_address)
+            bt.logging.info(f"Found UID: {self.uid}")
+            return self.uid is not None
+        except Exception as e:
+            bt.logging.error(f"Error checking registration: {e}")
             return False
-        
-        self.uid = self.metagraph.hotkeys.index(self.wallet.hotkey.ss58_address)
-        return self.uid is not None
     
     async def process_task(self, synapse: bt.Synapse) -> bt.Synapse:
         """Process validator request"""
