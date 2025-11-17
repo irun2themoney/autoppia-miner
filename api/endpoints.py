@@ -52,6 +52,21 @@ async def solve_task_options():
     )
 
 
+@router.get("/metrics")
+async def get_metrics():
+    """Get performance metrics"""
+    from ..utils.metrics import metrics
+    return JSONResponse(
+        content=metrics.get_metrics(),
+        status_code=200,
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, OPTIONS",
+            "Access-Control-Allow-Headers": "*",
+        }
+    )
+
+
 @router.post("/solve_task")
 async def solve_task(request: TaskRequest):
     """
@@ -84,6 +99,11 @@ async def solve_task(request: TaskRequest):
         )
     
     except Exception as e:
+        # Record error in metrics
+        from ..utils.metrics import metrics
+        import time
+        metrics.record_request(success=False, response_time=0.0, task_type="error")
+        
         # Return empty actions on error (playground expects this)
         return JSONResponse(
             content={

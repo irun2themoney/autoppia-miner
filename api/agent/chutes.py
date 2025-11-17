@@ -15,6 +15,7 @@ from ..actions.selectors import create_selector
 from ..utils.task_parser import TaskParser
 from ..utils.action_validator import ActionValidator
 from ..utils.action_sequencer import ActionSequencer
+from ..utils.metrics import metrics
 from config.settings import settings
 import os
 
@@ -239,11 +240,14 @@ class ChutesAgent(BaseAgent):
     async def _generate_actions_with_llm(self, prompt: str, url: str, parsed_task: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
         """Use LLM to generate action sequence with caching"""
         
-        # Check cache first
+            # Check cache first
         cache_key = self._get_cache_key(prompt, url)
         cached_actions = self._get_cached_response(cache_key)
         if cached_actions:
+            metrics.record_cache_hit()
             return cached_actions
+        
+        metrics.record_cache_miss()
         
         # Parse task if not provided
         if parsed_task is None:
@@ -298,7 +302,52 @@ EXTRACTION RULES:
 - Extract text to type: "type 'hello'" → TypeAction with text="hello"
 - Extract target elements: "click the login button" → ClickAction with selector for "Login"
 
-Return ONLY valid JSON array. No explanations, no markdown, just JSON."""
+Return ONLY valid JSON array. No explanations, no markdown, just JSON.
+
+EXAMPLES:
+
+Example 1 - Login task:
+Input: "Login with username:user123 and password:pass456"
+Output:
+[
+  {{"type": "NavigateAction", "url": "{parsed_task.get('url') or url}"}},
+  {{"type": "WaitAction", "time_seconds": 1.5}},
+  {{"type": "ScreenshotAction"}},
+  {{"type": "TypeAction", "selector": {{"type": "attributeValueSelector", "value": "username", "attribute": "name", "case_sensitive": false}}, "text": "user123"}},
+  {{"type": "TypeAction", "selector": {{"type": "attributeValueSelector", "value": "password", "attribute": "type", "case_sensitive": false}}, "text": "pass456"}},
+  {{"type": "WaitAction", "time_seconds": 0.3}},
+  {{"type": "ClickAction", "selector": {{"type": "tagContainsSelector", "value": "Login", "case_sensitive": false}}}},
+  {{"type": "WaitAction", "time_seconds": 2.0}},
+  {{"type": "ScreenshotAction"}}
+]
+
+Example 2 - Click task:
+Input: "Click the month view button"
+Output:
+[
+  {{"type": "NavigateAction", "url": "{parsed_task.get('url') or url}"}},
+  {{"type": "WaitAction", "time_seconds": 1.5}},
+  {{"type": "ScreenshotAction"}},
+  {{"type": "ClickAction", "selector": {{"type": "tagContainsSelector", "value": "Month", "case_sensitive": false}}}},
+  {{"type": "WaitAction", "time_seconds": 1.0}},
+  {{"type": "ScreenshotAction"}}
+]
+
+Example 3 - Form fill:
+Input: "Fill the form with name: John and email: john@example.com"
+Output:
+[
+  {{"type": "NavigateAction", "url": "{parsed_task.get('url') or url}"}},
+  {{"type": "WaitAction", "time_seconds": 1.5}},
+  {{"type": "ScreenshotAction"}},
+  {{"type": "TypeAction", "selector": {{"type": "attributeValueSelector", "value": "name", "attribute": "name", "case_sensitive": false}}, "text": "John"}},
+  {{"type": "WaitAction", "time_seconds": 0.3}},
+  {{"type": "TypeAction", "selector": {{"type": "attributeValueSelector", "value": "email", "attribute": "name", "case_sensitive": false}}, "text": "john@example.com"}},
+  {{"type": "WaitAction", "time_seconds": 0.3}},
+  {{"type": "ClickAction", "selector": {{"type": "tagContainsSelector", "value": "Submit", "case_sensitive": false}}}},
+  {{"type": "WaitAction", "time_seconds": 1.0}},
+  {{"type": "ScreenshotAction"}}
+]"""
         
         # Build enhanced prompt with extracted information
         prompt_parts = [f"Task: {prompt}"]
@@ -395,6 +444,7 @@ JSON only, no other text:"""
     ) -> List[Dict[str, Any]]:
         """Solve task using Chutes LLM with validation and error handling"""
         import logging
+        start_time = time.time()
         try:
             # Parse task to extract information
             parsed_task = self.task_parser.parse_task(prompt, url)
@@ -404,6 +454,7 @@ JSON only, no other text:"""
             task_url = parsed_task.get("url") or url
             
             # Generate actions using LLM (pass parsed_task to avoid re-parsing)
+            metrics.record_llm_call()
             raw_actions = await self._generate_actions_with_llm(prompt, task_url, parsed_task)
             
             logging.info(f"Chutes LLM generated {len(raw_actions)} actions")
@@ -422,6 +473,8 @@ JSON only, no other text:"""
             
             if errors:
                 logging.warning(f"Action validation found {len(errors)} errors: {errors[:3]}")
+                for error in errors[:3]:
+                    metrics.record_validation_error(error.split(":")[0] if ":" in error else "unknown")
             
             # Use valid actions, or fallback if none valid
             if valid_actions:
@@ -438,6 +491,12 @@ JSON only, no other text:"""
             iwa_actions = self.action_sequencer.add_smart_waits(iwa_actions)
             
             logging.info(f"Returning {len(iwa_actions)} optimized actions")
+            
+            # Record metrics
+            response_time = time.time() - start_time
+            task_type = "login" if parsed_task.get("has_login") else "form" if parsed_task.get("has_form") else "click" if "click" in prompt.lower() else "generic"
+            metrics.record_request(success=True, response_time=response_time, task_type=task_type)
+            
             return iwa_actions
             
         except Exception as e:
@@ -446,9 +505,18 @@ JSON only, no other text:"""
             error_msg = str(e)
             if "Rate limited" in error_msg or "429" in error_msg:
                 logging.warning(f"Chutes API rate limited, using template fallback")
+                metrics.record_rate_limit_error()
             else:
                 logging.warning(f"Chutes API error, using template fallback: {error_msg}")
+            
+            metrics.record_template_fallback()
             from .template import TemplateAgent
             template_agent = TemplateAgent()
-            return await template_agent.solve_task(task_id, prompt, url)
+            result = await template_agent.solve_task(task_id, prompt, url)
+            
+            # Record metrics for fallback
+            response_time = time.time() - start_time
+            metrics.record_request(success=len(result) > 0, response_time=response_time, task_type="template_fallback")
+            
+            return result
 

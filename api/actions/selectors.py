@@ -116,11 +116,29 @@ class SelectorStrategy:
                 strategies.append(create_selector("attributeValueSelector", field, attribute="name", case_sensitive=False))
                 strategies.append(create_selector("attributeValueSelector", field, attribute="type", case_sensitive=False))
                 strategies.append(create_selector("attributeValueSelector", field, attribute="id", case_sensitive=False))
+                # Try data attributes
+                strategies.append(create_selector("attributeValueSelector", field, attribute="data-testid", case_sensitive=False))
+                strategies.append(create_selector("attributeValueSelector", field, attribute="data-cy", case_sensitive=False))
+        
+        # XPath fallbacks for complex cases
+        if keywords["targets"]:
+            target = keywords["targets"][0].lower()
+            # Generate XPath selectors as last resort
+            xpath_strategies = [
+                f"//button[contains(text(), '{target.title()}')]",
+                f"//a[contains(text(), '{target.title()}')]",
+                f"//*[@class='{target}']",
+                f"//*[@id='{target}']",
+            ]
+            for xpath in xpath_strategies[:2]:  # Limit to 2 XPath selectors
+                strategies.append(create_selector("xpathSelector", xpath, case_sensitive=False))
         
         # Fallback: generic button/link selectors
         if not strategies:
             strategies.append(create_selector("tagContainsSelector", "button", case_sensitive=False))
             strategies.append(create_selector("attributeValueSelector", "button", attribute="type", case_sensitive=False))
+            # Last resort XPath
+            strategies.append(create_selector("xpathSelector", "//button[1]", case_sensitive=False))
         
         return strategies
 
