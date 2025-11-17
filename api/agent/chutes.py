@@ -21,6 +21,8 @@ class ChutesAgent(BaseAgent):
         self.api_key = os.getenv("CHUTES_API_KEY", "")
         # Chutes API endpoint - use /v1/chat/completions (correct endpoint)
         self.api_url = os.getenv("CHUTES_API_URL", "https://api.chutes.ai/v1/chat/completions")
+        # Model selection - default to gpt-4o-mini (fast, cost-effective)
+        self.model = os.getenv("CHUTES_MODEL", settings.chutes_model if hasattr(settings, 'chutes_model') else "gpt-4o-mini")
         self.client = httpx.AsyncClient(timeout=30.0)
         
         if not self.api_key:
@@ -64,20 +66,25 @@ class ChutesAgent(BaseAgent):
             messages.append({"role": "system", "content": system_prompt})
         messages.append({"role": "user", "content": prompt})
         
-        # Try different payload formats (OpenAI-compatible and alternatives)
+        # Use configured model, with fallback options
+        # Chutes supports OpenAI-compatible models: gpt-4o-mini, gpt-4o, gpt-4, gpt-3.5-turbo
+        # Also supports: claude-3-5-sonnet, claude-3-opus, and others
+        primary_model = self.model
+        fallback_models = ["gpt-4o-mini", "gpt-4", "gpt-3.5-turbo"] if primary_model not in ["gpt-4o-mini", "gpt-4", "gpt-3.5-turbo"] else ["gpt-4", "gpt-3.5-turbo"]
+        
+        # Remove primary model from fallback list if it's already there
+        fallback_models = [m for m in fallback_models if m != primary_model]
+        
+        models_to_try = [primary_model] + fallback_models
+        
         payloads = [
             {
-                "model": "gpt-4o-mini",
+                "model": model,
                 "messages": messages,
-                "temperature": 0.3,
-                "max_tokens": 1000
-            },
-            {
-                "model": "gpt-4",
-                "messages": messages,
-                "temperature": 0.3,
+                "temperature": 0.3,  # Lower temperature for more deterministic actions
                 "max_tokens": 1000
             }
+            for model in models_to_try
         ]
         
         # Try different URLs and payload formats

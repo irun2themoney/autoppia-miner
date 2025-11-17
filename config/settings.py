@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     # Chutes API Configuration
     chutes_api_key: Optional[str] = None
     chutes_api_url: str = "https://api.chutes.ai/v1/chat/completions"
+    chutes_model: str = "gpt-4o-mini"  # Model to use: gpt-4o-mini, gpt-4, gpt-4o, claude-3-5-sonnet, etc.
     
     # Miner Configuration
     subnet_uid: int = 36
