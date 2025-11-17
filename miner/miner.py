@@ -106,7 +106,15 @@ class AutoppiaMiner:
         
         # Get external IP for axon
         try:
-            external_ip = self.subtensor.get_external_ip()
+            # Try to get external IP from metagraph or use local IP
+            external_ip = self.metagraph.axons[self.uid].ip if self.uid is not None and self.uid < len(self.metagraph.axons) else "0.0.0.0"
+            if external_ip == "0.0.0.0" or not external_ip:
+                # Fallback: try to get from system
+                import socket
+                s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                s.connect(("8.8.8.8", 80))
+                external_ip = s.getsockname()[0]
+                s.close()
         except Exception as e:
             bt.logging.warning(f"Could not get external IP: {e}, using 0.0.0.0")
             external_ip = "0.0.0.0"
