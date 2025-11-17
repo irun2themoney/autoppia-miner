@@ -32,7 +32,7 @@ def test_solve_task_endpoint(base_url: str = "http://localhost:8080"):
             f"{base_url}/solve_task",
             json=task,
             headers={"Content-Type": "application/json"},
-            timeout=30
+            timeout=60  # Increased timeout for rate-limited scenarios
         )
         
         assert response.status_code == 200
