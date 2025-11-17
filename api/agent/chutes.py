@@ -240,7 +240,7 @@ class ChutesAgent(BaseAgent):
     async def _generate_actions_with_llm(self, prompt: str, url: str, parsed_task: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
         """Use LLM to generate action sequence with caching"""
         
-            # Check cache first
+        # Check cache first
         cache_key = self._get_cache_key(prompt, url)
         cached_actions = self._get_cached_response(cache_key)
         if cached_actions:
