@@ -69,29 +69,58 @@ class SelectorStrategy:
             strategies.append(create_selector("attributeValueSelector", "button", attribute="custom", case_sensitive=False))
             return strategies
         
-        # Generic click targets
+        # Generic click targets - improved strategy
         keywords = extract_keywords(prompt)
         
-        # Priority words
-        priority_words = ["month", "week", "day", "year", "view"]
-        for word in priority_words:
+        # Priority words with multiple variations
+        priority_words = {
+            "month": ["Month", "Monthly", "Month View"],
+            "week": ["Week", "Weekly", "Week View"],
+            "day": ["Day", "Daily", "Day View"],
+            "year": ["Year", "Yearly", "Year View"],
+            "view": ["View", "Views"],
+            "login": ["Login", "Sign In", "Log In"],
+            "submit": ["Submit", "Save", "Send"],
+            "search": ["Search", "Find"],
+            "profile": ["Profile", "Account", "Settings"],
+        }
+        
+        for word, variations in priority_words.items():
             if word in prompt_lower:
-                strategies.append(create_selector("tagContainsSelector", word.title(), case_sensitive=False))
+                for variation in variations:
+                    strategies.append(create_selector("tagContainsSelector", variation, case_sensitive=False))
+                # Also try attribute selectors
+                strategies.append(create_selector("attributeValueSelector", word, attribute="data-testid", case_sensitive=False))
+                strategies.append(create_selector("attributeValueSelector", word, attribute="aria-label", case_sensitive=False))
                 break
         
-        # Try target keywords
+        # Try target keywords with variations
         if keywords["targets"]:
-            target = keywords["targets"][0].title()
-            strategies.append(create_selector("tagContainsSelector", target, case_sensitive=False))
+            target = keywords["targets"][0]
+            # Try capitalized versions
+            strategies.append(create_selector("tagContainsSelector", target.title(), case_sensitive=False))
+            strategies.append(create_selector("tagContainsSelector", target.upper(), case_sensitive=False))
+            # Try as attribute
+            strategies.append(create_selector("attributeValueSelector", target.lower(), attribute="name", case_sensitive=False))
+            strategies.append(create_selector("attributeValueSelector", target.lower(), attribute="id", case_sensitive=False))
         
         # Try action keywords
         if keywords["actions"]:
-            action = keywords["actions"][0].title()
-            strategies.append(create_selector("tagContainsSelector", action, case_sensitive=False))
+            action = keywords["actions"][0]
+            strategies.append(create_selector("tagContainsSelector", action.title(), case_sensitive=False))
         
-        # Fallback: generic button selector
+        # Common form field selectors
+        form_fields = ["username", "password", "email", "name", "submit", "button"]
+        for field in form_fields:
+            if field in prompt_lower:
+                strategies.append(create_selector("attributeValueSelector", field, attribute="name", case_sensitive=False))
+                strategies.append(create_selector("attributeValueSelector", field, attribute="type", case_sensitive=False))
+                strategies.append(create_selector("attributeValueSelector", field, attribute="id", case_sensitive=False))
+        
+        # Fallback: generic button/link selectors
         if not strategies:
-            strategies.append(create_selector("attributeValueSelector", "button:first-of-type", attribute="custom", case_sensitive=False))
+            strategies.append(create_selector("tagContainsSelector", "button", case_sensitive=False))
+            strategies.append(create_selector("attributeValueSelector", "button", attribute="type", case_sensitive=False))
         
         return strategies
 
