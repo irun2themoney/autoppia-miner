@@ -236,7 +236,7 @@ class ChutesAgent(BaseAgent):
                            key=lambda k: self._response_cache[k][1])
             del self._response_cache[oldest_key]
     
-    async def _generate_actions_with_llm(self, prompt: str, url: str) -> List[Dict[str, Any]]:
+    async def _generate_actions_with_llm(self, prompt: str, url: str, parsed_task: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
         """Use LLM to generate action sequence with caching"""
         
         # Check cache first
@@ -244,6 +244,10 @@ class ChutesAgent(BaseAgent):
         cached_actions = self._get_cached_response(cache_key)
         if cached_actions:
             return cached_actions
+        
+        # Parse task if not provided
+        if parsed_task is None:
+            parsed_task = self.task_parser.parse_task(prompt, url)
         
         system_prompt = """You are an expert web automation agent. Generate precise, efficient browser action sequences to complete tasks.
 
@@ -295,9 +299,6 @@ EXTRACTION RULES:
 - Extract target elements: "click the login button" → ClickAction with selector for "Login"
 
 Return ONLY valid JSON array. No explanations, no markdown, just JSON."""
-        
-        # Parse task to enhance prompt
-        parsed_task = self.task_parser.parse_task(prompt, url)
         
         # Build enhanced prompt with extracted information
         prompt_parts = [f"Task: {prompt}"]
@@ -402,8 +403,8 @@ JSON only, no other text:"""
             # Use parsed URL if extracted
             task_url = parsed_task.get("url") or url
             
-            # Generate actions using LLM
-            raw_actions = await self._generate_actions_with_llm(prompt, task_url)
+            # Generate actions using LLM (pass parsed_task to avoid re-parsing)
+            raw_actions = await self._generate_actions_with_llm(prompt, task_url, parsed_task)
             
             logging.info(f"Chutes LLM generated {len(raw_actions)} actions")
             
