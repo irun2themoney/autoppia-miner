@@ -5,6 +5,7 @@ from .template import TemplateAgent
 from .chutes import ChutesAgent
 from ..utils.task_complexity import TaskComplexityAnalyzer
 from ..utils.pattern_learner import PatternLearner
+from ..utils.ensemble_generator import EnsembleGenerator
 
 
 class HybridAgent(BaseAgent):
@@ -15,6 +16,7 @@ class HybridAgent(BaseAgent):
         self.chutes_agent = ChutesAgent()
         self.complexity_analyzer = TaskComplexityAnalyzer()
         self.pattern_learner = PatternLearner()
+        self.ensemble_gen = EnsembleGenerator()
     
     async def solve_task(
         self,
@@ -45,7 +47,25 @@ class HybridAgent(BaseAgent):
                 logging.warning(f"Template agent failed, falling back to LLM: {e}")
                 # Fall through to LLM
         
-        # Complex tasks: use LLM
+        # Complex tasks: use ensemble (LLM + template) for best results
+        if complexity["complexity"] == "high":
+            logging.info(f"Using ensemble strategy for complex task: {prompt[:50]}...")
+            try:
+                # Use ensemble to get best result from multiple strategies
+                parsed_task = self.complexity_analyzer.analyze(prompt, url)
+                actions = await self.ensemble_gen.generate_ensemble(
+                    prompt,
+                    url,
+                    [self.chutes_agent, self.template_agent],
+                    parsed_task
+                )
+                
+                if actions and len(actions) > 0:
+                    return actions
+            except Exception as e:
+                logging.warning(f"Ensemble failed, falling back to LLM: {e}")
+        
+        # Medium complexity or ensemble fallback: use LLM
         logging.info(f"Using LLM agent for {'complex' if complexity['complexity'] == 'high' else 'medium'} task: {prompt[:50]}...")
         try:
             actions = await self.chutes_agent.solve_task(task_id, prompt, url)

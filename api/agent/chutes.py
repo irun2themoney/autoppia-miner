@@ -21,6 +21,9 @@ from ..utils.error_recovery import ErrorRecovery
 from ..utils.selector_enhancer import SelectorEnhancer
 from ..utils.visual_selectors import VisualSelectorGenerator
 from ..utils.feedback_loop import FeedbackLoop
+from ..utils.ensemble_generator import EnsembleGenerator
+from ..utils.performance_optimizer import PerformanceOptimizer
+from ..utils.adaptive_retry import AdaptiveRetry
 from ..utils.metrics import metrics
 from config.settings import settings
 import os
@@ -61,6 +64,9 @@ class ChutesAgent(BaseAgent):
         self.selector_enhancer = SelectorEnhancer()
         self.visual_selector_gen = VisualSelectorGenerator()
         self.feedback_loop = FeedbackLoop()
+        self.ensemble_gen = EnsembleGenerator()
+        self.performance_optimizer = PerformanceOptimizer()
+        self.adaptive_retry = AdaptiveRetry(max_retries=3)
         
         # Try alternative API URL formats if default doesn't work
         self.alternative_urls = [
@@ -247,7 +253,21 @@ class ChutesAgent(BaseAgent):
         if parsed_task is None:
             parsed_task = self.task_parser.parse_task(prompt, url)
         
-        system_prompt = """You are an expert web automation agent. Generate precise, efficient browser action sequences to complete tasks.
+        system_prompt = """You are an expert web automation agent. Use chain-of-thought reasoning to generate precise, efficient browser action sequences.
+
+THINKING PROCESS:
+1. Analyze the task requirements carefully
+2. Identify the key actions needed (navigate, interact, submit)
+3. Determine the best selectors for each element
+4. Plan the sequence logically
+5. Add appropriate waits for stability
+6. Include screenshots for verification
+
+Generate actions that are:
+- Logical and sequential
+- Efficient (no redundant steps)
+- Robust (multiple selector strategies)
+- Complete (all required actions)
 
 CRITICAL RULES:
 1. Always start with NavigateAction if URL is provided
@@ -597,10 +617,14 @@ JSON only, no other text:"""
             iwa_actions = self.action_sequencer.add_smart_waits(iwa_actions)
             iwa_actions = self.action_optimizer.optimize(iwa_actions)
             
+            # Performance optimization for speed
+            iwa_actions = self.performance_optimizer.optimize_response_time(iwa_actions)
+            
             logging.info(f"Returning {len(iwa_actions)} optimized actions")
             
             # Record metrics
             response_time = time.time() - start_time
+            self.performance_optimizer.track_response_time(response_time)
             task_type = "login" if parsed_task.get("has_login") else "form" if parsed_task.get("has_form") else "click" if "click" in prompt.lower() else "generic"
             metrics.record_request(success=True, response_time=response_time, task_type=task_type)
             
