@@ -107,8 +107,18 @@ async def solve_task(request: TaskRequest, http_request: Request):
     
     # Parse task for metrics
     task_parser = TaskParser()
-    parsed_task = task_parser.parse(request.prompt, request.url)
-    task_type = parsed_task.get("task_type", "generic")
+    parsed_task = task_parser.parse_task(request.prompt, request.url)
+    # Determine task type from parsed task
+    if parsed_task.get("has_login"):
+        task_type = "login"
+    elif parsed_task.get("has_form"):
+        task_type = "form"
+    elif parsed_task.get("has_search"):
+        task_type = "search"
+    elif parsed_task.get("has_modify"):
+        task_type = "modify"
+    else:
+        task_type = "generic"
     
     try:
         # Solve task using agent

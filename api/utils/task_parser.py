@@ -102,16 +102,34 @@ class TaskParser:
     
     def parse_task(self, prompt: str, url: str = "") -> Dict[str, Any]:
         """Parse task and extract all relevant information"""
+        has_login = any(word in prompt.lower() for word in ["login", "sign in", "log in"])
+        has_form = any(word in prompt.lower() for word in ["form", "fill", "submit", "enter"])
+        has_search = any(word in prompt.lower() for word in ["search", "find", "look for"])
+        has_modify = any(word in prompt.lower() for word in ["modify", "edit", "change", "update"])
+        
+        # Determine task type
+        if has_login:
+            task_type = "login"
+        elif has_form:
+            task_type = "form"
+        elif has_search:
+            task_type = "search"
+        elif has_modify:
+            task_type = "modify"
+        else:
+            task_type = "generic"
+        
         parsed = {
             "original_prompt": prompt,
             "url": self.extract_url(prompt, url),
             "credentials": self.extract_credentials(prompt),
             "text_to_type": self.extract_text_to_type(prompt),
             "target_element": self.extract_target_element(prompt),
-            "has_login": any(word in prompt.lower() for word in ["login", "sign in", "log in"]),
-            "has_form": any(word in prompt.lower() for word in ["form", "fill", "submit", "enter"]),
-            "has_search": any(word in prompt.lower() for word in ["search", "find", "look for"]),
-            "has_modify": any(word in prompt.lower() for word in ["modify", "edit", "change", "update"]),
+            "has_login": has_login,
+            "has_form": has_form,
+            "has_search": has_search,
+            "has_modify": has_modify,
+            "task_type": task_type,
         }
         
         return parsed
