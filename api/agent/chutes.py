@@ -589,20 +589,20 @@ JSON only, no other text:"""
             try:
                 # Parse task to extract information
                 parsed_task = self.task_parser.parse_task(prompt, url)
-            logging.info(f"Using Chutes LLM (model: {self.model}) for task: {prompt[:50]}...")
-            
-            # Use parsed URL if extracted
-            task_url = parsed_task.get("url") or url
-            
-            # Generate actions using LLM (pass parsed_task to avoid re-parsing)
-            metrics.record_llm_call()
-            raw_actions = await self._generate_actions_with_llm(prompt, task_url, parsed_task)
-            
-            logging.info(f"Chutes LLM generated {len(raw_actions)} actions")
-            
-            # Convert to IWA format and enhance selectors
-            iwa_actions = []
-            for action in raw_actions:
+                logging.info(f"Using Chutes LLM (model: {self.model}) for task: {prompt[:50]}...")
+                
+                # Use parsed URL if extracted
+                task_url = parsed_task.get("url") or url
+                
+                # Generate actions using LLM (pass parsed_task to avoid re-parsing)
+                metrics.record_llm_call()
+                raw_actions = await self._generate_actions_with_llm(prompt, task_url, parsed_task)
+                
+                logging.info(f"Chutes LLM generated {len(raw_actions)} actions")
+                
+                # Convert to IWA format and enhance selectors
+                iwa_actions = []
+                for action in raw_actions:
                 action_type = action.get("type", "")
                 
                 # Enhance selectors for ClickAction with visual and feedback-based strategies
@@ -660,48 +660,48 @@ JSON only, no other text:"""
                     # Add default selector if missing
                     action["selector"] = create_selector("tagContainsSelector", "button", case_sensitive=False)
                 
-                iwa_action = convert_to_iwa_action(action)
-                if iwa_action:
-                    iwa_actions.append(iwa_action)
-            
-            # Validate actions
-            valid_actions, errors = self.action_validator.validate_actions(iwa_actions)
-            
-            if errors:
-                logging.warning(f"Action validation found {len(errors)} errors: {errors[:3]}")
-                for error in errors[:3]:
-                    metrics.record_validation_error(error.split(":")[0] if ":" in error else "unknown")
-            
-            # Use valid actions, or fallback if none valid
-            if valid_actions:
-                iwa_actions = valid_actions
-            elif iwa_actions:
-                # If we have actions but validation failed, log and use them anyway
-                logging.warning(f"Using actions despite validation errors")
-            else:
-                # No valid actions, ensure non-empty
-                iwa_actions = [{"type": "ScreenshotAction"}]
-            
-            # Optimize action sequence
-            iwa_actions = self.action_sequencer.optimize_sequence(iwa_actions)
-            iwa_actions = self.action_sequencer.add_smart_waits(iwa_actions)
-            iwa_actions = self.action_optimizer.optimize(iwa_actions)
-            
-            # Performance optimization for speed
-            iwa_actions = self.performance_optimizer.optimize_response_time(iwa_actions)
-            
-            logging.info(f"Returning {len(iwa_actions)} optimized actions")
-            
-            # Record metrics
-            response_time = time.time() - start_time
-            self.performance_optimizer.track_response_time(response_time)
-            task_type = "login" if parsed_task.get("has_login") else "form" if parsed_task.get("has_form") else "click" if "click" in prompt.lower() else "generic"
-            metrics.record_request(success=True, response_time=response_time, task_type=task_type)
-            
-            # Note: Feedback will be recorded when validator provides results
-            # For now, we assume success if actions are generated
-            # In production, this would be called after validator feedback
-            
+                    iwa_action = convert_to_iwa_action(action)
+                    if iwa_action:
+                        iwa_actions.append(iwa_action)
+                
+                # Validate actions
+                valid_actions, errors = self.action_validator.validate_actions(iwa_actions)
+                
+                if errors:
+                    logging.warning(f"Action validation found {len(errors)} errors: {errors[:3]}")
+                    for error in errors[:3]:
+                        metrics.record_validation_error(error.split(":")[0] if ":" in error else "unknown")
+                
+                # Use valid actions, or fallback if none valid
+                if valid_actions:
+                    iwa_actions = valid_actions
+                elif iwa_actions:
+                    # If we have actions but validation failed, log and use them anyway
+                    logging.warning(f"Using actions despite validation errors")
+                else:
+                    # No valid actions, ensure non-empty
+                    iwa_actions = [{"type": "ScreenshotAction"}]
+                
+                # Optimize action sequence
+                iwa_actions = self.action_sequencer.optimize_sequence(iwa_actions)
+                iwa_actions = self.action_sequencer.add_smart_waits(iwa_actions)
+                iwa_actions = self.action_optimizer.optimize(iwa_actions)
+                
+                # Performance optimization for speed
+                iwa_actions = self.performance_optimizer.optimize_response_time(iwa_actions)
+                
+                logging.info(f"Returning {len(iwa_actions)} optimized actions")
+                
+                # Record metrics
+                response_time = time.time() - start_time
+                self.performance_optimizer.track_response_time(response_time)
+                task_type = "login" if parsed_task.get("has_login") else "form" if parsed_task.get("has_form") else "click" if "click" in prompt.lower() else "generic"
+                metrics.record_request(success=True, response_time=response_time, task_type=task_type)
+                
+                # Note: Feedback will be recorded when validator provides results
+                # For now, we assume success if actions are generated
+                # In production, this would be called after validator feedback
+                
                 return iwa_actions
                 
             except json.JSONDecodeError as e:
