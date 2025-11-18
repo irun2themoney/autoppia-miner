@@ -119,6 +119,16 @@ class TaskDiversityHandler:
                 return "autolist"
             elif "autobooks" in domain:
                 return "autobooks"
+            elif "autocrm" in domain:
+                return "autocrm"
+            elif "autodrive" in domain:
+                return "autodrive"
+            elif "automail" in domain:
+                return "automail"
+            elif "autoconnect" in domain:
+                return "autoconnect"
+            elif "autolodge" in domain:
+                return "autolodge"
             elif "autolodge" in domain:
                 return "autolodge"
             else:

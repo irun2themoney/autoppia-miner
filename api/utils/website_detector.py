@@ -97,6 +97,39 @@ class WebsiteDetector:
                 "company_name": [".company-name", "[data-company]"],
             }
         },
+        "autocrm": {
+            "url_patterns": [r"autocrm", r"crm"],
+            "keywords": ["crm", "contact", "customer", "calendar", "meeting", "appointment", "client"],
+            "common_selectors": {
+                "contact_form": ["input[name='contact']", "input[name='customer']", "input[name='client']"],
+                "calendar_view": ["button:contains('Calendar')", ".calendar-view", "[data-calendar]"],
+                "meeting_button": ["button:contains('Schedule Meeting')", "button:contains('New Meeting')", "button:contains('Book Meeting')"],
+                "contact_list": [".contact-list", "[data-contact]", ".contact-item"],
+                "appointment": ["button:contains('Appointment')", "[data-appointment]"],
+            }
+        },
+        "autodrive": {
+            "url_patterns": [r"autodrive", r"drive"],
+            "keywords": ["drive", "file", "upload", "download", "folder", "document", "storage"],
+            "common_selectors": {
+                "file_upload": ["input[type='file']", "button:contains('Upload')", "button:contains('Upload File')"],
+                "file_list": [".file-list", "[data-file]", ".file-item"],
+                "folder": [".folder", "[data-folder]", ".folder-item"],
+                "download_button": ["button:contains('Download')", "a[download]", "button[data-action='download']"],
+                "create_folder": ["button:contains('New Folder')", "button:contains('Create Folder')"],
+            }
+        },
+        "automail": {
+            "url_patterns": [r"automail", r"mail"],
+            "keywords": ["mail", "email", "message", "inbox", "compose", "send", "reply"],
+            "common_selectors": {
+                "compose_button": ["button:contains('Compose')", "button:contains('New Email')", "button:contains('New Message')"],
+                "email_list": [".email-list", "[data-email]", ".email-item", ".message-item"],
+                "send_button": ["button:contains('Send')", "button[type='submit']", "button[data-action='send']"],
+                "inbox": ["a:contains('Inbox')", ".inbox", "[data-inbox]"],
+                "reply_button": ["button:contains('Reply')", "button:contains('Reply All')"],
+            }
+        },
     }
     
     def __init__(self):
@@ -212,6 +245,24 @@ class WebsiteDetector:
                 "wait_after_navigation": 2.5,  # Job pages load slowly (increased for quality)
                 "wait_between_actions": 1.0,   # Job interactions need time
                 "screenshot_frequency": "always",  # Job applications are critical
+                "verification_enabled": True,  # Enable verification for quality
+            },
+            "autocrm": {
+                "wait_after_navigation": 2.5,  # CRM pages load slowly
+                "wait_between_actions": 1.0,   # CRM interactions need time
+                "screenshot_frequency": "always",  # CRM data is important
+                "verification_enabled": True,  # Enable verification for quality
+            },
+            "autodrive": {
+                "wait_after_navigation": 2.0,  # Drive pages load moderately
+                "wait_between_actions": 1.0,   # File operations need time
+                "screenshot_frequency": "after_important",  # File operations are important
+                "verification_enabled": True,  # Enable verification for quality
+            },
+            "automail": {
+                "wait_after_navigation": 2.0,  # Mail pages load moderately
+                "wait_between_actions": 0.8,   # Email interactions are quick
+                "screenshot_frequency": "after_important",  # Email actions are important
                 "verification_enabled": True,  # Enable verification for quality
             },
         }
