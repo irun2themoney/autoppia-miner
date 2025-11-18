@@ -1,7 +1,7 @@
 """Real-time dashboard endpoints for monitoring"""
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse, HTMLResponse
-from ..utils.advanced_metrics import AdvancedMetrics
+from api.utils.advanced_metrics import AdvancedMetrics
 import json
 
 router = APIRouter()

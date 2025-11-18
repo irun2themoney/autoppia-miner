@@ -104,7 +104,7 @@ async def solve_task(request: TaskRequest, http_request: Request = None):
             url=request.url
         )
         
-        response_time = time_module.time() - start_time
+        response_time = time.time() - start_time
         
         # Record success in advanced metrics
         advanced_metrics.record_request(
@@ -119,7 +119,7 @@ async def solve_task(request: TaskRequest, http_request: Request = None):
         )
         
         # Also record in basic metrics
-        from ..utils.metrics import metrics
+        from api.utils.metrics import metrics
         metrics.record_request(success=True, response_time=response_time, task_type=task_type)
         
         return JSONResponse(
@@ -140,11 +140,11 @@ async def solve_task(request: TaskRequest, http_request: Request = None):
     
     except Exception as e:
         # Record error in metrics
-        from ..utils.metrics import metrics
-        from ..utils.advanced_metrics import advanced_metrics
+        from api.utils.metrics import metrics
+        from api.utils.advanced_metrics import advanced_metrics
         import traceback
         
-        response_time = time_module.time() - start_time
+        response_time = time.time() - start_time
         error_type = type(e).__name__
         
         metrics.record_request(success=False, response_time=response_time, task_type="error")
