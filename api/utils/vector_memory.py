@@ -193,6 +193,7 @@ class VectorMemory:
     ) -> Optional[List[Dict[str, Any]]]:
         """
         Get best actions from similar past tasks
+        DYNAMIC ZERO: Includes anti-overfitting protection
         Returns actions from most similar successful task
         """
         similar = self.find_similar(prompt, url, top_k=1)
@@ -200,8 +201,27 @@ class VectorMemory:
         if similar:
             best = similar[0]
             if best.success_rate >= 0.7:  # Only use if success rate is good
-                logger.info(f"Recalled similar task: {best.task_type} (success: {best.success_rate:.0%})")
-                return best.actions
+                # DYNAMIC ZERO: Check for overfitting before using memory
+                try:
+                    from .anti_overfitting import anti_overfitting
+                    # Estimate similarity (vector memory uses cosine similarity internally)
+                    # Assume high similarity if found in top-1
+                    estimated_similarity = 0.8
+                    memory_key = f"{best.prompt[:50]}|{best.url}"
+                    should_use, adjusted_confidence = anti_overfitting.should_use_pattern(
+                        estimated_similarity, memory_key, prompt, url
+                    )
+                    
+                    if should_use and adjusted_confidence >= 0.5:
+                        logger.info(f"Recalled similar task: {best.task_type} (success: {best.success_rate:.0%})")
+                        return best.actions
+                    else:
+                        logger.info(f"Vector memory: Overfitting detected, skipping memory recall")
+                        return None
+                except ImportError:
+                    # Anti-overfitting not available, use memory anyway
+                    logger.info(f"Recalled similar task: {best.task_type} (success: {best.success_rate:.0%})")
+                    return best.actions
         
         return None
     
