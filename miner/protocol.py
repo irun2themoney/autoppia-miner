@@ -10,6 +10,9 @@ class StartRoundSynapse(bt.Synapse):
     """
     Synapse for starting a new round
     Used by validators to initiate task rounds
+    
+    Note: Bittensor may deserialize this as a generic Synapse.
+    The miner handles this by checking for round_id and task_type attributes.
     """
     # Round information
     round_id: Optional[str] = None
@@ -18,6 +21,10 @@ class StartRoundSynapse(bt.Synapse):
     # Response fields
     success: bool = False
     message: Optional[str] = None
+    
+    def deserialize(self) -> "StartRoundSynapse":
+        """Deserialize synapse data"""
+        return self
 
 
 class TaskSynapse(bt.Synapse):

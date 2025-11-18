@@ -80,9 +80,26 @@ class AutoppiaMiner:
     async def process_task(self, synapse: bt.Synapse) -> bt.Synapse:
         """Process validator request - handles both TaskSynapse and generic Synapse"""
         try:
-            # Handle StartRoundSynapse separately
-            if isinstance(synapse, StartRoundSynapse):
-                return await self.process_start_round(synapse)
+            # Handle StartRoundSynapse - check by attributes since Bittensor may deserialize as generic Synapse
+            # Validators send StartRoundSynapse with round_id and task_type attributes
+            has_round_id = hasattr(synapse, "round_id") and getattr(synapse, "round_id", None) is not None
+            has_task_type_attr = hasattr(synapse, "task_type") and getattr(synapse, "task_type", None) is not None
+            is_start_round = isinstance(synapse, StartRoundSynapse) or (has_round_id and has_task_type_attr and not hasattr(synapse, "prompt"))
+            
+            if is_start_round:
+                # Convert generic synapse to StartRoundSynapse if needed
+                if not isinstance(synapse, StartRoundSynapse):
+                    start_round_synapse = StartRoundSynapse(
+                        round_id=getattr(synapse, "round_id", None),
+                        task_type=getattr(synapse, "task_type", None)
+                    )
+                    # Copy any other attributes
+                    for attr in ["success", "message"]:
+                        if hasattr(synapse, attr):
+                            setattr(start_round_synapse, attr, getattr(synapse, attr))
+                    return await self.process_start_round(start_round_synapse)
+                else:
+                    return await self.process_start_round(synapse)
             
             # Handle TaskSynapse or generic synapse
             # Extract task data from synapse
@@ -194,23 +211,17 @@ class AutoppiaMiner:
         print("Axon created", flush=True)
         
         # Attach forward function - handles all synapse types
+        # The forward function will intelligently route based on synapse attributes
         print("Attaching forward function...", flush=True)
         self.axon.attach(
             forward_fn=self.process_task,
         )
         print("Forward function attached", flush=True)
         
-        # Register synapse types with axon (if supported)
-        # This helps validators know what synapse types we support
-        try:
-            # Try to register synapse types
-            if hasattr(self.axon, 'attach_synapse'):
-                self.axon.attach_synapse(StartRoundSynapse, self.process_start_round)
-                self.axon.attach_synapse(TaskSynapse, self.process_task)
-                print("Synapse types registered", flush=True)
-        except Exception as e:
-            # Not critical if not supported
-            bt.logging.debug(f"Could not register synapse types: {e}")
+        # Note: Bittensor may not support custom synapse type registration
+        # Our forward function handles this by checking synapse attributes
+        # This allows us to process StartRoundSynapse even if Bittensor deserializes it as generic Synapse
+        bt.logging.info("Forward function configured to handle StartRoundSynapse and TaskSynapse via attribute detection")
         
         # Start axon
         print("Starting axon...", flush=True)
