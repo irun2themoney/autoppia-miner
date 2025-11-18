@@ -1,11 +1,15 @@
 """Real-time dashboard endpoints for monitoring"""
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse, HTMLResponse
-from api.utils.advanced_metrics import AdvancedMetrics
 import json
 
 router = APIRouter()
-advanced_metrics = AdvancedMetrics()
+
+# Lazy import to avoid circular dependency
+def get_advanced_metrics():
+    """Get the shared advanced_metrics instance"""
+    from api.endpoints import advanced_metrics
+    return advanced_metrics
 
 
 @router.get("/dashboard")
