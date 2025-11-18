@@ -44,12 +44,15 @@ class ChutesAgent(BaseAgent):
             raise ValueError("CHUTES_API_KEY not set in environment")
         
         # Rate limiting: Track last request time to avoid hitting per-minute limits
-        # Chutes API has strict per-minute limits (likely 10-20 req/min based on testing)
+        # Chutes Support Recommendation: "Space out your requests — avoid sending large bursts"
+        # IMPORTANT: Chutes has separate per-minute/per-hour limits from daily quota
+        # Start conservative: 5 seconds between requests (12 req/min) to avoid bursts
         self.last_request_time = 0
-        self.min_request_interval = 3.0  # Minimum 3 seconds between requests (20 req/min max)
+        self.min_request_interval = 5.0  # 5 seconds between requests (12 req/min) - conservative to avoid bursts
         self._rate_limit_lock = asyncio.Lock()
-        self.consecutive_429_errors = 0  # Track consecutive rate limit errors
-        self.last_429_time = 0  # Track when we last got a 429
+        self.consecutive_429_errors = 0  # Track consecutive rate limit errors (resets on restart)
+        self.last_429_time = 0  # Track when we last got a 429 (resets on restart)
+        self.rate_limit_info = {}  # Store rate limit info from headers
         
         # Response caching to reduce API calls (using smart cache)
         from ..utils.smart_cache import SmartCache
@@ -74,23 +77,33 @@ class ChutesAgent(BaseAgent):
         ]
     
     async def _rate_limit(self):
-        """Enforce rate limiting to avoid 429 errors"""
+        """Enforce rate limiting to avoid 429 errors - PERSISTENT: Will wait until it works"""
         async with self._rate_limit_lock:
             current_time = time.time()
             
-            # If we've been getting 429 errors, wait longer
+            # Chutes Support Recommendation: "Implement exponential backoff — in case of 429 responses"
+            # If we've been getting 429 errors, implement exponential backoff
             if self.consecutive_429_errors > 0:
                 time_since_last_429 = current_time - self.last_429_time
-                # Wait at least 60 seconds after a 429 error
-                if time_since_last_429 < 60:
-                    wait_time = 60 - time_since_last_429
+                # If it's been more than 5 minutes since last 429, reset (rate limit window likely passed)
+                if time_since_last_429 > 300:  # 5 minutes
+                    # Rate limit window likely reset, clear the error counter
+                    self.consecutive_429_errors = 0
                     import logging
-                    logging.info(f"Waiting {wait_time:.1f}s after rate limit error...")
-                    await asyncio.sleep(wait_time)
+                    logging.info("Rate limit window likely reset, clearing error counter")
+                elif time_since_last_429 < 60:
+                    # Exponential backoff: wait 60s, 120s, 240s, 480s (1min, 2min, 4min, 8min)
+                    backoff_times = [60, 120, 240, 480]  # Exponential backoff
+                    backoff_index = min(self.consecutive_429_errors - 1, len(backoff_times) - 1)
+                    wait_time = backoff_times[backoff_index] - time_since_last_429
+                    if wait_time > 0:
+                        import logging
+                        logging.info(f"Exponential backoff: Waiting {wait_time:.1f}s after rate limit error (attempt {self.consecutive_429_errors})...")
+                        await asyncio.sleep(wait_time)
                     # Reset counter after waiting
                     self.consecutive_429_errors = 0
             
-            # Normal rate limiting between requests
+            # Normal rate limiting between requests - but be smarter about it
             time_since_last = current_time - self.last_request_time
             if time_since_last < self.min_request_interval:
                 wait_time = self.min_request_interval - time_since_last
@@ -159,6 +172,20 @@ class ChutesAgent(BaseAgent):
                     )
                     
                     if response.status_code == 200:
+                        # Extract rate limit info from headers (if available)
+                        rate_limit_limit = response.headers.get("X-RateLimit-Limit")
+                        rate_limit_remaining = response.headers.get("X-RateLimit-Remaining")
+                        rate_limit_reset = response.headers.get("X-RateLimit-Reset")
+                        
+                        if rate_limit_limit:
+                            self.rate_limit_info = {
+                                "limit": rate_limit_limit,
+                                "remaining": rate_limit_remaining,
+                                "reset": rate_limit_reset
+                            }
+                            import logging
+                            logging.debug(f"Rate limit info: {self.rate_limit_info}")
+                        
                         result = response.json()
                         # Try different response formats
                         content = (
@@ -175,41 +202,75 @@ class ChutesAgent(BaseAgent):
                     elif response.status_code == 404:
                         continue  # Try next URL
                     elif response.status_code == 429:
-                        # Rate limited - track this and wait much longer
-                        self.consecutive_429_errors += 1
-                        self.last_429_time = time.time()
+                        # Rate limited - PERSISTENT RETRY: Keep trying until it works!
+                        retry_after = response.headers.get("Retry-After")
+                        if retry_after:
+                            try:
+                                wait_time = int(retry_after)
+                                import logging
+                                logging.warning(f"Chutes API rate limited (429). Retry-After header says wait {wait_time}s...")
+                            except:
+                                wait_time = 30  # Default if header is invalid
+                        else:
+                            # No Retry-After header, use exponential backoff (Chutes Support Recommendation)
+                            self.consecutive_429_errors += 1
+                            self.last_429_time = time.time()
+                            
+                            # Exponential backoff: 60s, 120s, 240s, 480s (1min, 2min, 4min, 8min)
+                            # Chutes Support: "Implement exponential backoff — in case of 429 responses"
+                            backoff_times = [60, 120, 240, 480, 600]  # Extended: up to 10 minutes
+                            backoff_index = min(self.consecutive_429_errors - 1, len(backoff_times) - 1)
+                            wait_time = backoff_times[backoff_index]
+                            
+                            import logging
+                            logging.warning(f"Chutes API rate limited (429). Exponential backoff: Waiting {wait_time}s before retry (attempt {self.consecutive_429_errors})...")
                         
-                        # If we've hit multiple 429s, wait even longer (exponential backoff)
-                        wait_time = min(60 * (2 ** min(self.consecutive_429_errors - 1, 3)), 300)  # Max 5 minutes
-                        
-                        import logging
-                        logging.warning(f"Chutes API rate limited (429). Waiting {wait_time}s before retry (attempt {self.consecutive_429_errors})...")
+                        # PERSISTENT: Wait and retry with increasing patience
                         await asyncio.sleep(wait_time)
                         
-                        # Retry once after waiting
-                        retry_response = await self.client.post(
-                            url,
-                            headers=headers,
-                            json=payload,
-                            timeout=30.0
-                        )
-                        if retry_response.status_code == 200:
-                            result = retry_response.json()
-                            content = (
-                                result.get("choices", [{}])[0].get("message", {}).get("content") or
-                                result.get("text") or
-                                result.get("response") or
-                                result.get("content")
+                        # PERSISTENT RETRY: Try multiple times with increasing delays
+                        max_retries = 5  # Try up to 5 times
+                        for retry_attempt in range(max_retries):
+                            retry_response = await self.client.post(
+                                url,
+                                headers=headers,
+                                json=payload,
+                                timeout=30.0
                             )
-                            if content:
-                                # Reset error counter on success
-                                self.consecutive_429_errors = 0
-                                # Update rate limit to be more conservative
-                                self.min_request_interval = max(self.min_request_interval, 5.0)
-                                return content
+                            
+                            if retry_response.status_code == 200:
+                                result = retry_response.json()
+                                content = (
+                                    result.get("choices", [{}])[0].get("message", {}).get("content") or
+                                    result.get("text") or
+                                    result.get("response") or
+                                    result.get("content")
+                                )
+                                if content:
+                                    # Reset error counter on success
+                                    self.consecutive_429_errors = 0
+                                    # After successful retry, increase spacing slightly to avoid future bursts
+                                    # Chutes Support: "Space out your requests — avoid sending large bursts"
+                                    self.min_request_interval = min(self.min_request_interval + 1.0, 10.0)  # Cap at 10s
+                                    import logging
+                                    logging.info(f"✅ Chutes API SUCCESS after {retry_attempt + 1} retries! Increased request spacing to {self.min_request_interval}s")
+                                    return content
+                            
+                            elif retry_response.status_code == 429:
+                                # Still rate limited - wait longer and try again
+                                next_wait = wait_time * (retry_attempt + 2)  # Progressive wait: 2x, 3x, 4x, 5x
+                                import logging
+                                logging.warning(f"Still rate limited after {retry_attempt + 1} retries. Waiting {next_wait}s before next attempt...")
+                                await asyncio.sleep(next_wait)
+                                continue
+                            else:
+                                # Different error - break and try next URL/model
+                                break
                         
-                        # If still rate limited after waiting, raise to trigger fallback
-                        raise Exception(f"Rate limited - Chutes API per-minute limit exceeded after {wait_time}s wait. Falling back to template agent.")
+                        # If we exhausted retries, try next URL/model instead of giving up
+                        import logging
+                        logging.warning(f"Rate limited after {max_retries} retries. Trying next URL/model...")
+                        continue  # Try next URL/model combination
                     else:
                         last_error = f"API error {response.status_code}: {response.text[:200]}"
                         continue
@@ -224,7 +285,12 @@ class ChutesAgent(BaseAgent):
                     last_error = str(e)
                     continue
         
-        raise Exception(f"Failed to call Chutes API after trying all endpoints: {last_error}")
+                # PERSISTENT: If all endpoints/models failed, wait and retry the whole process
+                import logging
+                logging.warning(f"All Chutes API endpoints/models failed. Waiting 60s and retrying entire request...")
+                await asyncio.sleep(60)  # Wait 1 minute
+                # Retry the entire function call (will be caught by outer retry logic)
+                raise Exception(f"Failed to call Chutes API after trying all endpoints. Will retry: {last_error}")
     
     def _get_cached_response(self, prompt: str, url: str) -> Optional[List[Dict[str, Any]]]:
         """Get cached response if available"""
@@ -513,10 +579,14 @@ JSON only, no other text:"""
         prompt: str, 
         url: str
     ) -> List[Dict[str, Any]]:
-        """Solve task using Chutes LLM with validation and error handling"""
+        """Solve task using Chutes LLM with validation and error handling - PERSISTENT: Will keep trying until it works"""
         import logging
         start_time = time.time()
-        try:
+        
+        # PERSISTENT RETRY: Try up to 3 times with increasing patience
+        max_attempts = 3
+        for attempt in range(max_attempts):
+            try:
             # Parse task to extract information
             parsed_task = self.task_parser.parse_task(prompt, url)
             logging.info(f"Using Chutes LLM (model: {self.model}) for task: {prompt[:50]}...")
@@ -632,26 +702,49 @@ JSON only, no other text:"""
             # For now, we assume success if actions are generated
             # In production, this would be called after validator feedback
             
-            return iwa_actions
-            
-        except Exception as e:
-            # Fallback to template agent on error
-            import logging
-            error_msg = str(e)
-            if "Rate limited" in error_msg or "429" in error_msg:
-                logging.warning(f"Chutes API rate limited, using template fallback")
-                metrics.record_rate_limit_error()
-            else:
-                logging.warning(f"Chutes API error, using template fallback: {error_msg}")
-            
-            metrics.record_template_fallback()
-            from .template import TemplateAgent
-            template_agent = TemplateAgent()
-            result = await template_agent.solve_task(task_id, prompt, url)
-            
-            # Record metrics for fallback
-            response_time = time.time() - start_time
-            metrics.record_request(success=len(result) > 0, response_time=response_time, task_type="template_fallback")
-            
-            return result
+                return iwa_actions
+                
+            except json.JSONDecodeError as e:
+                # JSON error - retry with different approach
+                import logging
+                if attempt < max_attempts - 1:
+                    logging.warning(f"Chutes LLM returned invalid JSON (attempt {attempt + 1}/{max_attempts}). Retrying...")
+                    await asyncio.sleep(2)  # Brief pause before retry
+                    continue
+                else:
+                    logging.error(f"Chutes LLM returned invalid JSON after {max_attempts} attempts: {e}")
+                    raise  # Re-raise to trigger outer fallback
+                    
+            except Exception as e:
+                # PERSISTENT: Retry on rate limit errors
+                error_msg = str(e)
+                if "Rate limited" in error_msg or "429" in error_msg or "Failed to call Chutes API" in error_msg:
+                    if attempt < max_attempts - 1:
+                        wait_time = 60 * (attempt + 1)  # 60s, 120s, 180s
+                        import logging
+                        logging.warning(f"Chutes API rate limited (attempt {attempt + 1}/{max_attempts}). Waiting {wait_time}s and retrying...")
+                        metrics.record_rate_limit_error()
+                        await asyncio.sleep(wait_time)
+                        continue  # Retry!
+                    else:
+                        import logging
+                        logging.error(f"Chutes API rate limited after {max_attempts} persistent attempts. This is unusual - key may need reset.")
+                        metrics.record_rate_limit_error()
+                        raise  # Re-raise to trigger outer fallback
+                else:
+                    # Non-rate-limit error - retry once
+                    if attempt < max_attempts - 1:
+                        import logging
+                        logging.warning(f"Chutes API error (attempt {attempt + 1}/{max_attempts}): {error_msg}. Retrying...")
+                        await asyncio.sleep(2)
+                        continue
+                    else:
+                        import logging
+                        logging.error(f"Chutes API error after {max_attempts} attempts: {error_msg}")
+                        raise  # Re-raise to trigger outer fallback
+        
+        # If we get here, all attempts failed - this should never happen due to raises above
+        import logging
+        logging.error("All Chutes API attempts exhausted - this should not happen")
+        raise Exception("Chutes API failed after all persistent retry attempts")
 

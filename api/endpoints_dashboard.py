@@ -254,18 +254,19 @@ async def dashboard():
                         document.getElementById('agent-performance').innerHTML = '<div class="loading">Waiting for requests...</div>';
                     }
                     
-                    // Validator activity
+                    // Validator activity (only shows external validators, not localhost)
                     if (data.validators?.recent_activity?.length > 0) {
-                        let html = '<table><tr><th>Time</th><th>IP</th><th>Status</th><th>Time</th></tr>';
+                        let html = '<table><tr><th>Time</th><th>Validator IP</th><th>Status</th><th>Response</th></tr>';
                         data.validators.recent_activity.slice(-5).reverse().forEach(a => {
                             const status = a.success 
                                 ? '<span class="badge badge-success">OK</span>' 
                                 : '<span class="badge badge-error">FAIL</span>';
+                            const responseTime = a.response_time > 0 ? a.response_time.toFixed(3) + 's' : 'N/A';
                             html += `<tr>
                                 <td>${new Date(a.time).toLocaleTimeString()}</td>
                                 <td><code>${a.ip}</code></td>
                                 <td>${status}</td>
-                                <td>${a.response_time.toFixed(3)}s</td>
+                                <td>${responseTime}</td>
                             </tr>`;
                         });
                         html += '</table>';
@@ -327,8 +328,92 @@ async def dashboard():
 @router.get("/dashboard/metrics")
 async def dashboard_metrics():
     """Get real-time metrics as JSON"""
+    import subprocess
+    import re
+    from datetime import datetime
+    
     advanced_metrics = get_advanced_metrics()
     metrics = advanced_metrics.get_comprehensive_metrics()
     metrics["health_score"] = advanced_metrics.get_health_score()
+    
+    # Always load historical activity from logs (even if metrics exist, to show full history)
+    # This ensures the dashboard shows all activity even after service restarts
+    try:
+        # Get successful requests from logs (last 24 hours)
+        result = subprocess.run(
+            ["journalctl", "-u", "autoppia-api", "--since", "24 hours ago", "--no-pager"],
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+        
+        if result.returncode == 0:
+            log_lines = result.stdout.split('\n')
+            historical_activity = []
+            
+            for line in log_lines:
+                # Match: "Nov 18 09:06:44 ... INFO: 45.22.240.79:54712 - "POST /solve_task HTTP/1.1" 200 OK"
+                match = re.search(r'(\w+\s+\d+\s+\d+:\d+:\d+).*?INFO:\s+([\d.]+):\d+\s+-\s+"POST\s+/solve_task.*?"\s+(\d+)', line)
+                if match:
+                    timestamp_str, ip, status_code = match.groups()
+                    # Skip localhost (127.0.0.1) - these are local tests
+                    if ip == "127.0.0.1":
+                        continue
+                    # Parse timestamp (format: "Nov 18 09:06:44")
+                    try:
+                        # Convert to ISO format
+                        current_year = datetime.now().year
+                        dt = datetime.strptime(f"{timestamp_str} {current_year}", "%b %d %H:%M:%S %Y")
+                        historical_activity.append({
+                            "time": dt.isoformat(),
+                            "ip": ip,
+                            "success": status_code == "200",
+                            "response_time": 0.0,  # Not available from logs
+                            "source": "validator"  # Mark as validator (not localhost)
+                        })
+                    except:
+                        pass
+            
+            # Add historical activity to metrics if we found any
+            if historical_activity:
+                # Filter to only validators (exclude localhost)
+                validator_activity = [a for a in historical_activity if a.get("source") == "validator" or a.get("ip") != "127.0.0.1"]
+                
+                # Merge with existing metrics (if any) or replace if empty
+                if metrics["overview"]["total_requests"] == 0:
+                    # No current metrics, use historical data
+                    metrics["overview"]["total_requests"] = len(validator_activity)
+                    metrics["overview"]["successful_requests"] = sum(1 for a in validator_activity if a["success"])
+                    metrics["overview"]["failed_requests"] = sum(1 for a in validator_activity if not a["success"])
+                else:
+                    # Merge: add historical to current
+                    metrics["overview"]["total_requests"] += len(validator_activity)
+                    metrics["overview"]["successful_requests"] += sum(1 for a in validator_activity if a["success"])
+                    metrics["overview"]["failed_requests"] += sum(1 for a in validator_activity if not a["success"])
+                
+                if metrics["overview"]["total_requests"] > 0:
+                    metrics["overview"]["success_rate"] = round(
+                        (metrics["overview"]["successful_requests"] / metrics["overview"]["total_requests"]) * 100, 2
+                    )
+                
+                # Merge recent activity: combine current + historical, sort by time, take most recent 20
+                existing_activity = list(metrics.get("validators", {}).get("recent_activity", []))
+                combined_activity = existing_activity + validator_activity
+                # Sort by time (most recent first) and take top 20
+                combined_activity.sort(key=lambda x: x.get("time", ""), reverse=True)
+                metrics["validators"]["recent_activity"] = combined_activity[:20]
+                metrics["validators"]["unique_validators"] = len(set(a["ip"] for a in combined_activity))
+                
+                # Update top validators from combined activity
+                from collections import Counter
+                ip_counts = Counter(a["ip"] for a in combined_activity)
+                metrics["validators"]["top_validators"] = [
+                    {"ip": ip, "requests": count} 
+                    for ip, count in ip_counts.most_common(5)
+                ]
+    except Exception as e:
+        # If log parsing fails, just use current metrics
+        pass
+    
     return JSONResponse(content=metrics)
 
