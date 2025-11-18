@@ -820,10 +820,36 @@ async def dashboard():
                 draggedOffset.x = e.clientX - rect.left;
                 draggedOffset.y = e.clientY - rect.top;
                 
+                // Remove from parent if in two-col
+                const parent = section.parentElement;
+                if (parent && parent.classList.contains('two-col')) {
+                    parent.style.position = 'relative';
+                }
+                
+                // Get current position relative to viewport
+                const container = document.querySelector('.dashboard-container');
+                const containerRect = container.getBoundingClientRect();
+                const sectionRect = section.getBoundingClientRect();
+                
+                // Calculate current position relative to container
+                const currentLeft = sectionRect.left - containerRect.left;
+                const currentTop = sectionRect.top - containerRect.top;
+                
                 section.classList.add('dragging');
-                section.style.position = 'absolute';
-                section.style.zIndex = '1000';
+                section.style.position = 'fixed';
+                section.style.left = sectionRect.left + 'px';
+                section.style.top = sectionRect.top + 'px';
+                section.style.width = sectionRect.width + 'px';
+                section.style.zIndex = '10000';
                 section.style.pointerEvents = 'none';
+                section.style.margin = '0';
+                
+                // Store original parent and position
+                section._originalParent = parent;
+                section._originalIndex = Array.from(parent.children).indexOf(section);
+                
+                // Move to container for absolute positioning
+                container.appendChild(section);
                 
                 updateDragPosition(e);
             }
@@ -831,34 +857,14 @@ async def dashboard():
             function handleDrag(e) {
                 if (!draggedElement) return;
                 updateDragPosition(e);
-                
-                // Check for drop zones
-                sections.forEach(section => {
-                    if (section === draggedElement) return;
-                    const rect = section.getBoundingClientRect();
-                    const mouseX = e.clientX;
-                    const mouseY = e.clientY;
-                    
-                    if (mouseX >= rect.left && mouseX <= rect.right &&
-                        mouseY >= rect.top && mouseY <= rect.bottom) {
-                        section.classList.add('drag-over');
-                    } else {
-                        section.classList.remove('drag-over');
-                    }
-                });
             }
             
             function updateDragPosition(e) {
                 if (!draggedElement) return;
-                const container = document.querySelector('.dashboard-container');
-                const containerRect = container.getBoundingClientRect();
                 
-                let x = e.clientX - containerRect.left - draggedOffset.x;
-                let y = e.clientY - containerRect.top - draggedOffset.y;
-                
-                // Constrain to container bounds
-                x = Math.max(0, Math.min(x, containerRect.width - draggedElement.offsetWidth));
-                y = Math.max(0, Math.min(y, containerRect.height - draggedElement.offsetHeight));
+                // Use fixed positioning during drag for smooth movement
+                const x = e.clientX - draggedOffset.x;
+                const y = e.clientY - draggedOffset.y;
                 
                 draggedElement.style.left = x + 'px';
                 draggedElement.style.top = y + 'px';
@@ -867,16 +873,39 @@ async def dashboard():
             function stopDrag(e) {
                 if (!draggedElement) return;
                 
-                // Remove drag-over classes
-                sections.forEach(section => {
-                    section.classList.remove('drag-over');
-                });
+                const section = draggedElement;
+                const container = document.querySelector('.dashboard-container');
+                const containerRect = container.getBoundingClientRect();
                 
-                draggedElement.classList.remove('dragging');
-                draggedElement.style.pointerEvents = 'auto';
+                // Convert fixed position to absolute relative to container
+                const fixedLeft = parseFloat(section.style.left);
+                const fixedTop = parseFloat(section.style.top);
+                
+                // Calculate absolute position relative to container
+                const absoluteLeft = fixedLeft - containerRect.left;
+                const absoluteTop = fixedTop - containerRect.top;
+                
+                // Ensure section stays within container bounds
+                const maxX = containerRect.width - section.offsetWidth;
+                const maxY = containerRect.height - section.offsetHeight;
+                
+                const finalX = Math.max(0, Math.min(absoluteLeft, maxX));
+                const finalY = Math.max(0, Math.min(absoluteTop, maxY));
+                
+                // Set final position
+                section.style.position = 'absolute';
+                section.style.left = finalX + 'px';
+                section.style.top = finalY + 'px';
+                section.style.width = '';
+                section.style.zIndex = '1';
+                section.style.pointerEvents = 'auto';
+                section.classList.remove('dragging');
+                
+                // Remove drag-over classes
+                sections.forEach(s => s.classList.remove('drag-over'));
                 
                 // Save position
-                saveSectionPosition(draggedElement);
+                saveSectionPosition(section);
                 
                 draggedElement = null;
             }
@@ -900,10 +929,20 @@ async def dashboard():
                     if (saved) {
                         try {
                             const position = JSON.parse(saved);
-                            section.style.position = position.position || 'absolute';
-                            section.style.left = position.left || 'auto';
-                            section.style.top = position.top || 'auto';
-                            section.style.marginBottom = '10px';
+                            if (position.left && position.top) {
+                                // Remove from two-col if it was in one
+                                const parent = section.parentElement;
+                                if (parent && parent.classList.contains('two-col')) {
+                                    const container = document.querySelector('.dashboard-container');
+                                    container.appendChild(section);
+                                }
+                                
+                                section.style.position = 'absolute';
+                                section.style.left = position.left;
+                                section.style.top = position.top;
+                                section.style.marginBottom = '10px';
+                                section.style.margin = '0';
+                            }
                         } catch (e) {
                             console.error('Error loading position:', e);
                         }
@@ -920,6 +959,21 @@ async def dashboard():
                             section.style.position = '';
                             section.style.left = '';
                             section.style.top = '';
+                            section.style.width = '';
+                            section.style.margin = '';
+                            
+                            // Try to restore to original parent if it was in two-col
+                            const parent = section.parentElement;
+                            if (parent && parent.classList.contains('dashboard-container')) {
+                                // Find original two-col parent
+                                const twoCols = document.querySelectorAll('.two-col');
+                                twoCols.forEach(tc => {
+                                    const sectionIdAttr = tc.getAttribute('data-section-id');
+                                    if (sectionIdAttr && sectionIdAttr.includes(sectionId)) {
+                                        tc.appendChild(section);
+                                    }
+                                });
+                            }
                         }
                     });
                     location.reload();
