@@ -60,21 +60,6 @@ async def solve_task_options():
     )
 
 
-@router.get("/metrics")
-async def get_metrics():
-    """Get performance metrics"""
-    from api.utils.metrics import metrics
-    return JSONResponse(
-        content=metrics.get_metrics(),
-        status_code=200,
-        headers={
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "GET, OPTIONS",
-            "Access-Control-Allow-Headers": "*",
-        }
-    )
-
-
 @router.post("/solve_task")
 async def solve_task(request: TaskRequest, http_request: Request):
     """
