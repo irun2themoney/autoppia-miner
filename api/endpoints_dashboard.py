@@ -213,8 +213,16 @@ async def dashboard():
             .drag-handle:active {
                 cursor: grabbing;
             }
-            .section-title {
-                margin-bottom: 0;
+            .section-title { 
+                font-size: 11px; 
+                font-weight: 700; 
+                margin-bottom: 0; 
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                -webkit-background-clip: text;
+                -webkit-text-fill-color: transparent;
+                background-clip: text;
+                text-transform: uppercase;
+                letter-spacing: 0.8px;
             }
             table { 
                 width: 100%; 
