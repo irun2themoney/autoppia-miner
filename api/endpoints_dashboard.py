@@ -188,30 +188,38 @@ async def dashboard():
         <script>
             async function loadMetrics() {
                 try {
+                    console.log('Fetching metrics...');
                     const response = await fetch('/api/dashboard/metrics');
                     if (!response.ok) {
-                        throw new Error('Failed to fetch metrics');
+                        throw new Error('Failed to fetch metrics: ' + response.status);
                     }
                     const data = await response.json();
+                    console.log('Metrics data:', data);
                     
                     // Update timestamp
                     document.getElementById('last-update').textContent = new Date().toLocaleTimeString();
                     
-                    // Update main metrics
-                    const successRate = (data.overview?.success_rate || 0).toFixed(1);
+                    // Update main metrics - handle null/undefined properly
+                    const overview = data.overview || {};
+                    const performance = data.performance || {};
+                    
+                    const successRate = parseFloat(overview.success_rate || 0).toFixed(1);
                     const successRateEl = document.getElementById('success-rate');
                     successRateEl.textContent = successRate + '%';
                     successRateEl.className = 'metric-value ' + 
-                        (successRate >= 90 ? 'good' : successRate >= 70 ? 'warning' : 'error');
+                        (parseFloat(successRate) >= 90 ? 'good' : parseFloat(successRate) >= 70 ? 'warning' : 'error');
                     
-                    document.getElementById('avg-time').textContent = (data.performance?.avg_response_time || 0).toFixed(3) + 's';
-                    document.getElementById('total-requests').textContent = (data.overview?.total_requests || 0).toLocaleString();
+                    const avgTime = parseFloat(performance.avg_response_time || 0).toFixed(3);
+                    document.getElementById('avg-time').textContent = avgTime + 's';
                     
-                    const healthScore = (data.health_score || 0).toFixed(1);
+                    const totalRequests = parseInt(overview.total_requests || 0);
+                    document.getElementById('total-requests').textContent = totalRequests.toLocaleString();
+                    
+                    const healthScore = parseFloat(data.health_score || 0).toFixed(1);
                     const healthScoreEl = document.getElementById('health-score');
                     healthScoreEl.textContent = healthScore;
                     healthScoreEl.className = 'metric-value ' + 
-                        (healthScore >= 90 ? 'good' : healthScore >= 70 ? 'warning' : 'error');
+                        (parseFloat(healthScore) >= 90 ? 'good' : parseFloat(healthScore) >= 70 ? 'warning' : 'error');
                     
                     // Agent performance
                     if (data.agents && Object.keys(data.agents).length > 0) {

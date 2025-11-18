@@ -9,6 +9,10 @@ import time
 
 router = APIRouter()
 
+# Shared advanced_metrics instance - must be created here so dashboard can access it
+from api.utils.advanced_metrics import AdvancedMetrics
+advanced_metrics = AdvancedMetrics()
+
 # Initialize agent based on configuration
 def get_agent():
     """Get agent instance based on settings"""
@@ -78,7 +82,7 @@ async def solve_task(request: TaskRequest, http_request: Request):
     Input: task.clean_task() format
     Output: {actions: [], web_agent_id: str, recording: str}
     """
-    from api.utils.advanced_metrics import advanced_metrics
+    from api.endpoints import advanced_metrics  # Use shared instance
     from api.utils.task_parser import TaskParser
     
     start_time = time.time()
@@ -151,7 +155,7 @@ async def solve_task(request: TaskRequest, http_request: Request):
     except Exception as e:
         # Record error in metrics
         from api.utils.metrics import metrics
-        from api.utils.advanced_metrics import advanced_metrics
+        from api.endpoints import advanced_metrics  # Use shared instance
         import traceback
         
         response_time = time.time() - start_time
