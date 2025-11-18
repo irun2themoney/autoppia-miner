@@ -1024,23 +1024,14 @@ async def dashboard_metrics():
                 current_failed,
                 sum(1 for a in validator_activity if not a["success"])
             )
-                
-                # Recalculate success rate based on updated counts
-                if metrics["overview"]["total_requests"] > 0:
-                    metrics["overview"]["success_rate"] = round(
-                        (metrics["overview"]["successful_requests"] / metrics["overview"]["total_requests"]) * 100, 2
-                    )
-                else:
-                    # Fallback to in-memory metrics if no log data
-                    metrics["overview"]["total_requests"] = current_total_requests
-                    metrics["overview"]["successful_requests"] = current_successful
-                    metrics["overview"]["failed_requests"] = current_failed
-                    if current_total_requests > 0:
-                        metrics["overview"]["success_rate"] = round(
-                            (current_successful / current_total_requests) * 100, 2
-                        )
-                
-                if current_response_times and len(current_response_times) > 0:
+            
+            # Recalculate success rate based on updated counts
+            if metrics["overview"]["total_requests"] > 0:
+                metrics["overview"]["success_rate"] = round(
+                    (metrics["overview"]["successful_requests"] / metrics["overview"]["total_requests"]) * 100, 2
+                )
+            
+            if current_response_times and len(current_response_times) > 0:
                     metrics["performance"]["avg_response_time"] = round(sum(current_response_times) / len(current_response_times), 3)
                     sorted_times = sorted(current_response_times)
                     if len(sorted_times) >= 20:
