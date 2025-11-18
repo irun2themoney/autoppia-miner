@@ -429,6 +429,17 @@ async def dashboard():
             <div id="errors" class="loading">Loading...</div>
         </div>
         
+        <div class="two-col">
+            <div class="section">
+                <div class="section-title">🛡️ Dynamic Zero (Anti-Overfitting)</div>
+                <div id="anti-overfitting" class="loading">Loading...</div>
+            </div>
+            <div class="section">
+                <div class="section-title">📊 Task Diversity</div>
+                <div id="task-diversity" class="loading">Loading...</div>
+            </div>
+        </div>
+        
         <div class="section">
             <div class="section-title">📈 Real-Time Performance Trends</div>
             <div class="chart-container">
