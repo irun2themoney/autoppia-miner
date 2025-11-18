@@ -6,6 +6,7 @@ from .chutes import ChutesAgent
 from ..utils.task_complexity import TaskComplexityAnalyzer
 from ..utils.pattern_learner import PatternLearner
 from ..utils.ensemble_generator import EnsembleGenerator
+from ..utils.vector_memory import VectorMemory
 
 
 class HybridAgent(BaseAgent):
@@ -17,6 +18,7 @@ class HybridAgent(BaseAgent):
         self.complexity_analyzer = TaskComplexityAnalyzer()
         self.pattern_learner = PatternLearner()
         self.ensemble_gen = EnsembleGenerator()
+        self.vector_memory = VectorMemory(max_memories=1000)  # Top tier: vector store memory
     
     async def solve_task(
         self,
