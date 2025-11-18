@@ -1061,4 +1061,15 @@ async def dashboard_metrics():
     except Exception:
         pass
     
-    return JSONResponse(content=metrics)
+    # Ensure proper JSON serialization
+    import json
+    try:
+        # Validate that metrics can be serialized to JSON
+        json.dumps(metrics)
+        return JSONResponse(content=metrics)
+    except (TypeError, ValueError) as e:
+        # If serialization fails, return error
+        return JSONResponse(
+            content={"error": f"Metrics serialization error: {str(e)}"},
+            status_code=500
+        )
