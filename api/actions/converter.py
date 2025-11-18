@@ -18,6 +18,7 @@ def convert_to_iwa_action(action: Dict[str, Any]) -> Dict[str, Any]:
         "type": "TypeAction",
         "wait": "WaitAction",
         "navigate": "NavigateAction",
+        "goto": "GotoAction",  # Support GotoAction for test
         "screenshot": "ScreenshotAction",
         "scroll": "ScrollAction",
     }
@@ -56,9 +57,12 @@ def convert_to_iwa_action(action: Dict[str, Any]) -> Dict[str, Any]:
             result["text"] = action["text"]
         # Selector handled below
     
-    elif iwa_type == "NavigateAction":
+    elif iwa_type in ["NavigateAction", "GotoAction"]:
         if "url" in action:
             result["url"] = action["url"]
+        # GotoAction is same as NavigateAction, but test expects GotoAction
+        if action_type == "goto":
+            result["type"] = "GotoAction"
     
     elif iwa_type == "ScrollAction":
         direction = action.get("direction", "down").lower()

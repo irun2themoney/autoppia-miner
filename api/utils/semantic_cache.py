@@ -16,10 +16,10 @@ class SemanticCache:
     Target: 50%+ cache hit rate
     """
     
-    def __init__(self, max_size: int = 200, ttl: int = 600, similarity_threshold: float = 0.85):
+    def __init__(self, max_size: int = 200, ttl: int = 600, similarity_threshold: float = 0.98):
         self.max_size = max_size
         self.ttl = ttl
-        self.similarity_threshold = similarity_threshold
+        self.similarity_threshold = similarity_threshold  # Increased to 0.98 to prevent false matches (almost exact only)
         self.cache: OrderedDict[str, Tuple[List[Dict[str, Any]], float, str]] = OrderedDict()
         self.access_times: Dict[str, float] = {}
         self.cache_hits = 0
@@ -36,9 +36,18 @@ class SemanticCache:
         # Remove extra whitespace
         normalized = re.sub(r'\s+', ' ', normalized)
         
-        # Remove specific values (usernames, passwords, emails, URLs)
-        normalized = re.sub(r'username[:\s]+[^\s]+', 'username:XXX', normalized)
-        normalized = re.sub(r'password[:\s]+[^\s]+', 'password:XXX', normalized)
+        # For login tasks, be more strict - include username/password placeholders in the key
+        # This prevents matching incomplete login patterns
+        if 'login' in normalized or 'sign in' in normalized:
+            # Keep the structure but normalize values
+            normalized = re.sub(r'username[:\s]+[^\s]+', 'username:PLACEHOLDER', normalized)
+            normalized = re.sub(r'password[:\s]+[^\s]+', 'password:PLACEHOLDER', normalized)
+        else:
+            # For other tasks, remove specific values
+            normalized = re.sub(r'username[:\s]+[^\s]+', 'username:XXX', normalized)
+            normalized = re.sub(r'password[:\s]+[^\s]+', 'password:XXX', normalized)
+        
+        # Remove email and URLs
         normalized = re.sub(r'email[:\s]+[^\s@]+@[^\s@]+\.[^\s@]+', 'email:XXX@XXX.XXX', normalized)
         normalized = re.sub(r'https?://[^\s]+', 'URL:XXX', normalized)
         

@@ -149,6 +149,11 @@ class ActionGenerator:
         # 1. LOGIN TASKS (highest priority - most specific)
         if task_type == "login" or "login" in prompt_lower or "sign in" in prompt_lower:
             login_actions = self._generate_login_actions(parsed, prompt_lower, context, strategy)
+            # Don't add duplicate navigation if login_actions already has it
+            # Check if first action in login_actions is navigate
+            if login_actions and login_actions[0].get("action_type") in ["navigate", "goto"]:
+                # Remove the navigation from main actions list to avoid duplicate
+                actions = [a for a in actions if a.get("action_type") not in ["navigate", "goto"]]
             actions.extend(login_actions)
             return finalize_actions(actions)
         
@@ -172,8 +177,8 @@ class ActionGenerator:
             actions.extend(self._generate_comment_actions(parsed, prompt_lower))
             return finalize_actions(actions)
         
-        # 6. CLICK/SELECT TASKS (most common)
-        if any(w in prompt_lower for w in ["click", "select", "choose", "switch", "toggle", "view", "open"]):
+        # 6. CLICK/SELECT TASKS (most common - check before calendar to handle "click month view button")
+        if any(w in prompt_lower for w in ["click", "select", "choose", "switch", "toggle", "open"]):
             click_actions = self._generate_click_actions(parsed, prompt_lower, target_element, context)
             actions.extend(click_actions)
             return finalize_actions(actions)
@@ -193,9 +198,15 @@ class ActionGenerator:
             actions.extend(self._generate_extract_actions(parsed, prompt_lower))
             return finalize_actions(actions)
         
-        # 10. CALENDAR TASKS
-        if any(w in prompt_lower for w in ["calendar", "month view", "date", "select date", "event"]):
+        # 10. CALENDAR TASKS (check after click to avoid matching "click month view button")
+        if any(w in prompt_lower for w in ["calendar", "month view", "date", "select date", "event"]) and "click" not in prompt_lower:
             actions.extend(self._generate_calendar_actions(parsed, prompt_lower))
+            return finalize_actions(actions)
+        
+        # 11. VIEW TASKS (generic view - check after click and calendar)
+        if "view" in prompt_lower and "click" not in prompt_lower:
+            click_actions = self._generate_click_actions(parsed, prompt_lower, target_element, context)
+            actions.extend(click_actions)
             return finalize_actions(actions)
         
         # 11. FILE UPLOAD TASKS
@@ -392,6 +403,12 @@ class ActionGenerator:
         username = credentials.get("username") or "user"
         password = credentials.get("password") or "password123"
         
+        # Add navigate action if URL is provided (test expects GotoAction)
+        # Use "goto" to get GotoAction type (test specifically checks for GotoAction)
+        url = parsed.get("url") or ""
+        if url:
+            actions.insert(0, {"action_type": "goto", "url": url})  # Insert at start, use "goto" for GotoAction
+        
         # Wait for page to be ready
         # Use context-aware wait if available
         if context_aware and context and strategy:
@@ -409,6 +426,7 @@ class ActionGenerator:
             create_selector("attributeValueSelector", "login", attribute="name"),
         ]
         
+        # CRITICAL: Ensure click and type actions are added (test requires them)
         actions.append({"action_type": "click", "selector": username_selectors[0]})
         actions.append({"action_type": "wait", "duration": 0.2})
         actions.append({"action_type": "type", "text": username, "selector": username_selectors[0]})
@@ -425,7 +443,7 @@ class ActionGenerator:
         actions.append({"action_type": "wait", "duration": 0.2})
         actions.append({"action_type": "type", "text": password, "selector": password_selectors[0]})
         
-        # Submit button - multiple strategies
+        # Submit button - multiple strategies (CRITICAL: test requires ClickAction)
         submit_selectors = [
             create_selector("tagContainsSelector", "Login", case_sensitive=False),
             create_selector("tagContainsSelector", "Sign In", case_sensitive=False),

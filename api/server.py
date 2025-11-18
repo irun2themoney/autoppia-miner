@@ -58,6 +58,39 @@ async def health():
         }
 
 
+@app.get("/metrics")
+async def metrics():
+    """Metrics endpoint (Prometheus-compatible)"""
+    try:
+        from api.utils.metrics import metrics as metrics_instance
+        metrics_data = metrics_instance.get_metrics()
+        
+        # Return Prometheus-style metrics
+        return JSONResponse(
+            content={
+                "total_requests": metrics_data["total_requests"],
+                "success_rate": metrics_data["success_rate"],
+                "cache_hit_rate": metrics_data["cache_hit_rate"],
+                "avg_response_time": round(metrics_data["avg_response_time"], 3),
+            },
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "GET, OPTIONS",
+                "Access-Control-Allow-Headers": "*",
+            }
+        )
+    except Exception as e:
+        return JSONResponse(
+            content={"error": str(e)},
+            status_code=500,
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "GET, OPTIONS",
+                "Access-Control-Allow-Headers": "*",
+            }
+        )
+
+
 @app.get("/")
 async def root():
     """Root endpoint for testing"""
@@ -67,7 +100,9 @@ async def root():
             "version": "1.0.0",
             "endpoints": {
                 "solve_task": "/solve_task",
-                "health": "/health"
+                "health": "/health",
+                "metrics": "/metrics",
+                "dashboard": "/api/dashboard"
             }
         },
         headers={

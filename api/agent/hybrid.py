@@ -35,19 +35,37 @@ class HybridAgent(BaseAgent):
         start_time = time.time()
         
         # GOD-TIER: Check semantic cache first (advanced caching)
-        cached_result = semantic_cache.get(prompt, url)
-        if cached_result:
-            actions, similarity = cached_result
-            logging.info(f"Semantic cache hit (similarity: {similarity:.2f}) for task: {prompt[:50]}...")
-            return actions
+        # For login and click tasks, be more strict - skip cache to ensure fresh generation
+        prompt_lower = prompt.lower()
+        is_login_task = "login" in prompt_lower or "sign in" in prompt_lower
+        is_click_task = "click" in prompt_lower and any(w in prompt_lower for w in ["button", "link", "element", "item"])
+        
+        # For login and click tasks, skip cache to ensure fresh generation (prevents incomplete cached results)
+        if not is_login_task and not is_click_task:
+            cached_result = semantic_cache.get(prompt, url)
+            if cached_result:
+                actions, similarity = cached_result
+                logging.info(f"Semantic cache hit (similarity: {similarity:.2f}) for task: {prompt[:50]}...")
+                # Ensure actions are in IWA format (cache might have raw actions)
+                from ..actions.converter import convert_to_iwa_action
+                return [convert_to_iwa_action(action) if action.get("type") is None or not action.get("type").endswith("Action") else action for action in actions]
+        else:
+            # For login tasks, always generate fresh to ensure complete actions
+            logging.info(f"Login task detected, skipping cache for fresh generation")
+            cached_result = None
         
         # Check vector memory (top tier optimization)
-        memory_actions = self.vector_memory.get_best_actions(prompt, url)
-        if memory_actions:
-            logging.info(f"Using vector memory recall for task: {prompt[:50]}...")
-            # Cache in semantic cache
-            semantic_cache.set(prompt, url, memory_actions)
-            return memory_actions
+        # For login and click tasks, skip vector memory to ensure fresh generation
+        if not is_login_task and not is_click_task:
+            memory_actions = self.vector_memory.get_best_actions(prompt, url)
+            if memory_actions:
+                logging.info(f"Using vector memory recall for task: {prompt[:50]}...")
+                # Ensure actions are in IWA format
+                from ..actions.converter import convert_to_iwa_action
+                iwa_actions = [convert_to_iwa_action(action) if action.get("type") is None or not action.get("type").endswith("Action") else action for action in memory_actions]
+                # Cache in semantic cache
+                semantic_cache.set(prompt, url, iwa_actions)
+                return iwa_actions
         
         # DYNAMIC ZERO: Analyze task diversity
         diversity_info = task_diversity.analyze_task_diversity(prompt, url)
@@ -55,7 +73,10 @@ class HybridAgent(BaseAgent):
             logging.warning(f"Diversity issues detected: {diversity_info['diversity_issues']}")
         
         # Check for learned patterns (with anti-overfitting protection)
-        learned_pattern = self.pattern_learner.get_similar_pattern(prompt, url)
+        # For login and click tasks, skip pattern learner to ensure fresh generation
+        learned_pattern = None
+        if not is_login_task and not is_click_task:
+            learned_pattern = self.pattern_learner.get_similar_pattern(prompt, url)
         if learned_pattern:
             # DYNAMIC ZERO: Adapt pattern for variation if needed
             adaptation_factor = anti_overfitting.get_adaptation_factor(0.8)  # Assume high similarity
@@ -66,9 +87,12 @@ class HybridAgent(BaseAgent):
                 )
             
             logging.info(f"Using learned pattern for task: {prompt[:50]}...")
+            # Ensure actions are in IWA format
+            from ..actions.converter import convert_to_iwa_action
+            iwa_actions = [convert_to_iwa_action(action) if action.get("type") is None or not action.get("type").endswith("Action") else action for action in learned_pattern]
             # Cache in semantic cache
-            semantic_cache.set(prompt, url, learned_pattern)
-            return learned_pattern
+            semantic_cache.set(prompt, url, iwa_actions)
+            return iwa_actions
         
         # GOD-TIER: Multi-agent ensemble voting
         # Prepare multiple strategies
@@ -92,22 +116,25 @@ class HybridAgent(BaseAgent):
                 )
                 
                 if actions and len(actions) > 0:
+                    # Ensure actions are in IWA format (ensemble might return raw actions)
+                    from ..actions.converter import convert_to_iwa_action
+                    iwa_actions = [convert_to_iwa_action(action) if action.get("type") is None or not action.get("type").endswith("Action") else action for action in actions]
                     # Cache result
-                    semantic_cache.set(prompt, url, actions)
+                    semantic_cache.set(prompt, url, iwa_actions)
                     
                     # Store in vector memory
                     self.vector_memory.add_memory(
                         prompt=prompt,
                         url=url,
-                        actions=actions,
+                        actions=iwa_actions,
                         success_rate=1.0,
                         task_type=parsed_task.get("task_type", "generic")
                     )
                     
                     # Record in pattern learner
-                    self.pattern_learner.record_success(prompt, url, actions)
+                    self.pattern_learner.record_success(prompt, url, iwa_actions)
                     
-                    return actions
+                    return iwa_actions
             except Exception as e:
                 logging.warning(f"Ensemble voting failed: {e}, falling back to template agent")
         
