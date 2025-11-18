@@ -203,40 +203,51 @@ async def dashboard():
                     const overview = data.overview || {};
                     const performance = data.performance || {};
                     
-                    const successRate = parseFloat(overview.success_rate || 0).toFixed(1);
-                    const successRateEl = document.getElementById('success-rate');
-                    successRateEl.textContent = successRate + '%';
-                    successRateEl.className = 'metric-value ' + 
-                        (parseFloat(successRate) >= 90 ? 'good' : parseFloat(successRate) >= 70 ? 'warning' : 'error');
-                    
-                    const avgTime = parseFloat(performance.avg_response_time || 0).toFixed(3);
-                    document.getElementById('avg-time').textContent = avgTime + 's';
-                    
+                    // Update main metrics - always show values, even if 0
                     const totalRequests = parseInt(overview.total_requests || 0);
                     document.getElementById('total-requests').textContent = totalRequests.toLocaleString();
+                    
+                    const successRate = totalRequests > 0 ? parseFloat(overview.success_rate || 0).toFixed(1) : '0.0';
+                    const successRateEl = document.getElementById('success-rate');
+                    successRateEl.textContent = successRate + '%';
+                    if (totalRequests > 0) {
+                        successRateEl.className = 'metric-value ' + 
+                            (parseFloat(successRate) >= 90 ? 'good' : parseFloat(successRate) >= 70 ? 'warning' : 'error');
+                    } else {
+                        successRateEl.className = 'metric-value';
+                    }
+                    
+                    const avgTime = totalRequests > 0 ? parseFloat(performance.avg_response_time || 0).toFixed(3) : '0.000';
+                    document.getElementById('avg-time').textContent = avgTime + 's';
                     
                     const healthScore = parseFloat(data.health_score || 0).toFixed(1);
                     const healthScoreEl = document.getElementById('health-score');
                     healthScoreEl.textContent = healthScore;
-                    healthScoreEl.className = 'metric-value ' + 
-                        (parseFloat(healthScore) >= 90 ? 'good' : parseFloat(healthScore) >= 70 ? 'warning' : 'error');
+                    if (totalRequests > 0) {
+                        healthScoreEl.className = 'metric-value ' + 
+                            (parseFloat(healthScore) >= 90 ? 'good' : parseFloat(healthScore) >= 70 ? 'warning' : 'error');
+                    } else {
+                        healthScoreEl.className = 'metric-value';
+                    }
                     
                     // Agent performance
                     if (data.agents && Object.keys(data.agents).length > 0) {
                         let html = '<table><tr><th>Agent</th><th>Success</th><th>Total</th><th>Time</th></tr>';
                         for (const [agent, stats] of Object.entries(data.agents)) {
-                            const cls = stats.success_rate >= 80 ? 'status-good' : 'status-error';
-                            html += `<tr>
-                                <td>${agent}</td>
-                                <td class="${cls}">${stats.success_rate.toFixed(1)}%</td>
-                                <td>${stats.total}</td>
-                                <td>${stats.avg_response_time.toFixed(3)}s</td>
-                            </tr>`;
+                            if (stats.total > 0) {
+                                const cls = stats.success_rate >= 80 ? 'status-good' : 'status-error';
+                                html += `<tr>
+                                    <td>${agent}</td>
+                                    <td class="${cls}">${stats.success_rate.toFixed(1)}%</td>
+                                    <td>${stats.total}</td>
+                                    <td>${stats.avg_response_time.toFixed(3)}s</td>
+                                </tr>`;
+                            }
                         }
                         html += '</table>';
-                        document.getElementById('agent-performance').innerHTML = html;
+                        document.getElementById('agent-performance').innerHTML = html || '<div class="loading">Waiting for requests...</div>';
                     } else {
-                        document.getElementById('agent-performance').innerHTML = '<div class="loading">No data</div>';
+                        document.getElementById('agent-performance').innerHTML = '<div class="loading">Waiting for requests...</div>';
                     }
                     
                     // Validator activity
@@ -256,7 +267,7 @@ async def dashboard():
                         html += '</table>';
                         document.getElementById('validator-activity').innerHTML = html;
                     } else {
-                        document.getElementById('validator-activity').innerHTML = '<div class="loading">No activity</div>';
+                        document.getElementById('validator-activity').innerHTML = '<div class="loading">Waiting for validator requests...</div>';
                     }
                     
                     // Errors
@@ -268,7 +279,7 @@ async def dashboard():
                         html += '</table>';
                         document.getElementById('error-summary').innerHTML = html;
                     } else {
-                        document.getElementById('error-summary').innerHTML = '<div class="loading">No errors</div>';
+                        document.getElementById('error-summary').innerHTML = '<div class="loading status-good">✓ No errors</div>';
                     }
                     
                     // Performance stats
