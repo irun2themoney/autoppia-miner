@@ -160,6 +160,10 @@ async def dashboard():
                 margin-top: 4px;
                 font-weight: 500;
             }
+            .dashboard-container {
+                position: relative;
+                min-height: 100vh;
+            }
             .section { 
                 background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
                 padding: 12px; 
@@ -169,20 +173,48 @@ async def dashboard():
                 box-shadow: 0 2px 8px rgba(0,0,0,0.06);
                 transition: all 0.3s ease;
                 animation: fadeIn 0.6s ease-out;
+                cursor: move;
+                position: relative;
             }
             .section:hover {
                 box-shadow: 0 4px 12px rgba(0,0,0,0.1);
             }
-            .section-title { 
-                font-size: 11px; 
-                font-weight: 700; 
-                margin-bottom: 10px; 
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                -webkit-background-clip: text;
-                -webkit-text-fill-color: transparent;
-                background-clip: text;
-                text-transform: uppercase;
-                letter-spacing: 0.8px;
+            .section.dragging {
+                opacity: 0.7;
+                transform: rotate(2deg);
+                z-index: 1000;
+                box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+                cursor: grabbing;
+            }
+            .section.drag-over {
+                border: 2px dashed #667eea;
+                background: rgba(102, 126, 234, 0.05);
+            }
+            .section-header {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                margin-bottom: 10px;
+                padding-bottom: 8px;
+                border-bottom: 1px solid rgba(0,0,0,0.05);
+            }
+            .drag-handle {
+                cursor: grab;
+                padding: 4px 8px;
+                color: #868e96;
+                font-size: 14px;
+                user-select: none;
+                transition: all 0.2s ease;
+            }
+            .drag-handle:hover {
+                color: #667eea;
+                transform: scale(1.2);
+            }
+            .drag-handle:active {
+                cursor: grabbing;
+            }
+            .section-title {
+                margin-bottom: 0;
             }
             table { 
                 width: 100%; 
@@ -361,9 +393,11 @@ async def dashboard():
             <div class="header-info">
                 <span class="refresh-indicator"></span>
                 <span id="last-update">Loading...</span> | Auto-refresh: 5s
+                <span style="margin-left: 12px; color: #868e96; font-size: 10px;">💡 Drag sections to reposition</span>
             </div>
         </div>
         
+        <div class="dashboard-container">
         <div class="grid">
             <div class="card">
                 <div class="card-title">Success Rate</div>
@@ -397,45 +431,67 @@ async def dashboard():
             </div>
         </div>
         
-        <div class="two-col">
-            <div class="section">
-                <div class="section-title">⚡ Performance</div>
+        <div class="two-col" data-section-id="performance-godtier">
+            <div class="section" data-section="performance">
+                <div class="section-header">
+                    <div class="section-title">⚡ Performance</div>
+                    <div class="drag-handle">⋮⋮</div>
+                </div>
                 <div id="performance" class="loading">Loading...</div>
             </div>
-            <div class="section">
-                <div class="section-title">🏆 God-Tier Features</div>
+            <div class="section" data-section="god-tier">
+                <div class="section-header">
+                    <div class="section-title">🏆 God-Tier Features</div>
+                    <div class="drag-handle">⋮⋮</div>
+                </div>
                 <div id="god-tier" class="loading">Loading...</div>
             </div>
         </div>
         
-        <div class="section">
-            <div class="section-title">📊 Recent Activity (Last 10)</div>
+        <div class="section" data-section="recent-activity">
+            <div class="section-header">
+                <div class="section-title">📊 Recent Activity (Last 10)</div>
+                <div class="drag-handle">⋮⋮</div>
+            </div>
             <div id="recent-activity" class="loading">Loading...</div>
         </div>
         
-        <div class="two-col">
-            <div class="section">
-                <div class="section-title">🎯 Task Types</div>
+        <div class="two-col" data-section-id="task-validators">
+            <div class="section" data-section="task-types">
+                <div class="section-header">
+                    <div class="section-title">🎯 Task Types</div>
+                    <div class="drag-handle">⋮⋮</div>
+                </div>
                 <div id="task-types" class="loading">Loading...</div>
             </div>
-            <div class="section">
-                <div class="section-title">🔍 Top Validators</div>
+            <div class="section" data-section="top-validators">
+                <div class="section-header">
+                    <div class="section-title">🔍 Top Validators</div>
+                    <div class="drag-handle">⋮⋮</div>
+                </div>
                 <div id="top-validators" class="loading">Loading...</div>
             </div>
         </div>
         
-        <div class="section">
-            <div class="section-title">❌ Errors</div>
+        <div class="section" data-section="errors">
+            <div class="section-header">
+                <div class="section-title">❌ Errors</div>
+                <div class="drag-handle">⋮⋮</div>
+            </div>
             <div id="errors" class="loading">Loading...</div>
         </div>
         
-        <div class="section">
-            <div class="section-title">📈 Real-Time Performance Trends</div>
+        <div class="section" data-section="chart">
+            <div class="section-header">
+                <div class="section-title">📈 Real-Time Performance Trends</div>
+                <div class="drag-handle">⋮⋮</div>
+            </div>
             <div class="chart-container">
                 <div class="chart-wrapper">
                     <canvas id="performanceChart"></canvas>
                 </div>
             </div>
+        </div>
         </div>
         
         <script>
@@ -716,6 +772,164 @@ async def dashboard():
             
             // Initialize chart on load
             window.addEventListener('load', initChart);
+            
+            // Drag and Drop functionality
+            let draggedElement = null;
+            let draggedOffset = { x: 0, y: 0 };
+            let sections = [];
+            
+            function initDragAndDrop() {
+                sections = document.querySelectorAll('.section');
+                const container = document.querySelector('.dashboard-container');
+                
+                // Load saved positions
+                loadSectionPositions();
+                
+                sections.forEach(section => {
+                    const handle = section.querySelector('.drag-handle');
+                    if (!handle) return;
+                    
+                    handle.addEventListener('mousedown', (e) => {
+                        e.preventDefault();
+                        startDrag(section, e);
+                    });
+                    
+                    section.addEventListener('mousedown', (e) => {
+                        if (e.target === handle || handle.contains(e.target)) {
+                            e.preventDefault();
+                            startDrag(section, e);
+                        }
+                    });
+                });
+                
+                document.addEventListener('mousemove', handleDrag);
+                document.addEventListener('mouseup', stopDrag);
+            }
+            
+            function startDrag(section, e) {
+                draggedElement = section;
+                const rect = section.getBoundingClientRect();
+                draggedOffset.x = e.clientX - rect.left;
+                draggedOffset.y = e.clientY - rect.top;
+                
+                section.classList.add('dragging');
+                section.style.position = 'absolute';
+                section.style.zIndex = '1000';
+                section.style.pointerEvents = 'none';
+                
+                updateDragPosition(e);
+            }
+            
+            function handleDrag(e) {
+                if (!draggedElement) return;
+                updateDragPosition(e);
+                
+                // Check for drop zones
+                sections.forEach(section => {
+                    if (section === draggedElement) return;
+                    const rect = section.getBoundingClientRect();
+                    const mouseX = e.clientX;
+                    const mouseY = e.clientY;
+                    
+                    if (mouseX >= rect.left && mouseX <= rect.right &&
+                        mouseY >= rect.top && mouseY <= rect.bottom) {
+                        section.classList.add('drag-over');
+                    } else {
+                        section.classList.remove('drag-over');
+                    }
+                });
+            }
+            
+            function updateDragPosition(e) {
+                if (!draggedElement) return;
+                const container = document.querySelector('.dashboard-container');
+                const containerRect = container.getBoundingClientRect();
+                
+                let x = e.clientX - containerRect.left - draggedOffset.x;
+                let y = e.clientY - containerRect.top - draggedOffset.y;
+                
+                // Constrain to container bounds
+                x = Math.max(0, Math.min(x, containerRect.width - draggedElement.offsetWidth));
+                y = Math.max(0, Math.min(y, containerRect.height - draggedElement.offsetHeight));
+                
+                draggedElement.style.left = x + 'px';
+                draggedElement.style.top = y + 'px';
+            }
+            
+            function stopDrag(e) {
+                if (!draggedElement) return;
+                
+                // Remove drag-over classes
+                sections.forEach(section => {
+                    section.classList.remove('drag-over');
+                });
+                
+                draggedElement.classList.remove('dragging');
+                draggedElement.style.pointerEvents = 'auto';
+                
+                // Save position
+                saveSectionPosition(draggedElement);
+                
+                draggedElement = null;
+            }
+            
+            function saveSectionPosition(section) {
+                const sectionId = section.getAttribute('data-section');
+                const position = {
+                    left: section.style.left,
+                    top: section.style.top,
+                    position: 'absolute'
+                };
+                localStorage.setItem(`dashboard-section-${sectionId}`, JSON.stringify(position));
+            }
+            
+            function loadSectionPositions() {
+                sections.forEach(section => {
+                    const sectionId = section.getAttribute('data-section');
+                    if (!sectionId) return;
+                    
+                    const saved = localStorage.getItem(`dashboard-section-${sectionId}`);
+                    if (saved) {
+                        try {
+                            const position = JSON.parse(saved);
+                            section.style.position = position.position || 'absolute';
+                            section.style.left = position.left || 'auto';
+                            section.style.top = position.top || 'auto';
+                            section.style.marginBottom = '10px';
+                        } catch (e) {
+                            console.error('Error loading position:', e);
+                        }
+                    }
+                });
+            }
+            
+            function resetPositions() {
+                if (confirm('Reset all section positions to default?')) {
+                    sections.forEach(section => {
+                        const sectionId = section.getAttribute('data-section');
+                        if (sectionId) {
+                            localStorage.removeItem(`dashboard-section-${sectionId}`);
+                            section.style.position = '';
+                            section.style.left = '';
+                            section.style.top = '';
+                        }
+                    });
+                    location.reload();
+                }
+            }
+            
+            // Add reset button to header
+            window.addEventListener('load', () => {
+                initDragAndDrop();
+                const headerInfo = document.querySelector('.header-info');
+                const resetBtn = document.createElement('button');
+                resetBtn.textContent = 'Reset Layout';
+                resetBtn.style.cssText = 'margin-left: 12px; padding: 4px 12px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 6px; font-size: 10px; cursor: pointer; font-weight: 600; transition: all 0.2s ease;';
+                resetBtn.onmouseover = () => resetBtn.style.transform = 'scale(1.05)';
+                resetBtn.onmouseout = () => resetBtn.style.transform = 'scale(1)';
+                resetBtn.onclick = resetPositions;
+                headerInfo.appendChild(resetBtn);
+            });
             
             async function loadMetrics() {
                 try {
