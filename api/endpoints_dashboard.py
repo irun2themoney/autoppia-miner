@@ -1038,11 +1038,23 @@ async def dashboard_metrics():
                     metrics["performance"]["p95_response_time"] = round(sorted_times[int(len(sorted_times) * 0.95)], 3)
                     metrics["performance"]["p99_response_time"] = round(sorted_times[int(len(sorted_times) * 0.99)], 3)
             
-            uptime_hours = metrics["overview"].get("uptime_hours", 0.02)
-            if uptime_hours > 0:
-                metrics["performance"]["requests_per_minute"] = round(
-                    metrics["overview"]["total_requests"] / (uptime_hours * 60), 2
-                )
+            # Calculate requests/min based on recent activity (last 60 minutes), not total uptime
+            # This prevents the metric from decreasing as uptime increases
+            from datetime import datetime, timedelta
+            one_hour_ago = datetime.now() - timedelta(hours=1)
+            recent_requests = [
+                a for a in validator_activity 
+                if datetime.fromisoformat(a["timestamp"].replace("Z", "+00:00").split("+")[0]) >= one_hour_ago
+            ]
+            metrics["performance"]["requests_per_minute"] = round(len(recent_requests) / 60.0, 2) if recent_requests else 0.0
+            
+            # Also calculate unique validators from logs
+            unique_validator_ips = set()
+            for activity in validator_activity:
+                ip = activity.get("ip", "")
+                if ip and ip != "127.0.0.1" and not ip.startswith("localhost"):
+                    unique_validator_ips.add(ip)
+            metrics["overview"]["unique_validators"] = len(unique_validator_ips)
             
             if metrics["overview"]["total_requests"] > 0:
                 success_rate = metrics["overview"]["success_rate"]
