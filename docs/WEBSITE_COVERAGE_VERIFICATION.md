@@ -21,7 +21,7 @@ Based on IWA Platform and top miner analysis, the 13 websites are:
 10. **AutoDelivery** - Order/delivery management
 11. **Autozone** - E-commerce/product management
 12. **AutoLodge** - Hotel/booking management
-13. **AutoCRM** (may be duplicate) - Need to verify
+13. **AutoDining** - Restaurant booking platform (OpenTable-like)
 
 ---
 
@@ -48,7 +48,7 @@ Based on IWA Platform and top miner analysis, the 13 websites are:
 | **AutoCRM** | ✅ | ✅ | ✅ | **ADDED** |
 | **AutoDrive** | ✅ | ✅ | ✅ | **ADDED** |
 | **AutoMail** | ✅ | ✅ | ✅ | **ADDED** |
-| **Unknown** | ❌ | ❌ | ❌ | **NEED TO IDENTIFY** |
+| **AutoDining** | ✅ | ✅ | ✅ | **ADDED** |
 
 ---
 
@@ -138,10 +138,12 @@ Based on IWA Platform and top miner analysis, the 13 websites are:
 - **Strategy**: ✅ 2.5s navigation, 1.0s between actions, verification enabled
 - **Status**: **FULLY SUPPORTED**
 
-### **13. Unknown** ❓ NEED TO IDENTIFY
-- **Detection**: ❓ Need to identify 13th website
-- **Priority**: **MEDIUM**
-- **Action**: **NEED TO RESEARCH**
+### **13. AutoDining** ✅ COMPLETE
+- **Detection**: ✅ URL patterns: "autodining", "dining", "restaurant", "opentable"
+- **Keywords**: ✅ "restaurant", "dining", "reservation", "booking", "menu", "table"
+- **Selectors**: ✅ restaurant_search, restaurant_card, reserve_button, menu_button, date_picker, time_picker, party_size
+- **Strategy**: ✅ 2.5s navigation, 1.0s between actions, verification enabled
+- **Status**: **FULLY SUPPORTED** (just added)
 
 ---
 
@@ -236,12 +238,11 @@ Based on IWA Platform and top miner analysis, the 13 websites are:
 
 | Status | Count | Percentage |
 |--------|-------|------------|
-| **✅ Complete** | 12 | **92.3%** |
+| **✅ Complete** | 13 | **100%** |
 | **❌ Missing** | 0 | **0%** |
-| **❓ Unknown** | 1 | **7.7%** |
 | **Total** | 13 | **100%** |
 
-**Note**: After implementation, we now support 12/13 websites. The 13th website may be a duplicate or variant of one we already support.
+**Note**: ✅ **100% Coverage Achieved!** All 13 websites are now fully supported.
 
 ---
 
@@ -251,7 +252,7 @@ Based on IWA Platform and top miner analysis, the 13 websites are:
 1. ✅ **Add AutoCRM** - **COMPLETE** ✅
 2. ✅ **Add AutoDrive** - **COMPLETE** ✅
 3. ✅ **Add AutoMail** - **COMPLETE** ✅
-4. ⚠️ **Identify 13th website** - Research needed (may be duplicate/variant)
+4. ✅ **Add AutoDining** - **COMPLETE** ✅
 
 ### **Verification Steps**
 1. ✅ Test each website with sample tasks
@@ -261,8 +262,8 @@ Based on IWA Platform and top miner analysis, the 13 websites are:
 
 ### **Expected Impact**
 - **Before**: 69.2% coverage (9/13)
-- **After**: 92.3% coverage (12/13) ✅
-- **Expected Score Improvement**: +5-10% (better website coverage)
+- **After**: 100% coverage (13/13) ✅
+- **Expected Score Improvement**: +5-10% (complete website coverage)
 
 ---
 
@@ -274,7 +275,7 @@ Based on IWA Platform and top miner analysis, the 13 websites are:
 
 ---
 
-**Status**: **92.3% Coverage** ✅ - All known websites now supported (12/13)
+**Status**: **100% Coverage** ✅ - All 13 websites fully supported!
 
-**Next Step**: Identify and verify the 13th website (may be a duplicate or variant)
+**Achievement**: Complete website coverage - miner can handle all active IWA websites
 

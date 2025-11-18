@@ -125,10 +125,10 @@ class TaskDiversityHandler:
                 return "autodrive"
             elif "automail" in domain:
                 return "automail"
+            elif "autodining" in domain:
+                return "autodining"
             elif "autoconnect" in domain:
                 return "autoconnect"
-            elif "autolodge" in domain:
-                return "autolodge"
             elif "autolodge" in domain:
                 return "autolodge"
             else:

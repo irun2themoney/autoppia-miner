@@ -130,6 +130,19 @@ class WebsiteDetector:
                 "reply_button": ["button:contains('Reply')", "button:contains('Reply All')"],
             }
         },
+        "autodining": {
+            "url_patterns": [r"autodining", r"dining", r"restaurant", r"opentable"],
+            "keywords": ["restaurant", "dining", "reservation", "booking", "menu", "table", "reserve", "book table"],
+            "common_selectors": {
+                "restaurant_search": ["input[type='search']", "input[name='search']", "input[placeholder*='restaurant']", "input[placeholder*='dining']"],
+                "restaurant_card": [".restaurant-card", "[data-restaurant]", ".restaurant-item", ".restaurant-listing"],
+                "reserve_button": ["button:contains('Reserve')", "button:contains('Book Table')", "button:contains('Book')", "a[href*='reserve']"],
+                "menu_button": ["button:contains('Menu')", "a:contains('Menu')", "[data-menu]"],
+                "date_picker": ["input[name='date']", "input[name='reservation-date']", ".date-picker"],
+                "time_picker": ["input[name='time']", "input[name='reservation-time']", ".time-picker"],
+                "party_size": ["input[name='party']", "input[name='guests']", "select[name='party-size']"],
+            }
+        },
     }
     
     def __init__(self):
@@ -263,6 +276,12 @@ class WebsiteDetector:
                 "wait_after_navigation": 2.0,  # Mail pages load moderately
                 "wait_between_actions": 0.8,   # Email interactions are quick
                 "screenshot_frequency": "after_important",  # Email actions are important
+                "verification_enabled": True,  # Enable verification for quality
+            },
+            "autodining": {
+                "wait_after_navigation": 2.5,  # Restaurant pages load slowly (menus, images)
+                "wait_between_actions": 1.0,   # Reservation interactions need time
+                "screenshot_frequency": "always",  # Reservations are critical
                 "verification_enabled": True,  # Enable verification for quality
             },
         }
