@@ -16,13 +16,7 @@ class Settings(BaseSettings):
     api_port: int = 8080
     
     # Agent Configuration
-    agent_type: str = "hybrid"  # template, chutes, hybrid, or browser-use
-    llm_provider: Optional[str] = None  # openai, chutes, or None
-    
-    # Chutes API Configuration
-    chutes_api_key: Optional[str] = None
-    chutes_api_url: str = "https://api.chutes.ai/v1/chat/completions"
-    chutes_model: str = "Qwen/Qwen2.5-7B-Instruct"  # Free model! Options: Qwen/Qwen2.5-7B-Instruct, Qwen/Qwen3-32B, gpt-4o-mini, etc.
+    agent_type: str = "hybrid"  # template or hybrid (enhanced template agent)
     
     # Miner Configuration
     subnet_uid: int = 36

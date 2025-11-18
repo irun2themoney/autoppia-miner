@@ -68,7 +68,7 @@ def test_solve_task_endpoint(base_url: str = "http://localhost:8080"):
         return True
     except requests.exceptions.Timeout:
         print("⚠️  solve_task endpoint: TIMEOUT (likely rate-limited)")
-        print("   This is expected when Chutes API is rate-limited.")
+        print("   This is expected when API is rate-limited or slow.")
         print("   The API will fall back to template agent automatically.")
         print("   Consider this a WARNING, not a failure.")
         return True  # Don't fail the test for rate limits
@@ -141,7 +141,7 @@ def test_response_time(base_url: str = "http://localhost:8080"):
         return True
     except requests.exceptions.Timeout:
         print("⚠️  Response time: TIMEOUT (likely rate-limited)")
-        print("   This is expected when Chutes API is rate-limited.")
+        print("   This is expected when API is rate-limited or slow.")
         return True  # Don't fail for rate limits
     except Exception as e:
         print(f"❌ Response time: FAIL - {e}")
@@ -195,7 +195,7 @@ def test_action_format(base_url: str = "http://localhost:8080"):
         return True
     except requests.exceptions.Timeout:
         print("⚠️  Action format: TIMEOUT (likely rate-limited)")
-        print("   This is expected when Chutes API is rate-limited.")
+        print("   This is expected when API is rate-limited or slow.")
         print("   The API will fall back to template agent automatically.")
         return True  # Don't fail for rate limits
     except Exception as e:

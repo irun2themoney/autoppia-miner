@@ -20,8 +20,8 @@ def get_agent():
     """Get agent instance based on settings"""
     agent_type = os.getenv("AGENT_TYPE", settings.agent_type).lower()
     
-    # Always use hybrid (enhanced template) - Chutes removed
-    if agent_type in ["hybrid", "template", "chutes"]:
+    # Always use hybrid (enhanced template agent)
+    if agent_type in ["hybrid", "template"]:
         from .agent.hybrid import HybridAgent
         return HybridAgent()
     else:

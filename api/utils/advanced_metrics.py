@@ -50,7 +50,6 @@ class AdvancedMetrics:
         # Agent performance
         self.agent_performance = {
             "template": {"success": 0, "total": 0, "avg_time": 0.0},
-            "chutes": {"success": 0, "total": 0, "avg_time": 0.0},
             "hybrid": {"success": 0, "total": 0, "avg_time": 0.0},
         }
         
