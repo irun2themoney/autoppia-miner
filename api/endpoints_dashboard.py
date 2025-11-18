@@ -716,8 +716,7 @@ async def dashboard():
             
             // Initialize chart on load
             window.addEventListener('load', initChart);
-        
-        <script>
+            
             async function loadMetrics() {
                 try {
                     const response = await fetch('/api/dashboard/metrics');
