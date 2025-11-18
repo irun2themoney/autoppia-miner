@@ -8,6 +8,8 @@ from ..utils.vector_memory import VectorMemory
 from ..utils.ensemble_voting import ensemble_voting
 from ..utils.semantic_cache import semantic_cache
 from ..utils.validator_learner import validator_learner
+from ..utils.anti_overfitting import anti_overfitting
+from ..utils.task_diversity import task_diversity
 
 
 class HybridAgent(BaseAgent):
@@ -47,9 +49,22 @@ class HybridAgent(BaseAgent):
             semantic_cache.set(prompt, url, memory_actions)
             return memory_actions
         
-        # Check for learned patterns
+        # DYNAMIC ZERO: Analyze task diversity
+        diversity_info = task_diversity.analyze_task_diversity(prompt, url)
+        if diversity_info.get("diversity_issues"):
+            logging.warning(f"Diversity issues detected: {diversity_info['diversity_issues']}")
+        
+        # Check for learned patterns (with anti-overfitting protection)
         learned_pattern = self.pattern_learner.get_similar_pattern(prompt, url)
         if learned_pattern:
+            # DYNAMIC ZERO: Adapt pattern for variation if needed
+            adaptation_factor = anti_overfitting.get_adaptation_factor(0.8)  # Assume high similarity
+            if adaptation_factor < 1.0:
+                logging.info(f"Adapting pattern for variation (factor: {adaptation_factor})")
+                learned_pattern = task_diversity.adapt_actions_for_variation(
+                    learned_pattern, diversity_info
+                )
+            
             logging.info(f"Using learned pattern for task: {prompt[:50]}...")
             # Cache in semantic cache
             semantic_cache.set(prompt, url, learned_pattern)

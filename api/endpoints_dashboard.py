@@ -160,10 +160,6 @@ async def dashboard():
                 margin-top: 4px;
                 font-weight: 500;
             }
-            .dashboard-container {
-                position: relative;
-                min-height: 100vh;
-            }
             .section { 
                 background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
                 padding: 12px; 
@@ -173,50 +169,14 @@ async def dashboard():
                 box-shadow: 0 2px 8px rgba(0,0,0,0.06);
                 transition: all 0.3s ease;
                 animation: fadeIn 0.6s ease-out;
-                cursor: move;
-                position: relative;
             }
             .section:hover {
                 box-shadow: 0 4px 12px rgba(0,0,0,0.1);
             }
-            .section.dragging {
-                opacity: 0.7;
-                transform: rotate(2deg);
-                z-index: 1000;
-                box-shadow: 0 8px 24px rgba(0,0,0,0.2);
-                cursor: grabbing;
-            }
-            .section.drag-over {
-                border: 2px dashed #667eea;
-                background: rgba(102, 126, 234, 0.05);
-            }
-            .section-header {
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                margin-bottom: 10px;
-                padding-bottom: 8px;
-                border-bottom: 1px solid rgba(0,0,0,0.05);
-            }
-            .drag-handle {
-                cursor: grab;
-                padding: 4px 8px;
-                color: #868e96;
-                font-size: 14px;
-                user-select: none;
-                transition: all 0.2s ease;
-            }
-            .drag-handle:hover {
-                color: #667eea;
-                transform: scale(1.2);
-            }
-            .drag-handle:active {
-                cursor: grabbing;
-            }
             .section-title { 
                 font-size: 11px; 
                 font-weight: 700; 
-                margin-bottom: 0; 
+                margin-bottom: 10px; 
                 background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
                 -webkit-background-clip: text;
                 -webkit-text-fill-color: transparent;
@@ -401,11 +361,9 @@ async def dashboard():
             <div class="header-info">
                 <span class="refresh-indicator"></span>
                 <span id="last-update">Loading...</span> | Auto-refresh: 5s
-                <span style="margin-left: 12px; color: #868e96; font-size: 10px;">💡 Drag sections to reposition</span>
             </div>
         </div>
         
-        <div class="dashboard-container">
         <div class="grid">
             <div class="card">
                 <div class="card-title">Success Rate</div>
@@ -439,67 +397,45 @@ async def dashboard():
             </div>
         </div>
         
-        <div class="two-col" data-section-id="performance-godtier">
-            <div class="section" data-section="performance">
-                <div class="section-header">
-                    <div class="section-title">⚡ Performance</div>
-                    <div class="drag-handle">⋮⋮</div>
-                </div>
+        <div class="two-col">
+            <div class="section">
+                <div class="section-title">⚡ Performance</div>
                 <div id="performance" class="loading">Loading...</div>
             </div>
-            <div class="section" data-section="god-tier">
-                <div class="section-header">
-                    <div class="section-title">🏆 God-Tier Features</div>
-                    <div class="drag-handle">⋮⋮</div>
-                </div>
+            <div class="section">
+                <div class="section-title">🏆 God-Tier Features</div>
                 <div id="god-tier" class="loading">Loading...</div>
             </div>
         </div>
         
-        <div class="section" data-section="recent-activity">
-            <div class="section-header">
-                <div class="section-title">📊 Recent Activity (Last 10)</div>
-                <div class="drag-handle">⋮⋮</div>
-            </div>
+        <div class="section">
+            <div class="section-title">📊 Recent Activity (Last 10)</div>
             <div id="recent-activity" class="loading">Loading...</div>
         </div>
         
-        <div class="two-col" data-section-id="task-validators">
-            <div class="section" data-section="task-types">
-                <div class="section-header">
-                    <div class="section-title">🎯 Task Types</div>
-                    <div class="drag-handle">⋮⋮</div>
-                </div>
+        <div class="two-col">
+            <div class="section">
+                <div class="section-title">🎯 Task Types</div>
                 <div id="task-types" class="loading">Loading...</div>
             </div>
-            <div class="section" data-section="top-validators">
-                <div class="section-header">
-                    <div class="section-title">🔍 Top Validators</div>
-                    <div class="drag-handle">⋮⋮</div>
-                </div>
+            <div class="section">
+                <div class="section-title">🔍 Top Validators</div>
                 <div id="top-validators" class="loading">Loading...</div>
             </div>
         </div>
         
-        <div class="section" data-section="errors">
-            <div class="section-header">
-                <div class="section-title">❌ Errors</div>
-                <div class="drag-handle">⋮⋮</div>
-            </div>
+        <div class="section">
+            <div class="section-title">❌ Errors</div>
             <div id="errors" class="loading">Loading...</div>
         </div>
         
-        <div class="section" data-section="chart">
-            <div class="section-header">
-                <div class="section-title">📈 Real-Time Performance Trends</div>
-                <div class="drag-handle">⋮⋮</div>
-            </div>
+        <div class="section">
+            <div class="section-title">📈 Real-Time Performance Trends</div>
             <div class="chart-container">
                 <div class="chart-wrapper">
                     <canvas id="performanceChart"></canvas>
                 </div>
             </div>
-        </div>
         </div>
         
         <script>
@@ -781,218 +717,6 @@ async def dashboard():
             // Initialize chart on load
             window.addEventListener('load', initChart);
             
-            // Drag and Drop functionality
-            let draggedElement = null;
-            let draggedOffset = { x: 0, y: 0 };
-            let sections = [];
-            
-            function initDragAndDrop() {
-                sections = document.querySelectorAll('.section');
-                const container = document.querySelector('.dashboard-container');
-                
-                // Load saved positions
-                loadSectionPositions();
-                
-                sections.forEach(section => {
-                    const handle = section.querySelector('.drag-handle');
-                    if (!handle) return;
-                    
-                    handle.addEventListener('mousedown', (e) => {
-                        e.preventDefault();
-                        startDrag(section, e);
-                    });
-                    
-                    section.addEventListener('mousedown', (e) => {
-                        if (e.target === handle || handle.contains(e.target)) {
-                            e.preventDefault();
-                            startDrag(section, e);
-                        }
-                    });
-                });
-                
-                document.addEventListener('mousemove', handleDrag);
-                document.addEventListener('mouseup', stopDrag);
-            }
-            
-            function startDrag(section, e) {
-                draggedElement = section;
-                const rect = section.getBoundingClientRect();
-                draggedOffset.x = e.clientX - rect.left;
-                draggedOffset.y = e.clientY - rect.top;
-                
-                // Remove from parent if in two-col
-                const parent = section.parentElement;
-                if (parent && parent.classList.contains('two-col')) {
-                    parent.style.position = 'relative';
-                }
-                
-                // Get current position relative to viewport
-                const container = document.querySelector('.dashboard-container');
-                const containerRect = container.getBoundingClientRect();
-                const sectionRect = section.getBoundingClientRect();
-                
-                // Calculate current position relative to container
-                const currentLeft = sectionRect.left - containerRect.left;
-                const currentTop = sectionRect.top - containerRect.top;
-                
-                section.classList.add('dragging');
-                section.style.position = 'fixed';
-                section.style.left = sectionRect.left + 'px';
-                section.style.top = sectionRect.top + 'px';
-                section.style.width = sectionRect.width + 'px';
-                section.style.zIndex = '10000';
-                section.style.pointerEvents = 'none';
-                section.style.margin = '0';
-                
-                // Store original parent and position
-                section._originalParent = parent;
-                section._originalIndex = Array.from(parent.children).indexOf(section);
-                
-                // Move to container for absolute positioning
-                container.appendChild(section);
-                
-                updateDragPosition(e);
-            }
-            
-            function handleDrag(e) {
-                if (!draggedElement) return;
-                updateDragPosition(e);
-            }
-            
-            function updateDragPosition(e) {
-                if (!draggedElement) return;
-                
-                // Use fixed positioning during drag for smooth movement
-                const x = e.clientX - draggedOffset.x;
-                const y = e.clientY - draggedOffset.y;
-                
-                draggedElement.style.left = x + 'px';
-                draggedElement.style.top = y + 'px';
-            }
-            
-            function stopDrag(e) {
-                if (!draggedElement) return;
-                
-                const section = draggedElement;
-                const container = document.querySelector('.dashboard-container');
-                const containerRect = container.getBoundingClientRect();
-                
-                // Convert fixed position to absolute relative to container
-                const fixedLeft = parseFloat(section.style.left);
-                const fixedTop = parseFloat(section.style.top);
-                
-                // Calculate absolute position relative to container
-                const absoluteLeft = fixedLeft - containerRect.left;
-                const absoluteTop = fixedTop - containerRect.top;
-                
-                // Ensure section stays within container bounds
-                const maxX = containerRect.width - section.offsetWidth;
-                const maxY = containerRect.height - section.offsetHeight;
-                
-                const finalX = Math.max(0, Math.min(absoluteLeft, maxX));
-                const finalY = Math.max(0, Math.min(absoluteTop, maxY));
-                
-                // Set final position
-                section.style.position = 'absolute';
-                section.style.left = finalX + 'px';
-                section.style.top = finalY + 'px';
-                section.style.width = '';
-                section.style.zIndex = '1';
-                section.style.pointerEvents = 'auto';
-                section.classList.remove('dragging');
-                
-                // Remove drag-over classes
-                sections.forEach(s => s.classList.remove('drag-over'));
-                
-                // Save position
-                saveSectionPosition(section);
-                
-                draggedElement = null;
-            }
-            
-            function saveSectionPosition(section) {
-                const sectionId = section.getAttribute('data-section');
-                const position = {
-                    left: section.style.left,
-                    top: section.style.top,
-                    position: 'absolute'
-                };
-                localStorage.setItem(`dashboard-section-${sectionId}`, JSON.stringify(position));
-            }
-            
-            function loadSectionPositions() {
-                sections.forEach(section => {
-                    const sectionId = section.getAttribute('data-section');
-                    if (!sectionId) return;
-                    
-                    const saved = localStorage.getItem(`dashboard-section-${sectionId}`);
-                    if (saved) {
-                        try {
-                            const position = JSON.parse(saved);
-                            if (position.left && position.top) {
-                                // Remove from two-col if it was in one
-                                const parent = section.parentElement;
-                                if (parent && parent.classList.contains('two-col')) {
-                                    const container = document.querySelector('.dashboard-container');
-                                    container.appendChild(section);
-                                }
-                                
-                                section.style.position = 'absolute';
-                                section.style.left = position.left;
-                                section.style.top = position.top;
-                                section.style.marginBottom = '10px';
-                                section.style.margin = '0';
-                            }
-                        } catch (e) {
-                            console.error('Error loading position:', e);
-                        }
-                    }
-                });
-            }
-            
-            function resetPositions() {
-                if (confirm('Reset all section positions to default?')) {
-                    sections.forEach(section => {
-                        const sectionId = section.getAttribute('data-section');
-                        if (sectionId) {
-                            localStorage.removeItem(`dashboard-section-${sectionId}`);
-                            section.style.position = '';
-                            section.style.left = '';
-                            section.style.top = '';
-                            section.style.width = '';
-                            section.style.margin = '';
-                            
-                            // Try to restore to original parent if it was in two-col
-                            const parent = section.parentElement;
-                            if (parent && parent.classList.contains('dashboard-container')) {
-                                // Find original two-col parent
-                                const twoCols = document.querySelectorAll('.two-col');
-                                twoCols.forEach(tc => {
-                                    const sectionIdAttr = tc.getAttribute('data-section-id');
-                                    if (sectionIdAttr && sectionIdAttr.includes(sectionId)) {
-                                        tc.appendChild(section);
-                                    }
-                                });
-                            }
-                        }
-                    });
-                    location.reload();
-                }
-            }
-            
-            // Add reset button to header
-            window.addEventListener('load', () => {
-                initDragAndDrop();
-                const headerInfo = document.querySelector('.header-info');
-                const resetBtn = document.createElement('button');
-                resetBtn.textContent = 'Reset Layout';
-                resetBtn.style.cssText = 'margin-left: 12px; padding: 4px 12px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 6px; font-size: 10px; cursor: pointer; font-weight: 600; transition: all 0.2s ease;';
-                resetBtn.onmouseover = () => resetBtn.style.transform = 'scale(1.05)';
-                resetBtn.onmouseout = () => resetBtn.style.transform = 'scale(1)';
-                resetBtn.onclick = resetPositions;
-                headerInfo.appendChild(resetBtn);
-            });
-            
             async function loadMetrics() {
                 try {
                     const response = await fetch('/api/dashboard/metrics');
@@ -1141,6 +865,57 @@ async def dashboard():
                     // Update performance chart
                     updateChart(data);
                     
+                    // DYNAMIC ZERO: Display anti-overfitting metrics
+                    if (data.anti_overfitting) {
+                        const ao = data.anti_overfitting;
+                        let html = '<div class="compact-row">';
+                        html += `<div class="compact-stat">
+                            <div class="compact-stat-value ${ao.diversity_score >= 0.5 ? 'good' : 'warning'}">${(ao.diversity_score * 100).toFixed(1)}%</div>
+                            <div class="compact-stat-label">Diversity</div>
+                        </div>`;
+                        html += `<div class="compact-stat">
+                            <div class="compact-stat-value">${ao.overused_patterns}</div>
+                            <div class="compact-stat-label">Overused</div>
+                        </div>`;
+                        html += `<div class="compact-stat">
+                            <div class="compact-stat-value">${ao.total_patterns}</div>
+                            <div class="compact-stat-label">Total Patterns</div>
+                        </div>`;
+                        html += `<div class="compact-stat">
+                            <div class="compact-stat-value ${ao.is_overfitting ? 'error' : 'good'}">${ao.is_overfitting ? '⚠️' : '✓'}</div>
+                            <div class="compact-stat-label">Status</div>
+                        </div>`;
+                        html += '</div>';
+                        if (ao.is_overfitting) {
+                            html += '<div style="margin-top: 8px; padding: 8px; background: #fff3cd; border-radius: 6px; font-size: 10px; color: #856404;">⚠️ Overfitting detected - forcing pattern adaptation</div>';
+                        }
+                        document.getElementById('anti-overfitting').innerHTML = html;
+                    } else {
+                        document.getElementById('anti-overfitting').innerHTML = '<div class="loading">No data yet</div>';
+                    }
+                    
+                    // Task diversity metrics
+                    if (data.task_diversity) {
+                        const td = data.task_diversity;
+                        let html = '<div class="compact-row">';
+                        html += `<div class="compact-stat">
+                            <div class="compact-stat-value">${td.unique_task_types || 0}</div>
+                            <div class="compact-stat-label">Task Types</div>
+                        </div>`;
+                        html += `<div class="compact-stat">
+                            <div class="compact-stat-value">${td.unique_websites || 0}</div>
+                            <div class="compact-stat-label">Websites</div>
+                        </div>`;
+                        html += `<div class="compact-stat">
+                            <div class="compact-stat-value">${td.recent_tasks_count || 0}</div>
+                            <div class="compact-stat-label">Recent Tasks</div>
+                        </div>`;
+                        html += '</div>';
+                        document.getElementById('task-diversity').innerHTML = html;
+                    } else {
+                        document.getElementById('task-diversity').innerHTML = '<div class="loading">No data yet</div>';
+                    }
+                    
                 } catch (error) {
                     console.error('Error:', error);
                     document.getElementById('recent-activity').innerHTML = 
@@ -1167,6 +942,16 @@ async def dashboard_metrics():
     advanced_metrics = get_advanced_metrics()
     metrics = advanced_metrics.get_comprehensive_metrics()
     metrics["health_score"] = advanced_metrics.get_health_score()
+    
+    # DYNAMIC ZERO: Add anti-overfitting metrics
+    try:
+        from api.utils.anti_overfitting import anti_overfitting
+        from api.utils.task_diversity import task_diversity
+        metrics["anti_overfitting"] = anti_overfitting.get_overfitting_metrics()
+        metrics["task_diversity"] = task_diversity.get_diversity_metrics()
+    except Exception:
+        metrics["anti_overfitting"] = {}
+        metrics["task_diversity"] = {}
     
     # Store current metrics before rebuilding from logs
     current_response_times = list(advanced_metrics.response_times) if hasattr(advanced_metrics, 'response_times') else []

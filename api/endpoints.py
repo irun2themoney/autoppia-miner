@@ -200,6 +200,14 @@ async def solve_task(request: TaskRequest, http_request: Request):
                 except Exception as e:
                     logger = logging.getLogger(__name__)
                     logger.debug(f"Error recording validator result: {e}")
+            
+            # DYNAMIC ZERO: Track task diversity and anti-overfitting
+            try:
+                from api.utils.task_diversity import task_diversity
+                from api.utils.anti_overfitting import anti_overfitting
+                task_diversity.analyze_task_diversity(request.prompt, request.url)
+            except Exception as e:
+                logger.debug(f"Task diversity tracking failed: {e}")
         
         return JSONResponse(
             content={

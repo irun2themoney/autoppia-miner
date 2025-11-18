@@ -121,10 +121,18 @@ class SemanticCache:
     ) -> Optional[Tuple[List[Dict[str, Any]], float]]:
         """
         Get cached result with semantic similarity matching
+        DYNAMIC ZERO: Includes anti-overfitting protection
         
         Returns:
             (cached_actions, similarity_score) or None
         """
+        # DYNAMIC ZERO: Import anti-overfitting (lazy import to avoid circular deps)
+        try:
+            from .anti_overfitting import anti_overfitting
+            has_anti_overfitting = True
+        except ImportError:
+            has_anti_overfitting = False
+        
         # First try exact match
         exact_key = self._create_cache_key(prompt, url)
         if exact_key in self.cache:
@@ -132,11 +140,26 @@ class SemanticCache:
             
             # Check TTL
             if time.time() - timestamp < self.ttl:
+                # DYNAMIC ZERO: Check for overfitting before using exact match
+                if has_anti_overfitting:
+                    similarity = 1.0  # Exact match
+                    should_use, adjusted_confidence = anti_overfitting.should_use_pattern(
+                        similarity, exact_key, prompt, url
+                    )
+                    if not should_use or adjusted_confidence < 0.6:
+                        # Overfitting detected, skip cache
+                        logger.info(f"Semantic cache: Overfitting detected, skipping exact match")
+                        self.cache_misses += 1
+                        return None
+                    similarity = adjusted_confidence
+                else:
+                    similarity = 1.0
+                
                 self.access_times[exact_key] = time.time()
                 self.cache.move_to_end(exact_key)
                 self.cache_hits += 1
                 logger.info(f"Semantic cache: Exact match found")
-                return (actions, 1.0)
+                return (actions, similarity)
             else:
                 # Expired, remove
                 del self.cache[exact_key]
@@ -161,6 +184,17 @@ class SemanticCache:
             cached_domain = self._get_domain(cached_prompt)  # Try to extract from cached prompt
             if domain and cached_domain and domain == cached_domain:
                 similarity += 0.05  # Small boost for same domain
+            
+            # DYNAMIC ZERO: Check for overfitting
+            if has_anti_overfitting and similarity >= self.similarity_threshold:
+                should_use, adjusted_confidence = anti_overfitting.should_use_pattern(
+                    similarity, key, prompt, url
+                )
+                if should_use and adjusted_confidence >= 0.5:
+                    similarity = adjusted_confidence
+                else:
+                    # Overfitting detected, skip this match
+                    continue
             
             if similarity > best_similarity and similarity >= self.similarity_threshold:
                 best_similarity = similarity

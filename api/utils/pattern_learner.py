@@ -87,7 +87,9 @@ class PatternLearner:
             self.save_patterns()
     
     def get_similar_pattern(self, prompt: str, url: str) -> Optional[List[Dict[str, Any]]]:
-        """Get similar successful pattern - Enhanced similarity matching"""
+        """Get similar successful pattern - Enhanced similarity matching with anti-overfitting"""
+        from .anti_overfitting import anti_overfitting
+        
         pattern_key = self.get_pattern_key(prompt, url)
         
         # Check exact match first
@@ -99,7 +101,15 @@ class PatternLearner:
                 reverse=True
             )
             if patterns and patterns[0].get("success_count", 0) >= 2:
-                return patterns[0].get("actions")
+                # DYNAMIC ZERO: Check for overfitting before using pattern
+                similarity = 1.0  # Exact match
+                should_use, adjusted_confidence = anti_overfitting.should_use_pattern(
+                    similarity, pattern_key, prompt, url
+                )
+                
+                if should_use and adjusted_confidence >= 0.6:
+                    return patterns[0].get("actions")
+                # If overfitting detected, continue to similarity search for variation
         
         # Enhanced similarity check with better matching
         prompt_lower = prompt.lower()
@@ -151,8 +161,20 @@ class PatternLearner:
             weighted_score = similarity * (1 + success_count * 0.1)
             
             if weighted_score > best_score and similarity >= 0.3:  # Minimum 30% similarity
-                best_score = weighted_score
-                best_match = best_pattern.get("actions")
+                # DYNAMIC ZERO: Check for overfitting
+                from .anti_overfitting import anti_overfitting
+                should_use, adjusted_confidence = anti_overfitting.should_use_pattern(
+                    similarity, key, prompt, url
+                )
+                
+                if should_use and adjusted_confidence >= 0.5:
+                    best_score = weighted_score
+                    best_match = best_pattern.get("actions")
+        
+        # DYNAMIC ZERO: If best match found, add variation tracking
+        if best_match:
+            from .anti_overfitting import anti_overfitting
+            anti_overfitting.add_variation(prompt, url, best_match)
         
         return best_match
 
