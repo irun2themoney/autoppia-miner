@@ -964,11 +964,21 @@ async def dashboard_metrics():
         metrics["anti_overfitting"] = {}
         metrics["task_diversity"] = {}
     
-    # Store current in-memory metrics (source of truth)
+    # Store current in-memory metrics (should only contain validator requests now)
+    # But we'll still rebuild from logs to ensure accuracy and filter any old localhost data
     current_total_requests = metrics["overview"]["total_requests"]
     current_successful = metrics["overview"]["successful_requests"]
     current_failed = metrics["overview"]["failed_requests"]
     current_response_times = list(advanced_metrics.response_times) if hasattr(advanced_metrics, 'response_times') else []
+    
+    # Also get validator activity from in-memory (filters localhost)
+    in_memory_validator_activity = []
+    if hasattr(advanced_metrics, 'validator_activity'):
+        for activity in advanced_metrics.validator_activity:
+            ip = activity.get("ip", "")
+            if ip and ip not in ["127.0.0.1", "localhost", "::1"]:
+                if not ip.startswith("192.168.") and not ip.startswith("10.") and not ip.startswith("172.16.") and ip != "134.199.203.133":
+                    in_memory_validator_activity.append(activity)
     
     # Supplement with historical log data (for recent activity display), but don't replace in-memory counts
     try:
@@ -984,7 +994,13 @@ async def dashboard_metrics():
             historical_activity = []
             
             for line in log_lines:
-                match = re.search(r'(\w+\s+\d+\s+\d+:\d+:\d+).*?INFO:.*?([\d.]+):\d+\s+-\s+"POST\s+/solve_task.*?"\s+(\d+)', line)
+                # Try multiple regex patterns to match different log formats
+                match = None
+                # Pattern 1: Standard format with quotes and status code
+                match = re.search(r'(\w+\s+\d+\s+\d+:\d+:\d+).*?INFO:\s+([\d.]+):\d+\s+-\s+"POST\s+/solve_task.*?"\s+(\d+)', line)
+                if not match:
+                    # Pattern 2: Format with "HTTP/1.1" and status code
+                    match = re.search(r'(\w+\s+\d+\s+\d+:\d+:\d+).*?INFO:\s+([\d.]+):\d+\s+-\s+"POST\s+/solve_task.*?HTTP/1\.1"\s+(\d+)', line)
                 if match:
                     timestamp_str, ip, status_code = match.groups()
                     if ip in ["127.0.0.1", "localhost", "::1"]:
@@ -1024,31 +1040,24 @@ async def dashboard_metrics():
             validator_activity = list(combined_activity.values())
             
             # Use validator activity from logs as source of truth (filters out localhost)
-            # In-memory metrics may include localhost, so we rebuild from filtered logs
+            # In-memory metrics may include old localhost data, so we prioritize filtered validator activity
             validator_total = len(validator_activity)
             validator_successful = sum(1 for a in validator_activity if a.get("success", False))
             validator_failed = validator_total - validator_successful
             
-            # Use in-memory metrics ONLY if they're higher (to preserve validator counts)
-            # But ensure we're not counting localhost requests
-            # If in-memory has more, it means we have validator requests that aren't in logs yet
-            if current_total_requests > validator_total:
-                # In-memory has more - use it but ensure success/failed are consistent
+            # Always use validator activity counts (filters localhost correctly)
+            # In-memory may have old localhost data, so we trust the filtered logs
+            metrics["overview"]["total_requests"] = validator_total
+            metrics["overview"]["successful_requests"] = validator_successful
+            metrics["overview"]["failed_requests"] = validator_failed
+            
+            # Only use in-memory if it has MORE validator requests (new requests not yet in logs)
+            # But only if in-memory looks valid (not all failed, which indicates old localhost data)
+            if current_total_requests > validator_total and current_successful > 0:
+                # In-memory has more AND has successful requests (likely new validator requests)
                 metrics["overview"]["total_requests"] = current_total_requests
-                # Only update if in-memory values are reasonable (not all failed)
-                if current_successful > 0 or current_failed < current_total_requests:
-                    metrics["overview"]["successful_requests"] = current_successful
-                    metrics["overview"]["failed_requests"] = current_failed
-                else:
-                    # In-memory looks wrong (all failed), use validator counts
-                    metrics["overview"]["total_requests"] = validator_total
-                    metrics["overview"]["successful_requests"] = validator_successful
-                    metrics["overview"]["failed_requests"] = validator_failed
-            else:
-                # Use validator counts from logs (more accurate, filters localhost)
-                metrics["overview"]["total_requests"] = validator_total
-                metrics["overview"]["successful_requests"] = validator_successful
-                metrics["overview"]["failed_requests"] = validator_failed
+                metrics["overview"]["successful_requests"] = current_successful
+                metrics["overview"]["failed_requests"] = current_failed
             
             # Recalculate success rate based on updated counts
             if metrics["overview"]["total_requests"] > 0:
