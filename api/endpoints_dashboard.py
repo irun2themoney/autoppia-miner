@@ -395,6 +395,21 @@ async def dashboard():
                 <div class="card-value" id="validators">-</div>
                 <div class="card-sub" id="validator-detail">-</div>
             </div>
+            <div class="card">
+                <div class="card-title">💰 Wallet Balance</div>
+                <div class="card-value" id="wallet-balance">-</div>
+                <div class="card-sub" id="wallet-balance-detail">TAO</div>
+            </div>
+            <div class="card">
+                <div class="card-title">📊 Total Stake</div>
+                <div class="card-value" id="wallet-stake">-</div>
+                <div class="card-sub" id="wallet-stake-detail">TAO (Your: <span id="your-stake">-</span> | Delegators: <span id="delegator-stake">-</span>)</div>
+            </div>
+            <div class="card">
+                <div class="card-title">🏆 Rank</div>
+                <div class="card-value" id="wallet-rank">-</div>
+                <div class="card-sub" id="wallet-rank-detail">Incentive: <span id="wallet-incentive">-</span></div>
+            </div>
         </div>
         
         <div class="two-col">
@@ -788,6 +803,29 @@ async def dashboard():
                     document.getElementById('validators').className = 'card-value' + (uniqueValidators > 0 ? ' good' : '');
                     document.getElementById('validator-detail').textContent = 'Unique validators';
                     
+                    // Wallet info
+                    const wallet = data.wallet || {};
+                    const balance = parseFloat(wallet.balance_tao || 0);
+                    const totalStake = parseFloat(wallet.stake_tao || 0);
+                    const yourStake = parseFloat(wallet.your_stake_tao || wallet.stake_tao || 0);
+                    const delegatorStake = parseFloat(wallet.delegator_stake_tao || 0);
+                    const rank = parseFloat(wallet.rank || 0);
+                    const incentive = parseFloat(wallet.incentive || 0);
+                    const uid = wallet.uid;
+                    
+                    document.getElementById('wallet-balance').textContent = balance.toFixed(4);
+                    document.getElementById('wallet-balance').className = 'card-value' + (balance > 0 ? ' good' : '');
+                    document.getElementById('wallet-balance-detail').textContent = 'TAO | UID: ' + (uid !== null && uid !== undefined ? uid : 'N/A');
+                    
+                    document.getElementById('wallet-stake').textContent = totalStake.toFixed(2);
+                    document.getElementById('wallet-stake').className = 'card-value' + (totalStake > 0 ? ' good' : '');
+                    document.getElementById('your-stake').textContent = yourStake.toFixed(2);
+                    document.getElementById('delegator-stake').textContent = delegatorStake.toFixed(2);
+                    
+                    document.getElementById('wallet-rank').textContent = rank.toFixed(6);
+                    document.getElementById('wallet-rank').className = 'card-value' + (rank > 0 ? ' good' : '');
+                    document.getElementById('wallet-incentive').textContent = incentive.toFixed(6);
+                    
                     // Performance
                     let perfHtml = '<div class="compact-row">';
                     perfHtml += `<div class="compact-stat"><div class="compact-stat-value">${avgTime}s</div><div class="compact-stat-label">Avg</div></div>`;
@@ -943,6 +981,87 @@ async def dashboard():
     return HTMLResponse(content=html_content)
 
 
+def get_wallet_info():
+    """Get wallet balance and stake information from Bittensor"""
+    try:
+        import bittensor as bt
+        from config.settings import settings
+        
+        wallet = bt.wallet(name='default', hotkey='default')
+        subtensor = bt.subtensor(network='finney')
+        
+        # Get balance
+        balance = subtensor.get_balance(wallet.coldkeypub.ss58_address)
+        balance_tao = float(balance.tao) if hasattr(balance, 'tao') else float(balance)
+        
+        # Get stake and other metrics
+        metagraph = subtensor.metagraph(settings.subnet_uid)
+        uid = metagraph.hotkeys.index(wallet.hotkey.ss58_address) if wallet.hotkey.ss58_address in metagraph.hotkeys else None
+        
+        if uid is not None:
+            total_stake = metagraph.S[uid].item() if hasattr(metagraph, 'S') and uid < len(metagraph.S) else 0
+            
+            # Try to get stake FROM your coldkey specifically
+            your_stake = 0.0
+            delegator_stake = 0.0
+            try:
+                # Try different method signatures
+                try:
+                    stake_from_you = subtensor.get_stake_for_coldkey_and_hotkey(
+                        coldkey_ss58=wallet.coldkeypub.ss58_address,
+                        hotkey_ss58=wallet.hotkey.ss58_address
+                    )
+                except TypeError:
+                    # Try without netuid parameter
+                    stake_from_you = subtensor.get_stake(
+                        coldkey_ss58=wallet.coldkeypub.ss58_address,
+                        hotkey_ss58=wallet.hotkey.ss58_address
+                    )
+                
+                your_stake = float(stake_from_you.tao) if hasattr(stake_from_you, 'tao') else float(stake_from_you)
+                delegator_stake = max(0, total_stake - your_stake)
+            except Exception as e:
+                # If we can't get the breakdown, we'll show total stake
+                # and note that it may include delegators
+                your_stake = 0.0  # Unknown - will show as 0.00
+                delegator_stake = total_stake  # Assume all is delegator until we can verify
+            
+            rank = metagraph.R[uid].item() if hasattr(metagraph, 'R') and uid < len(metagraph.R) else 0
+            trust = metagraph.T[uid].item() if hasattr(metagraph, 'T') and uid < len(metagraph.T) else 0
+            incentive = metagraph.I[uid].item() if hasattr(metagraph, 'I') and uid < len(metagraph.I) else 0
+            
+            return {
+                "balance_tao": balance_tao,
+                "stake_tao": float(total_stake),  # Total stake (for backwards compatibility)
+                "your_stake_tao": float(your_stake),  # Your stake specifically
+                "delegator_stake_tao": float(delegator_stake),  # Delegator stake
+                "rank": float(rank),
+                "trust": float(trust),
+                "incentive": float(incentive),
+                "uid": uid
+            }
+        else:
+            return {
+                "balance_tao": balance_tao,
+                "stake_tao": 0.0,
+                "rank": 0.0,
+                "trust": 0.0,
+                "incentive": 0.0,
+                "uid": None
+            }
+    except Exception as e:
+        # Return zeros if there's an error (e.g., network issue)
+        return {
+            "balance_tao": 0.0,
+            "stake_tao": 0.0,
+            "rank": 0.0,
+            "trust": 0.0,
+            "incentive": 0.0,
+            "uid": None,
+            "error": str(e)
+        }
+
+
 @router.get("/dashboard/metrics")
 async def dashboard_metrics():
     """Get real-time metrics as JSON"""
@@ -953,6 +1072,20 @@ async def dashboard_metrics():
     advanced_metrics = get_advanced_metrics()
     metrics = advanced_metrics.get_comprehensive_metrics()
     metrics["health_score"] = advanced_metrics.get_health_score()
+    
+    # WALLET INFO: Add wallet balance and stake information
+    try:
+        wallet_info = get_wallet_info()
+        metrics["wallet"] = wallet_info
+    except Exception:
+        metrics["wallet"] = {
+            "balance_tao": 0.0,
+            "stake_tao": 0.0,
+            "rank": 0.0,
+            "trust": 0.0,
+            "incentive": 0.0,
+            "uid": None
+        }
     
     # DYNAMIC ZERO: Add anti-overfitting metrics
     try:
