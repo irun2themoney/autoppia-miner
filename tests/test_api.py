@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Test API endpoints"""
+"""Quick test script for API"""
+
 import requests
 import json
-from config.settings import settings
 
-API_URL = f"http://localhost:{settings.api_port}"
+API_URL = "http://localhost:8080"
 
 def test_solve_task(prompt: str, url: str = "https://example.com"):
     """Test solve_task endpoint"""
@@ -39,9 +39,17 @@ def test_solve_task(prompt: str, url: str = "https://example.com"):
 if __name__ == "__main__":
     print("🧪 Testing IWA API\n")
     
-    # Test various prompts
-    test_solve_task("Switch to month view in the calendar")
-    test_solve_task("Click the submit button")
-    test_solve_task("Type your email address")
-    test_solve_task("Search for something")
+    # Test cases
+    tests = [
+        ("Switch to month view in the calendar", "https://example.com"),
+        ("Click the login button", "https://example.com"),
+        ("Search for products", "https://example.com"),
+        ("Fill in email field", "https://example.com"),
+    ]
+    
+    results = []
+    for prompt, url in tests:
+        results.append(test_solve_task(prompt, url))
+    
+    print(f"\n📊 Results: {sum(results)}/{len(results)} passed")
 

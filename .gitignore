@@ -54,7 +54,6 @@ logs/
 # Temporary files
 *.tmp
 *.temp
-test_chutes_*.py
 tests/temp/
 scripts/temp/
 
@@ -64,3 +63,12 @@ scripts/temp/
 # Deployment
 *.pem
 *.key
+
+# Test files (moved to tests/)
+test_*.py
+diagnose_*.py
+check_*.py
+
+# Old/duplicate files
+miner.py
+api.py
