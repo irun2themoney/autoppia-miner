@@ -603,7 +603,7 @@ JSON only, no other text:"""
                 # Convert to IWA format and enhance selectors
                 iwa_actions = []
                 for action in raw_actions:
-                action_type = action.get("type", "")
+                    action_type = action.get("type", "")
                 
                 # Enhance selectors for ClickAction with visual and feedback-based strategies
                 if action_type == "ClickAction" and action.get("selector"):
