@@ -87,7 +87,7 @@ class PatternLearner:
             self.save_patterns()
     
     def get_similar_pattern(self, prompt: str, url: str) -> Optional[List[Dict[str, Any]]]:
-        """Get similar successful pattern"""
+        """Get similar successful pattern - Enhanced similarity matching"""
         pattern_key = self.get_pattern_key(prompt, url)
         
         # Check exact match first
@@ -101,20 +101,58 @@ class PatternLearner:
             if patterns and patterns[0].get("success_count", 0) >= 2:
                 return patterns[0].get("actions")
         
-        # Check for similar patterns (simple keyword matching)
+        # Enhanced similarity check with better matching
         prompt_lower = prompt.lower()
+        prompt_words = set(prompt_lower.split())
+        
+        best_match = None
+        best_score = 0.0
+        
         for key, patterns_list in self.patterns.items():
             if key == pattern_key:
                 continue
             
-            # Simple similarity check (shared keywords)
             key_prompt = key.split("|")[0]
-            shared_words = set(prompt_lower.split()) & set(key_prompt.split())
-            if len(shared_words) >= 2:  # At least 2 shared words
-                # Check if this pattern has been successful
-                best_pattern = max(patterns_list, key=lambda x: x.get("success_count", 0))
-                if best_pattern.get("success_count", 0) >= 3:
-                    return best_pattern.get("actions")
+            key_words = set(key_prompt.split())
+            
+            # Calculate similarity score
+            if not prompt_words or not key_words:
+                continue
+            
+            # Jaccard similarity (intersection over union)
+            intersection = len(prompt_words & key_words)
+            union = len(prompt_words | key_words)
+            similarity = intersection / union if union > 0 else 0.0
+            
+            # Bonus for task type keywords
+            task_keywords = {
+                "login": ["login", "sign", "authenticate"],
+                "form": ["form", "fill", "submit"],
+                "click": ["click", "select", "choose"],
+                "search": ["search", "find", "look"],
+            }
+            
+            for task_type, keywords in task_keywords.items():
+                if any(kw in prompt_lower for kw in keywords) and any(kw in key_prompt for kw in keywords):
+                    similarity += 0.2  # Bonus for same task type
+                    break
+            
+            # URL similarity bonus
+            key_url = key.split("|")[1] if "|" in key else ""
+            if url and key_url:
+                if url in key_url or key_url in url:
+                    similarity += 0.1
+            
+            # Check if this pattern has been successful
+            best_pattern = max(patterns_list, key=lambda x: x.get("success_count", 0))
+            success_count = best_pattern.get("success_count", 0)
+            
+            # Weighted score (similarity * success_count)
+            weighted_score = similarity * (1 + success_count * 0.1)
+            
+            if weighted_score > best_score and similarity >= 0.3:  # Minimum 30% similarity
+                best_score = weighted_score
+                best_match = best_pattern.get("actions")
         
-        return None
+        return best_match
 
