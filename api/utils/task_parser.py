@@ -147,6 +147,106 @@ class TaskParser:
         
         return None
     
+    def extract_negative_constraints(self, prompt: str) -> Dict[str, List[str]]:
+        """Extract negative constraints like 'NOT contain', 'does NOT contain', 'NOT equal'"""
+        constraints = {
+            "exclude_text": [],
+            "exclude_location": [],
+            "exclude_date": [],
+            "exclude_company": [],
+            "exclude_job_title": [],
+        }
+        
+        # Pattern: "does NOT contain 'text'"
+        not_contains = re.findall(r"does?\s+NOT\s+contain\s+['\"]([^'\"]+)['\"]", prompt, re.IGNORECASE)
+        constraints["exclude_text"].extend(not_contains)
+        
+        # Pattern: "NOT contain 'text'"
+        not_contains2 = re.findall(r"NOT\s+contain\s+['\"]([^'\"]+)['\"]", prompt, re.IGNORECASE)
+        constraints["exclude_text"].extend(not_contains2)
+        
+        # Pattern: "NOT equal to 'value'"
+        not_equal = re.findall(r"NOT\s+equal\s+to\s+['\"]([^'\"]+)['\"]", prompt, re.IGNORECASE)
+        constraints["exclude_text"].extend(not_equal)
+        
+        # Pattern: "location does NOT contain"
+        location_not = re.findall(r"location\s+does?\s+NOT\s+contain\s+['\"]([^'\"]+)['\"]", prompt, re.IGNORECASE)
+        constraints["exclude_location"].extend(location_not)
+        
+        # Pattern: "company does NOT contain"
+        company_not = re.findall(r"company\s+does?\s+NOT\s+contain\s+['\"]([^'\"]+)['\"]", prompt, re.IGNORECASE)
+        constraints["exclude_company"].extend(company_not)
+        
+        # Pattern: "date is NOT equal to"
+        date_not = re.findall(r"date\s+is\s+NOT\s+equal\s+to\s+['\"]([^'\"]+)['\"]", prompt, re.IGNORECASE)
+        constraints["exclude_date"].extend(date_not)
+        
+        return constraints
+    
+    def extract_job_info(self, prompt: str) -> Dict[str, Any]:
+        """Extract job-related information from prompt"""
+        job_info = {
+            "job_title": None,
+            "company": None,
+            "location": None,
+            "use_case": None,
+            "constraints": {},
+        }
+        
+        prompt_lower = prompt.lower()
+        
+        # Detect use case
+        if "apply_for_job" in prompt_lower or "apply for" in prompt_lower:
+            job_info["use_case"] = "APPLY_FOR_JOB"
+        elif "view_job" in prompt_lower or "retrieve details" in prompt_lower or "job posting" in prompt_lower:
+            job_info["use_case"] = "VIEW_JOB"
+        elif "search_jobs" in prompt_lower or "search for jobs" in prompt_lower:
+            job_info["use_case"] = "SEARCH_JOBS"
+        
+        # Extract job_title
+        # Pattern: "job_title is equal to 'X'"
+        job_title_match = re.search(r"job[_\s]?title\s+is\s+equal\s+to\s+['\"]([^'\"]+)['\"]", prompt, re.IGNORECASE)
+        if job_title_match:
+            job_info["job_title"] = job_title_match.group(1)
+        
+        # Pattern: "job title is equal to 'X'"
+        job_title_match2 = re.search(r"job\s+title\s+is\s+equal\s+to\s+['\"]([^'\"]+)['\"]", prompt, re.IGNORECASE)
+        if job_title_match2:
+            job_info["job_title"] = job_title_match2.group(1)
+        
+        # Pattern: "title is equal to 'X'"
+        title_match = re.search(r"title\s+is\s+equal\s+to\s+['\"]([^'\"]+)['\"]", prompt, re.IGNORECASE)
+        if title_match and not job_info["job_title"]:
+            job_info["job_title"] = title_match.group(1)
+        
+        # Extract company
+        # Pattern: "company that contains 'X'"
+        company_match = re.search(r"company\s+(?:that\s+)?contains\s+['\"]([^'\"]+)['\"]", prompt, re.IGNORECASE)
+        if company_match:
+            job_info["company"] = company_match.group(1)
+        
+        # Pattern: "company name contains 'X'"
+        company_match2 = re.search(r"company\s+name\s+contains\s+['\"]([^'\"]+)['\"]", prompt, re.IGNORECASE)
+        if company_match2:
+            job_info["company"] = company_match2.group(1)
+        
+        # Extract location
+        # Pattern: "location does NOT contain 'X'"
+        location_match = re.search(r"location\s+(?:does\s+NOT\s+contain|contains)\s+['\"]([^'\"]+)['\"]", prompt, re.IGNORECASE)
+        if location_match:
+            job_info["location"] = location_match.group(1)
+        
+        # Extract search query
+        # Pattern: "query that does NOT contain 'X'"
+        query_match = re.search(r"query\s+(?:that\s+)?(?:does\s+NOT\s+contain|contains)\s+['\"]([^'\"]+)['\"]", prompt, re.IGNORECASE)
+        if query_match:
+            job_info["search_query"] = query_match.group(1)
+        
+        # Extract negative constraints
+        job_info["constraints"] = self.extract_negative_constraints(prompt)
+        
+        return job_info
+    
     def parse_task(self, prompt: str, url: str = "") -> Dict[str, Any]:
         """Parse task and extract all relevant information - Enhanced"""
         prompt_lower = prompt.lower()
@@ -163,8 +263,20 @@ class TaskParser:
         has_extract = any(word in prompt_lower for word in ["extract", "get", "read", "retrieve", "fetch"])
         has_multistep = any(word in prompt_lower for word in ["and", "then", "after", "before", "first", "next"])
         
-        # Determine task type with priority
-        if has_login:
+        # Job-related task detection (HIGH PRIORITY)
+        has_job_apply = any(phrase in prompt_lower for phrase in ["apply for", "apply_for_job", "apply to job"])
+        has_job_view = any(phrase in prompt_lower for phrase in ["view job", "view_job", "retrieve details", "job posting", "job details"])
+        has_job_search = any(phrase in prompt_lower for phrase in ["search jobs", "search_jobs", "search for jobs", "find jobs"])
+        has_job = has_job_apply or has_job_view or has_job_search or "job" in prompt_lower
+        
+        # Determine task type with priority (job tasks have high priority)
+        if has_job_apply:
+            task_type = "job_apply"
+        elif has_job_view:
+            task_type = "job_view"
+        elif has_job_search:
+            task_type = "job_search"
+        elif has_login:
             task_type = "login"
         elif has_form:
             task_type = "form"
@@ -187,6 +299,14 @@ class TaskParser:
         else:
             task_type = "generic"
         
+        # Extract job information if job-related
+        job_info = {}
+        if has_job:
+            job_info = self.extract_job_info(prompt)
+        
+        # Extract negative constraints
+        negative_constraints = self.extract_negative_constraints(prompt)
+        
         parsed = {
             "original_prompt": prompt,
             "url": self.extract_url(prompt, url),
@@ -203,7 +323,13 @@ class TaskParser:
             "has_scroll": has_scroll,
             "has_extract": has_extract,
             "has_multistep": has_multistep,
+            "has_job": has_job,
+            "has_job_apply": has_job_apply,
+            "has_job_view": has_job_view,
+            "has_job_search": has_job_search,
             "task_type": task_type,
+            "job_info": job_info,
+            "negative_constraints": negative_constraints,
         }
         
         return parsed

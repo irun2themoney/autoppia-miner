@@ -101,6 +101,33 @@ class SelectorStrategy:
             strategies.append(create_selector("attributeValueSelector", "cancel", attribute="class", case_sensitive=False))
             return strategies
         
+        # Job-specific selectors (NEW - for AutoConnect)
+        if element_lower == "job_search":
+            strategies.append(create_selector("tagSelector", "input", attributes={"type": "search"}))
+            strategies.append(create_selector("tagSelector", "input", attributes={"name": "search"}))
+            strategies.append(create_selector("tagSelector", "input", attributes={"placeholder": "*job*"}))
+            strategies.append(create_selector("attributeValueSelector", "job-search", attribute="id"))
+            strategies.append(create_selector("attributeValueSelector", "job-search", attribute="class"))
+            strategies.append(create_selector("attributeValueSelector", "search", attribute="data-testid"))
+            return strategies
+        
+        if element_lower == "job_card":
+            strategies.append(create_selector("attributeValueSelector", "job-card", attribute="class"))
+            strategies.append(create_selector("attributeValueSelector", "job-listing", attribute="class"))
+            strategies.append(create_selector("attributeValueSelector", "job-item", attribute="class"))
+            strategies.append(create_selector("tagSelector", "div", attributes={"data-job-id": "*"}))
+            strategies.append(create_selector("attributeValueSelector", "job", attribute="data-testid"))
+            return strategies
+        
+        if element_lower == "apply_button":
+            strategies.append(create_selector("tagContainsSelector", "Apply", case_sensitive=False))
+            strategies.append(create_selector("tagContainsSelector", "Apply Now", case_sensitive=False))
+            strategies.append(create_selector("attributeValueSelector", "apply", attribute="data-action"))
+            strategies.append(create_selector("attributeValueSelector", "apply-button", attribute="class"))
+            strategies.append(create_selector("tagSelector", "a", attributes={"href": "*apply*"}))
+            strategies.append(create_selector("attributeValueSelector", "apply", attribute="data-testid"))
+            return strategies
+        
         # Fallback to original prompt-based logic
         prompt_lower = element_type.lower()
         strategies = []

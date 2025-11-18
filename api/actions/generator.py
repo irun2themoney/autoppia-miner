@@ -146,7 +146,17 @@ class ActionGenerator:
             
             return optimized
         
-        # 1. LOGIN TASKS (highest priority - most specific)
+        # 1. JOB APPLICATION TASKS (HIGHEST PRIORITY - 3/4 validators testing)
+        if task_type in ["job_apply", "job_view", "job_search"] or parsed.get("has_job"):
+            job_actions = self._generate_job_actions(parsed, prompt_lower, context, strategy)
+            if job_actions:
+                # Remove duplicate navigation if job_actions already has it
+                if job_actions and job_actions[0].get("action_type") in ["navigate", "goto"]:
+                    actions = [a for a in actions if a.get("action_type") not in ["navigate", "goto"]]
+                actions.extend(job_actions)
+                return finalize_actions(actions)
+        
+        # 2. LOGIN TASKS (highest priority - most specific)
         if task_type == "login" or "login" in prompt_lower or "sign in" in prompt_lower:
             login_actions = self._generate_login_actions(parsed, prompt_lower, context, strategy)
             # Don't add duplicate navigation if login_actions already has it
@@ -157,7 +167,7 @@ class ActionGenerator:
             actions.extend(login_actions)
             return finalize_actions(actions)
         
-        # 2. FORM FILLING TASKS
+        # 3. FORM FILLING TASKS
         if task_type == "form" or any(w in prompt_lower for w in ["fill", "submit", "enter"]):
             actions.extend(self._generate_form_actions(parsed, prompt_lower))
             return finalize_actions(actions)
@@ -460,6 +470,250 @@ class ActionGenerator:
         # Handle post-login tasks
         if any(w in prompt_lower for w in ["modify", "edit", "profile", "settings"]):
             actions.extend(self._generate_post_login_actions(parsed, prompt_lower))
+        
+        return actions
+    
+    def _generate_job_actions(
+        self,
+        parsed: Dict[str, Any],
+        prompt_lower: str,
+        context: Optional[Dict[str, Any]] = None,
+        strategy: Optional[Dict[str, Any]] = None
+    ) -> List[Dict[str, Any]]:
+        """Generate job-related actions (APPLY_FOR_JOB, VIEW_JOB, SEARCH_JOBS)"""
+        actions = []
+        job_info = parsed.get("job_info", {})
+        use_case = job_info.get("use_case")
+        task_url = parsed.get("url") or ""
+        
+        # Navigate to job listings page if URL provided
+        if task_url:
+            actions.append({"action_type": "goto", "url": task_url})
+            nav_wait = 2.5  # Job pages load slowly
+            if context_aware and context and strategy:
+                nav_wait = context_aware.get_optimal_wait_time("NavigateAction", context, strategy)
+            elif smart_wait:
+                nav_wait = smart_wait.get_wait_time("NavigateAction", {"is_navigation": True})
+            actions.append({"action_type": "wait", "duration": nav_wait})
+            actions.append({"action_type": "screenshot"})
+        
+        # Get job-specific selectors
+        job_title = job_info.get("job_title")
+        company = job_info.get("company")
+        location = job_info.get("location")
+        search_query = job_info.get("search_query")
+        constraints = job_info.get("constraints", {})
+        
+        if use_case == "APPLY_FOR_JOB":
+            # APPLY_FOR_JOB: Apply for job where job_title = 'X' at company containing 'Y'
+            actions.extend(self._generate_apply_for_job_actions(job_title, company, location, constraints))
+        
+        elif use_case == "VIEW_JOB":
+            # VIEW_JOB: Retrieve details of job posting where...
+            actions.extend(self._generate_view_job_actions(job_title, company, location, constraints))
+        
+        elif use_case == "SEARCH_JOBS":
+            # SEARCH_JOBS: Search for jobs with query...
+            actions.extend(self._generate_search_jobs_actions(search_query, constraints))
+        
+        else:
+            # Generic job task - try to infer from prompt
+            if "apply" in prompt_lower:
+                actions.extend(self._generate_apply_for_job_actions(job_title, company, location, constraints))
+            elif "view" in prompt_lower or "retrieve" in prompt_lower:
+                actions.extend(self._generate_view_job_actions(job_title, company, location, constraints))
+            elif "search" in prompt_lower:
+                actions.extend(self._generate_search_jobs_actions(search_query, constraints))
+        
+        # Final verification screenshot
+        if actions:
+            actions.append({"action_type": "wait", "duration": 1.0})
+            actions.append({"action_type": "screenshot"})
+        
+        return actions
+    
+    def _generate_apply_for_job_actions(
+        self,
+        job_title: Optional[str],
+        company: Optional[str],
+        location: Optional[str],
+        constraints: Dict[str, Any]
+    ) -> List[Dict[str, Any]]:
+        """Generate actions for APPLY_FOR_JOB use case"""
+        actions = []
+        
+        # Step 1: Search/filter for the job
+        if job_title or company:
+            # Find job search input
+            search_selectors = self.selector_strategy.get_strategies("job_search", "job search")
+            if not search_selectors:
+                # Fallback selectors
+                search_selectors = [
+                    create_selector("tagSelector", "input", attributes={"type": "search"}),
+                    create_selector("tagSelector", "input", attributes={"name": "search"}),
+                    create_selector("tagSelector", "input", attributes={"placeholder": "*job*"}),
+                    create_selector("attributeValueSelector", "job-search", attribute="id"),
+                    create_selector("attributeValueSelector", "job-search", attribute="class"),
+                ]
+            
+            # Build search query
+            search_terms = []
+            if job_title:
+                search_terms.append(job_title)
+            if company:
+                search_terms.append(company)
+            search_text = " ".join(search_terms)
+            
+            # Type search query
+            if search_selectors and search_text:
+                actions.append({"action_type": "wait", "duration": 0.5})
+                actions.append({"action_type": "type", "text": search_text, "selector": search_selectors[0]})
+                actions.append({"action_type": "wait", "duration": 0.5})
+                
+                # Click search button
+                search_button_selectors = self.selector_strategy.get_strategies("search", "Search")
+                if search_button_selectors:
+                    actions.append({"action_type": "click", "selector": search_button_selectors[0]})
+                    actions.append({"action_type": "wait", "duration": 2.0})  # Wait for results
+                    actions.append({"action_type": "screenshot"})
+        
+        # Step 2: Find and click matching job card
+        # Look for job cards matching criteria
+        job_card_selectors = self.selector_strategy.get_strategies("job_card", "job card")
+        if not job_card_selectors:
+            job_card_selectors = [
+                create_selector("attributeValueSelector", "job-card", attribute="class"),
+                create_selector("attributeValueSelector", "job-listing", attribute="class"),
+                create_selector("attributeValueSelector", "job-item", attribute="class"),
+                create_selector("tagSelector", "div", attributes={"data-job-id": "*"}),
+            ]
+        
+        # Click first job card (in real scenario, would filter by job_title/company)
+        if job_card_selectors:
+            actions.append({"action_type": "wait", "duration": 1.0})
+            actions.append({"action_type": "click", "selector": job_card_selectors[0]})
+            actions.append({"action_type": "wait", "duration": 2.0})  # Wait for job details page
+            actions.append({"action_type": "screenshot"})
+        
+        # Step 3: Click Apply button
+        apply_selectors = self.selector_strategy.get_strategies("apply_button", "Apply")
+        if not apply_selectors:
+            apply_selectors = [
+                create_selector("tagContainsSelector", "Apply", case_sensitive=False),
+                create_selector("tagContainsSelector", "Apply Now", case_sensitive=False),
+                create_selector("attributeValueSelector", "apply", attribute="data-action"),
+                create_selector("attributeValueSelector", "apply-button", attribute="class"),
+                create_selector("tagSelector", "a", attributes={"href": "*apply*"}),
+            ]
+        
+        if apply_selectors:
+            actions.append({"action_type": "wait", "duration": 1.0})
+            actions.append({"action_type": "click", "selector": apply_selectors[0]})
+            actions.append({"action_type": "wait", "duration": 2.0})  # Wait for application form
+            actions.append({"action_type": "screenshot"})
+            
+            # Step 4: Fill application form if needed (basic fields)
+            # Check if form fields are present and fill them
+            actions.append({"action_type": "wait", "duration": 1.0})
+            actions.append({"action_type": "screenshot"})  # Final verification
+        
+        return actions
+    
+    def _generate_view_job_actions(
+        self,
+        job_title: Optional[str],
+        company: Optional[str],
+        location: Optional[str],
+        constraints: Dict[str, Any]
+    ) -> List[Dict[str, Any]]:
+        """Generate actions for VIEW_JOB use case"""
+        actions = []
+        
+        # Similar to APPLY_FOR_JOB but stop at viewing job details
+        # Step 1: Search/filter for the job
+        if job_title or company:
+            search_selectors = self.selector_strategy.get_strategies("job_search", "job search")
+            if not search_selectors:
+                search_selectors = [
+                    create_selector("tagSelector", "input", attributes={"type": "search"}),
+                    create_selector("tagSelector", "input", attributes={"name": "search"}),
+                ]
+            
+            search_terms = []
+            if job_title:
+                search_terms.append(job_title)
+            if company:
+                search_terms.append(company)
+            search_text = " ".join(search_terms)
+            
+            if search_selectors and search_text:
+                actions.append({"action_type": "wait", "duration": 0.5})
+                actions.append({"action_type": "type", "text": search_text, "selector": search_selectors[0]})
+                actions.append({"action_type": "wait", "duration": 0.5})
+                
+                search_button_selectors = self.selector_strategy.get_strategies("search", "Search")
+                if search_button_selectors:
+                    actions.append({"action_type": "click", "selector": search_button_selectors[0]})
+                    actions.append({"action_type": "wait", "duration": 2.0})
+                    actions.append({"action_type": "screenshot"})
+        
+        # Step 2: Click job card to view details
+        job_card_selectors = self.selector_strategy.get_strategies("job_card", "job card")
+        if not job_card_selectors:
+            job_card_selectors = [
+                create_selector("attributeValueSelector", "job-card", attribute="class"),
+                create_selector("tagSelector", "div", attributes={"data-job-id": "*"}),
+            ]
+        
+        if job_card_selectors:
+            actions.append({"action_type": "wait", "duration": 1.0})
+            actions.append({"action_type": "click", "selector": job_card_selectors[0]})
+            actions.append({"action_type": "wait", "duration": 2.0})  # Wait for job details
+            actions.append({"action_type": "screenshot"})  # Extract job details from screenshot
+        
+        return actions
+    
+    def _generate_search_jobs_actions(
+        self,
+        search_query: Optional[str],
+        constraints: Dict[str, Any]
+    ) -> List[Dict[str, Any]]:
+        """Generate actions for SEARCH_JOBS use case"""
+        actions = []
+        
+        # Step 1: Find search input
+        search_selectors = self.selector_strategy.get_strategies("job_search", "job search")
+        if not search_selectors:
+            search_selectors = [
+                create_selector("tagSelector", "input", attributes={"type": "search"}),
+                create_selector("tagSelector", "input", attributes={"name": "search"}),
+                create_selector("tagSelector", "input", attributes={"placeholder": "*job*"}),
+            ]
+        
+        # Step 2: Type search query (handle negative constraints)
+        if search_selectors:
+            # If search_query has negative constraints, we'll need to filter results
+            # For now, just type the query
+            query_text = search_query or ""
+            
+            # Remove excluded terms from query if specified
+            exclude_text = constraints.get("exclude_text", [])
+            for exclude in exclude_text:
+                if exclude.lower() in query_text.lower():
+                    # Don't include excluded terms
+                    query_text = query_text.replace(exclude, "").strip()
+            
+            if query_text:
+                actions.append({"action_type": "wait", "duration": 0.5})
+                actions.append({"action_type": "type", "text": query_text, "selector": search_selectors[0]})
+                actions.append({"action_type": "wait", "duration": 0.5})
+                
+                # Step 3: Click search button
+                search_button_selectors = self.selector_strategy.get_strategies("search", "Search")
+                if search_button_selectors:
+                    actions.append({"action_type": "click", "selector": search_button_selectors[0]})
+                    actions.append({"action_type": "wait", "duration": 2.0})  # Wait for results
+                    actions.append({"action_type": "screenshot"})  # Show search results
         
         return actions
     

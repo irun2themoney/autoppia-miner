@@ -86,6 +86,17 @@ class WebsiteDetector:
                 "check_out": ["input[name='check-out']", ".check-out-date"],
             }
         },
+        "autoconnect": {
+            "url_patterns": [r"autoconnect", r"connect", r"job", r"career"],
+            "keywords": ["job", "apply", "application", "career", "position", "hiring", "job_title", "company"],
+            "common_selectors": {
+                "job_search": ["input[type='search']", "input[name='search']", "input[placeholder*='job']"],
+                "job_card": [".job-card", "[data-job-id]", ".job-listing", ".job-item"],
+                "apply_button": ["button:contains('Apply')", "a[href*='apply']", "[data-action='apply']"],
+                "job_title": ["h2.job-title", ".job-title", "[data-job-title]"],
+                "company_name": [".company-name", "[data-company]"],
+            }
+        },
     }
     
     def __init__(self):
@@ -196,6 +207,12 @@ class WebsiteDetector:
                 "wait_between_actions": 1.0,   # Increased for quality
                 "screenshot_frequency": "always",  # Bookings are important
                 "verification_enabled": True,
+            },
+            "autoconnect": {
+                "wait_after_navigation": 2.5,  # Job pages load slowly (increased for quality)
+                "wait_between_actions": 1.0,   # Job interactions need time
+                "screenshot_frequency": "always",  # Job applications are critical
+                "verification_enabled": True,  # Enable verification for quality
             },
         }
         
