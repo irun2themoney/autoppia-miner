@@ -323,6 +323,7 @@ async def dashboard():
 @router.get("/dashboard/metrics")
 async def dashboard_metrics():
     """Get real-time metrics as JSON"""
+    advanced_metrics = get_advanced_metrics()
     metrics = advanced_metrics.get_comprehensive_metrics()
     metrics["health_score"] = advanced_metrics.get_health_score()
     return JSONResponse(content=metrics)
