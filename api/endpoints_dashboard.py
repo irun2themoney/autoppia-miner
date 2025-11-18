@@ -1032,45 +1032,36 @@ async def dashboard_metrics():
                 )
             
             if current_response_times and len(current_response_times) > 0:
-                    metrics["performance"]["avg_response_time"] = round(sum(current_response_times) / len(current_response_times), 3)
-                    sorted_times = sorted(current_response_times)
-                    if len(sorted_times) >= 20:
-                        metrics["performance"]["p95_response_time"] = round(sorted_times[int(len(sorted_times) * 0.95)], 3)
-                        metrics["performance"]["p99_response_time"] = round(sorted_times[int(len(sorted_times) * 0.99)], 3)
-                
-                uptime_hours = metrics["overview"].get("uptime_hours", 0.02)
-                if uptime_hours > 0:
-                    metrics["performance"]["requests_per_minute"] = round(
-                        metrics["overview"]["total_requests"] / (uptime_hours * 60), 2
-                    )
-                
-                if metrics["overview"]["total_requests"] > 0:
-                    success_rate = metrics["overview"]["success_rate"]
-                    response_time_score = max(0, 100 - (metrics["performance"]["avg_response_time"] * 10))
-                    uptime_score = min(100, uptime_hours * 10)
-                    metrics["health_score"] = round(
-                        success_rate * 0.5 + response_time_score * 0.3 + uptime_score * 0.2, 2
-                    )
-                
-                validator_activity.sort(key=lambda x: x.get("time", ""), reverse=True)
-                metrics["validators"]["recent_activity"] = validator_activity[:20]
-                metrics["validators"]["unique_validators"] = len(set(a["ip"] for a in validator_activity))
-                
-                from collections import Counter
-                ip_counts = Counter(a["ip"] for a in validator_activity)
-                metrics["validators"]["top_validators"] = [
-                    {"ip": ip, "requests": count} 
-                    for ip, count in ip_counts.most_common(5)
-                ]
-            else:
-                metrics["overview"]["total_requests"] = 0
-                metrics["overview"]["successful_requests"] = 0
-                metrics["overview"]["failed_requests"] = 0
-                metrics["overview"]["success_rate"] = 0
-                metrics["validators"]["recent_activity"] = []
-                metrics["validators"]["unique_validators"] = 0
-                metrics["validators"]["top_validators"] = []
-                metrics["health_score"] = 0.0
+                metrics["performance"]["avg_response_time"] = round(sum(current_response_times) / len(current_response_times), 3)
+                sorted_times = sorted(current_response_times)
+                if len(sorted_times) >= 20:
+                    metrics["performance"]["p95_response_time"] = round(sorted_times[int(len(sorted_times) * 0.95)], 3)
+                    metrics["performance"]["p99_response_time"] = round(sorted_times[int(len(sorted_times) * 0.99)], 3)
+            
+            uptime_hours = metrics["overview"].get("uptime_hours", 0.02)
+            if uptime_hours > 0:
+                metrics["performance"]["requests_per_minute"] = round(
+                    metrics["overview"]["total_requests"] / (uptime_hours * 60), 2
+                )
+            
+            if metrics["overview"]["total_requests"] > 0:
+                success_rate = metrics["overview"]["success_rate"]
+                response_time_score = max(0, 100 - (metrics["performance"]["avg_response_time"] * 10))
+                uptime_score = min(100, uptime_hours * 10)
+                metrics["health_score"] = round(
+                    success_rate * 0.5 + response_time_score * 0.3 + uptime_score * 0.2, 2
+                )
+            
+            validator_activity.sort(key=lambda x: x.get("time", ""), reverse=True)
+            metrics["validators"]["recent_activity"] = validator_activity[:20]
+            metrics["validators"]["unique_validators"] = len(set(a["ip"] for a in validator_activity))
+            
+            from collections import Counter
+            ip_counts = Counter(a["ip"] for a in validator_activity)
+            metrics["validators"]["top_validators"] = [
+                {"ip": ip, "requests": count} 
+                for ip, count in ip_counts.most_common(5)
+            ]
     except Exception:
         pass
     
