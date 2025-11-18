@@ -78,8 +78,8 @@ async def solve_task(request: TaskRequest, http_request: Request = None):
     Input: task.clean_task() format
     Output: {actions: [], web_agent_id: str, recording: str}
     """
-    from ..utils.advanced_metrics import advanced_metrics
-    from ..utils.task_parser import TaskParser
+    from api.utils.advanced_metrics import advanced_metrics
+    from api.utils.task_parser import TaskParser
     
     start_time = time.time()
     validator_ip = None
