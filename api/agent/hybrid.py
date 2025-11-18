@@ -29,7 +29,13 @@ class HybridAgent(BaseAgent):
         """Solve task using hybrid strategy"""
         import logging
         
-        # Check for learned patterns first
+        # Check vector memory first (top tier optimization)
+        memory_actions = self.vector_memory.get_best_actions(prompt, url)
+        if memory_actions:
+            logging.info(f"Using vector memory recall for task: {prompt[:50]}...")
+            return memory_actions
+        
+        # Check for learned patterns
         learned_pattern = self.pattern_learner.get_similar_pattern(prompt, url)
         if learned_pattern:
             logging.info(f"Using learned pattern for task: {prompt[:50]}...")
@@ -74,10 +80,17 @@ class HybridAgent(BaseAgent):
             
             # Record successful pattern (if we got valid actions)
             if actions and len(actions) > 0:
-                # Note: In production, we'd need feedback on success
-                # For now, we record patterns that generate actions
-                # self.pattern_learner.record_success(prompt, url, actions)
-                pass
+                # Store in vector memory (top tier optimization)
+                parsed_task = self.complexity_analyzer.analyze(prompt, url)
+                self.vector_memory.add_memory(
+                    prompt=prompt,
+                    url=url,
+                    actions=actions,
+                    success_rate=1.0,
+                    task_type=parsed_task.get("task_type", "generic")
+                )
+                # Also record in pattern learner
+                self.pattern_learner.record_success(prompt, url, actions)
             
             return actions
         except Exception as e:
