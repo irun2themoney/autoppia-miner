@@ -75,7 +75,16 @@ class AdvancedMetrics:
         vector_recall: bool = False,
         mutation_detected: bool = False
     ):
-        """Record a request with full metrics"""
+        """Record a request with full metrics - ONLY records validator requests (filters localhost)"""
+        # Only record if this is a validator request (not localhost)
+        # This ensures metrics only reflect actual validator activity
+        if not validator_ip or validator_ip in ["127.0.0.1", "localhost", "::1"]:
+            return  # Skip localhost requests
+        
+        # Also filter out internal IPs
+        if validator_ip.startswith("192.168.") or validator_ip.startswith("10.") or validator_ip.startswith("172.16."):
+            return  # Skip internal IPs
+        
         self.total_requests += 1
         
         if success:
@@ -115,15 +124,17 @@ class AdvancedMetrics:
             total = agent["total"]
             agent["avg_time"] = ((current_avg * (total - 1)) + response_time) / total
         
-        # Validator tracking
-        if validator_ip:
-            self.validator_ips[validator_ip] += 1
-            self.validator_activity.append({
-                "time": datetime.now().isoformat(),
-                "ip": validator_ip,
-                "success": success,
-                "response_time": response_time
-            })
+        # Validator tracking - ONLY track if validator_ip is provided (filters out localhost)
+        if validator_ip and validator_ip not in ["127.0.0.1", "localhost", "::1"]:
+            # Also filter out internal IPs
+            if not validator_ip.startswith("192.168.") and not validator_ip.startswith("10.") and not validator_ip.startswith("172.16."):
+                self.validator_ips[validator_ip] += 1
+                self.validator_activity.append({
+                    "time": datetime.now().isoformat(),
+                    "ip": validator_ip,
+                    "success": success,
+                    "response_time": response_time
+                })
         
         # Cache stats
         if cache_hit:

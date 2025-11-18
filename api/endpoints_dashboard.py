@@ -1011,19 +1011,44 @@ async def dashboard_metrics():
                 and a.get("ip") != "134.199.203.133"
             ]
             
-            # Use in-memory metrics as source of truth (they accumulate correctly)
-            # Only use log data for recent activity display and validator tracking
-            # Take the maximum to ensure count never decreases
-            log_count = len(validator_activity)
-            metrics["overview"]["total_requests"] = max(current_total_requests, log_count)
-            metrics["overview"]["successful_requests"] = max(
-                current_successful, 
-                sum(1 for a in validator_activity if a["success"])
-            )
-            metrics["overview"]["failed_requests"] = max(
-                current_failed,
-                sum(1 for a in validator_activity if not a["success"])
-            )
+            # Merge with in-memory validator activity (more recent, may not be in logs yet)
+            # Combine and deduplicate by time and IP
+            combined_activity = {}
+            for activity in validator_activity + in_memory_validator_activity:
+                key = f"{activity.get('ip')}_{activity.get('time', '')}"
+                if key not in combined_activity:
+                    combined_activity[key] = activity
+                elif activity.get("time", "") > combined_activity[key].get("time", ""):
+                    combined_activity[key] = activity  # Keep more recent
+            
+            validator_activity = list(combined_activity.values())
+            
+            # Use validator activity from logs as source of truth (filters out localhost)
+            # In-memory metrics may include localhost, so we rebuild from filtered logs
+            validator_total = len(validator_activity)
+            validator_successful = sum(1 for a in validator_activity if a.get("success", False))
+            validator_failed = validator_total - validator_successful
+            
+            # Use in-memory metrics ONLY if they're higher (to preserve validator counts)
+            # But ensure we're not counting localhost requests
+            # If in-memory has more, it means we have validator requests that aren't in logs yet
+            if current_total_requests > validator_total:
+                # In-memory has more - use it but ensure success/failed are consistent
+                metrics["overview"]["total_requests"] = current_total_requests
+                # Only update if in-memory values are reasonable (not all failed)
+                if current_successful > 0 or current_failed < current_total_requests:
+                    metrics["overview"]["successful_requests"] = current_successful
+                    metrics["overview"]["failed_requests"] = current_failed
+                else:
+                    # In-memory looks wrong (all failed), use validator counts
+                    metrics["overview"]["total_requests"] = validator_total
+                    metrics["overview"]["successful_requests"] = validator_successful
+                    metrics["overview"]["failed_requests"] = validator_failed
+            else:
+                # Use validator counts from logs (more accurate, filters localhost)
+                metrics["overview"]["total_requests"] = validator_total
+                metrics["overview"]["successful_requests"] = validator_successful
+                metrics["overview"]["failed_requests"] = validator_failed
             
             # Recalculate success rate based on updated counts
             if metrics["overview"]["total_requests"] > 0:
@@ -1038,23 +1063,11 @@ async def dashboard_metrics():
                     metrics["performance"]["p95_response_time"] = round(sorted_times[int(len(sorted_times) * 0.95)], 3)
                     metrics["performance"]["p99_response_time"] = round(sorted_times[int(len(sorted_times) * 0.99)], 3)
             
-            # Calculate requests/min based on recent activity (last 60 minutes), not total uptime
-            # This prevents the metric from decreasing as uptime increases
-            from datetime import datetime, timedelta
-            one_hour_ago = datetime.now() - timedelta(hours=1)
-            recent_requests = [
-                a for a in validator_activity 
-                if datetime.fromisoformat(a["timestamp"].replace("Z", "+00:00").split("+")[0]) >= one_hour_ago
-            ]
-            metrics["performance"]["requests_per_minute"] = round(len(recent_requests) / 60.0, 2) if recent_requests else 0.0
-            
-            # Also calculate unique validators from logs
-            unique_validator_ips = set()
-            for activity in validator_activity:
-                ip = activity.get("ip", "")
-                if ip and ip != "127.0.0.1" and not ip.startswith("localhost"):
-                    unique_validator_ips.add(ip)
-            metrics["overview"]["unique_validators"] = len(unique_validator_ips)
+            uptime_hours = metrics["overview"].get("uptime_hours", 0.02)
+            if uptime_hours > 0:
+                metrics["performance"]["requests_per_minute"] = round(
+                    metrics["overview"]["total_requests"] / (uptime_hours * 60), 2
+                )
             
             if metrics["overview"]["total_requests"] > 0:
                 success_rate = metrics["overview"]["success_rate"]
