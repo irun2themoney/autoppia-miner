@@ -338,7 +338,22 @@ async def dashboard():
                     grid-template-columns: 1fr;
                 }
             }
+            .chart-container {
+                position: relative;
+                height: 300px;
+                margin-top: 10px;
+                background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+                border-radius: 12px;
+                padding: 16px;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+            }
+            .chart-wrapper {
+                position: relative;
+                height: 100%;
+            }
         </style>
+        <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
     </head>
     <body>
         <div class="header">
@@ -413,6 +428,294 @@ async def dashboard():
             <div class="section-title">❌ Errors</div>
             <div id="errors" class="loading">Loading...</div>
         </div>
+        
+        <div class="section">
+            <div class="section-title">📈 Real-Time Performance Trends</div>
+            <div class="chart-container">
+                <div class="chart-wrapper">
+                    <canvas id="performanceChart"></canvas>
+                </div>
+            </div>
+        </div>
+        
+        <script>
+            // Initialize complex performance chart
+            let performanceChart = null;
+            const chartData = {
+                labels: [],
+                datasets: [
+                    {
+                        label: 'Success Rate (%)',
+                        data: [],
+                        borderColor: 'rgb(17, 153, 142)',
+                        backgroundColor: 'rgba(17, 153, 142, 0.1)',
+                        borderWidth: 3,
+                        fill: true,
+                        tension: 0.4,
+                        pointRadius: 4,
+                        pointHoverRadius: 6,
+                        pointBackgroundColor: 'rgb(17, 153, 142)',
+                        pointBorderColor: '#fff',
+                        pointBorderWidth: 2,
+                        yAxisID: 'y',
+                    },
+                    {
+                        label: 'Response Time (ms)',
+                        data: [],
+                        borderColor: 'rgb(102, 126, 234)',
+                        backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                        borderWidth: 3,
+                        fill: true,
+                        tension: 0.4,
+                        pointRadius: 4,
+                        pointHoverRadius: 6,
+                        pointBackgroundColor: 'rgb(102, 126, 234)',
+                        pointBorderColor: '#fff',
+                        pointBorderWidth: 2,
+                        yAxisID: 'y1',
+                    },
+                    {
+                        label: 'Requests/min',
+                        data: [],
+                        borderColor: 'rgb(250, 112, 154)',
+                        backgroundColor: 'rgba(250, 112, 154, 0.1)',
+                        borderWidth: 3,
+                        fill: true,
+                        tension: 0.4,
+                        pointRadius: 4,
+                        pointHoverRadius: 6,
+                        pointBackgroundColor: 'rgb(250, 112, 154)',
+                        pointBorderColor: '#fff',
+                        pointBorderWidth: 2,
+                        yAxisID: 'y2',
+                    },
+                    {
+                        label: 'Cache Hit Rate (%)',
+                        data: [],
+                        borderColor: 'rgb(118, 75, 162)',
+                        backgroundColor: 'rgba(118, 75, 162, 0.1)',
+                        borderWidth: 3,
+                        fill: true,
+                        tension: 0.4,
+                        pointRadius: 4,
+                        pointHoverRadius: 6,
+                        pointBackgroundColor: 'rgb(118, 75, 162)',
+                        pointBorderColor: '#fff',
+                        pointBorderWidth: 2,
+                        yAxisID: 'y',
+                    }
+                ]
+            };
+            
+            function initChart() {
+                const ctx = document.getElementById('performanceChart').getContext('2d');
+                performanceChart = new Chart(ctx, {
+                    type: 'line',
+                    data: chartData,
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        interaction: {
+                            mode: 'index',
+                            intersect: false,
+                        },
+                        plugins: {
+                            legend: {
+                                display: true,
+                                position: 'top',
+                                labels: {
+                                    usePointStyle: true,
+                                    padding: 15,
+                                    font: {
+                                        size: 11,
+                                        weight: '600'
+                                    },
+                                    color: '#495057'
+                                }
+                            },
+                            tooltip: {
+                                backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                                padding: 12,
+                                titleFont: {
+                                    size: 12,
+                                    weight: 'bold'
+                                },
+                                bodyFont: {
+                                    size: 11
+                                },
+                                borderColor: 'rgba(255, 255, 255, 0.1)',
+                                borderWidth: 1,
+                                cornerRadius: 8,
+                                displayColors: true,
+                                callbacks: {
+                                    label: function(context) {
+                                        let label = context.dataset.label || '';
+                                        if (label) {
+                                            label += ': ';
+                                        }
+                                        if (context.parsed.y !== null) {
+                                            if (label.includes('Time')) {
+                                                label += context.parsed.y.toFixed(2) + 'ms';
+                                            } else if (label.includes('Rate') || label.includes('Hit')) {
+                                                label += context.parsed.y.toFixed(1) + '%';
+                                            } else {
+                                                label += context.parsed.y.toFixed(2);
+                                            }
+                                        }
+                                        return label;
+                                    }
+                                }
+                            },
+                            animation: {
+                                duration: 1000,
+                                easing: 'easeInOutQuart'
+                            }
+                        },
+                        scales: {
+                            x: {
+                                grid: {
+                                    display: true,
+                                    color: 'rgba(0, 0, 0, 0.05)',
+                                    drawBorder: false
+                                },
+                                ticks: {
+                                    font: {
+                                        size: 10
+                                    },
+                                    color: '#6c757d',
+                                    maxRotation: 45,
+                                    minRotation: 0
+                                }
+                            },
+                            y: {
+                                type: 'linear',
+                                display: true,
+                                position: 'left',
+                                title: {
+                                    display: true,
+                                    text: 'Success Rate / Cache Hit (%)',
+                                    font: {
+                                        size: 11,
+                                        weight: '600'
+                                    },
+                                    color: '#495057'
+                                },
+                                grid: {
+                                    display: true,
+                                    color: 'rgba(0, 0, 0, 0.05)',
+                                    drawBorder: false
+                                },
+                                ticks: {
+                                    font: {
+                                        size: 10
+                                    },
+                                    color: '#6c757d',
+                                    callback: function(value) {
+                                        return value.toFixed(0) + '%';
+                                    }
+                                },
+                                min: 0,
+                                max: 100
+                            },
+                            y1: {
+                                type: 'linear',
+                                display: true,
+                                position: 'right',
+                                title: {
+                                    display: true,
+                                    text: 'Response Time (ms)',
+                                    font: {
+                                        size: 11,
+                                        weight: '600'
+                                    },
+                                    color: '#495057'
+                                },
+                                grid: {
+                                    drawOnChartArea: false,
+                                    color: 'rgba(0, 0, 0, 0.05)'
+                                },
+                                ticks: {
+                                    font: {
+                                        size: 10
+                                    },
+                                    color: '#6c757d',
+                                    callback: function(value) {
+                                        return value.toFixed(0) + 'ms';
+                                    }
+                                }
+                            },
+                            y2: {
+                                type: 'linear',
+                                display: true,
+                                position: 'right',
+                                title: {
+                                    display: true,
+                                    text: 'Requests/min',
+                                    font: {
+                                        size: 11,
+                                        weight: '600'
+                                    },
+                                    color: '#495057'
+                                },
+                                grid: {
+                                    drawOnChartArea: false,
+                                    color: 'rgba(0, 0, 0, 0.05)'
+                                },
+                                ticks: {
+                                    font: {
+                                        size: 10
+                                    },
+                                    color: '#6c757d',
+                                    callback: function(value) {
+                                        return value.toFixed(1);
+                                    }
+                                },
+                                offset: true
+                            }
+                        }
+                    }
+                });
+            }
+            
+            function updateChart(data) {
+                if (!performanceChart) {
+                    initChart();
+                }
+                
+                const now = new Date();
+                const timeLabel = now.toLocaleTimeString('en-US', { 
+                    hour: '2-digit', 
+                    minute: '2-digit', 
+                    second: '2-digit',
+                    hour12: false
+                });
+                
+                const overview = data.overview || {};
+                const perf = data.performance || {};
+                const caching = data.caching || {};
+                
+                // Add new data point
+                chartData.labels.push(timeLabel);
+                chartData.datasets[0].data.push(parseFloat(overview.success_rate || 0));
+                chartData.datasets[1].data.push((parseFloat(perf.avg_response_time || 0) * 1000)); // Convert to ms
+                chartData.datasets[2].data.push(parseFloat(perf.requests_per_minute || 0));
+                chartData.datasets[3].data.push(parseFloat(caching.cache_hit_rate || 0));
+                
+                // Keep only last 30 data points for performance
+                const maxPoints = 30;
+                if (chartData.labels.length > maxPoints) {
+                    chartData.labels.shift();
+                    chartData.datasets.forEach(dataset => {
+                        dataset.data.shift();
+                    });
+                }
+                
+                // Update chart with animation
+                performanceChart.update('active');
+            }
+            
+            // Initialize chart on load
+            window.addEventListener('load', initChart);
         
         <script>
             async function loadMetrics() {
@@ -559,6 +862,9 @@ async def dashboard():
                     } else {
                         document.getElementById('errors').innerHTML = '<div class="loading status-good">✓ No errors</div>';
                     }
+                    
+                    // Update performance chart
+                    updateChart(data);
                     
                 } catch (error) {
                     console.error('Error:', error);
