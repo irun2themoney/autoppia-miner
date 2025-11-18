@@ -37,20 +37,6 @@ class HybridAgent(BaseAgent):
             logging.info(f"Using learned pattern for task: {prompt[:50]}...")
             return learned_pattern
         
-        # Analyze complexity
-        complexity = self.complexity_analyzer.analyze(prompt, url)
-        
-        # Route based on complexity
-        if complexity["complexity"] == "low" and not complexity["requires_llm"]:
-            # Simple tasks: use template (faster, cheaper)
-            logging.info(f"Using template agent for simple task: {prompt[:50]}...")
-            try:
-                actions = await self.template_agent.solve_task(task_id, prompt, url)
-                return actions
-            except Exception as e:
-                logging.warning(f"Template agent failed, falling back to LLM: {e}")
-                # Fall through to LLM
-        
         # All tasks use enhanced template agent
         logging.info(f"Using enhanced template agent for task: {prompt[:50]}...")
         try:
