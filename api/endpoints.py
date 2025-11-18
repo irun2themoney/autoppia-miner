@@ -1,10 +1,11 @@
 """API endpoints"""
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import Dict, Any, List
 from config.settings import settings
 import os
+import time
 
 router = APIRouter()
 
@@ -71,12 +72,30 @@ async def get_metrics():
 
 
 @router.post("/solve_task")
-async def solve_task(request: TaskRequest):
+async def solve_task(request: TaskRequest, http_request: Request = None):
     """
     Main endpoint - matches ApifiedWebAgent expectations
     Input: task.clean_task() format
     Output: {actions: [], web_agent_id: str, recording: str}
     """
+    from ..utils.advanced_metrics import advanced_metrics
+    from ..utils.task_parser import TaskParser
+    
+    start_time = time.time()
+    validator_ip = None
+    
+    # Get validator IP if available
+    try:
+        if http_request and hasattr(http_request, 'client'):
+            validator_ip = getattr(http_request.client, 'host', None)
+    except:
+        pass
+    
+    # Parse task for metrics
+    task_parser = TaskParser()
+    parsed_task = task_parser.parse(request.prompt, request.url)
+    task_type = parsed_task.get("task_type", "generic")
+    
     try:
         # Solve task using agent
         actions = await agent.solve_task(
@@ -84,6 +103,24 @@ async def solve_task(request: TaskRequest):
             prompt=request.prompt,
             url=request.url
         )
+        
+        response_time = time_module.time() - start_time
+        
+        # Record success in advanced metrics
+        advanced_metrics.record_request(
+            success=True,
+            response_time=response_time,
+            task_type=task_type,
+            agent_type=os.getenv("AGENT_TYPE", settings.agent_type),
+            validator_ip=validator_ip,
+            cache_hit=False,  # Will be enhanced later
+            vector_recall=False,  # Will be enhanced later
+            mutation_detected=False  # Will be enhanced later
+        )
+        
+        # Also record in basic metrics
+        from ..utils.metrics import metrics
+        metrics.record_request(success=True, response_time=response_time, task_type=task_type)
         
         return JSONResponse(
             content={
@@ -104,8 +141,23 @@ async def solve_task(request: TaskRequest):
     except Exception as e:
         # Record error in metrics
         from ..utils.metrics import metrics
-        import time
-        metrics.record_request(success=False, response_time=0.0, task_type="error")
+        from ..utils.advanced_metrics import advanced_metrics
+        import traceback
+        
+        response_time = time_module.time() - start_time
+        error_type = type(e).__name__
+        
+        metrics.record_request(success=False, response_time=response_time, task_type="error")
+        
+        # Record in advanced metrics
+        advanced_metrics.record_request(
+            success=False,
+            response_time=response_time,
+            task_type=task_type,
+            agent_type=os.getenv("AGENT_TYPE", settings.agent_type),
+            error_type=error_type,
+            validator_ip=validator_ip
+        )
         
         # Return empty actions on error (playground expects this)
         return JSONResponse(

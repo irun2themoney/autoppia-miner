@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from .endpoints import router
 from .endpoints_feedback import router as feedback_router
+from .endpoints_dashboard import router as dashboard_router
 from config.settings import settings
 
 app = FastAPI(
@@ -23,6 +24,7 @@ app.add_middleware(
 # Include routes
 app.include_router(router)
 app.include_router(feedback_router, prefix="/api")
+app.include_router(dashboard_router, prefix="/api")  # Real-time dashboard
 
 
 @app.get("/health")
