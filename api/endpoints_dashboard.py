@@ -156,12 +156,12 @@ async def dashboard():
                 <div class="metric-value" id="success-rate">-</div>
             </div>
             <div class="metric">
-                <div class="metric-label">Avg Response</div>
-                <div class="metric-value" id="avg-time">-</div>
-            </div>
-            <div class="metric">
                 <div class="metric-label">Total Requests</div>
                 <div class="metric-value" id="total-requests">-</div>
+            </div>
+            <div class="metric">
+                <div class="metric-label">Unique Validators</div>
+                <div class="metric-value" id="unique-validators">-</div>
             </div>
             <div class="metric">
                 <div class="metric-label">Health Score</div>
@@ -170,23 +170,43 @@ async def dashboard():
         </div>
         
         <div class="section">
-            <div class="section-title">Agents</div>
+            <div class="section-title">Request Breakdown</div>
+            <div id="request-breakdown" class="loading">Loading...</div>
+        </div>
+        
+        <div class="section">
+            <div class="section-title">Top Validators</div>
+            <div id="top-validators" class="loading">Loading...</div>
+        </div>
+        
+        <div class="section">
+            <div class="section-title">Recent Activity (Last 10)</div>
+            <div id="validator-activity" class="loading">Loading...</div>
+        </div>
+        
+        <div class="section">
+            <div class="section-title">Task Types</div>
+            <div id="task-types" class="loading">Loading...</div>
+        </div>
+        
+        <div class="section">
+            <div class="section-title">Agent Performance</div>
             <div id="agent-performance" class="loading">Loading...</div>
         </div>
         
         <div class="section">
-            <div class="section-title">Recent Activity</div>
-            <div id="validator-activity" class="loading">Loading...</div>
+            <div class="section-title">Performance Metrics</div>
+            <div id="performance-stats" class="loading">Loading...</div>
+        </div>
+        
+        <div class="section">
+            <div class="section-title">System Info</div>
+            <div id="system-info" class="loading">Loading...</div>
         </div>
         
         <div class="section">
             <div class="section-title">Errors</div>
             <div id="error-summary" class="loading">Loading...</div>
-        </div>
-        
-        <div class="section">
-            <div class="section-title">Performance</div>
-            <div id="performance-stats" class="loading">Loading...</div>
         </div>
         
         <script>
@@ -200,8 +220,15 @@ async def dashboard():
                     const data = await response.json();
                     console.log('Metrics data:', data);
                     
-                    // Update timestamp
-                    document.getElementById('last-update').textContent = new Date().toLocaleTimeString();
+                    // Update timestamp (Central Time)
+                    const now = new Date();
+                    document.getElementById('last-update').textContent = now.toLocaleString('en-US', { 
+                        timeZone: 'America/Chicago',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        second: '2-digit',
+                        hour12: true
+                    }) + ' CT';
                     
                     // Update main metrics - handle null/undefined properly
                     const overview = data.overview || {};
@@ -221,8 +248,9 @@ async def dashboard():
                         successRateEl.className = 'metric-value';
                     }
                     
-                    const avgTime = totalRequests > 0 ? parseFloat(performance.avg_response_time || 0).toFixed(3) : '0.000';
-                    document.getElementById('avg-time').textContent = avgTime + 's';
+                    // Unique validators
+                    const uniqueValidators = parseInt(data.validators?.unique_validators || 0);
+                    document.getElementById('unique-validators').textContent = uniqueValidators;
                     
                     const healthScore = parseFloat(data.health_score || 0).toFixed(1);
                     const healthScoreEl = document.getElementById('health-score');
@@ -232,6 +260,63 @@ async def dashboard():
                             (parseFloat(healthScore) >= 90 ? 'good' : parseFloat(healthScore) >= 70 ? 'warning' : 'error');
                     } else {
                         healthScoreEl.className = 'metric-value';
+                    }
+                    
+                    // Request breakdown
+                    const successful = parseInt(overview.successful_requests || 0);
+                    const failed = parseInt(overview.failed_requests || 0);
+                    let breakdownHtml = '<div class="compact-row">';
+                    breakdownHtml += `<div class="compact-stat">
+                        <div class="compact-stat-value status-good">${successful}</div>
+                        <div class="compact-stat-label">Successful</div>
+                    </div>`;
+                    breakdownHtml += `<div class="compact-stat">
+                        <div class="compact-stat-value status-error">${failed}</div>
+                        <div class="compact-stat-label">Failed</div>
+                    </div>`;
+                    breakdownHtml += `<div class="compact-stat">
+                        <div class="compact-stat-value">${(performance.avg_response_time || 0).toFixed(3)}s</div>
+                        <div class="compact-stat-label">Avg Response</div>
+                    </div>`;
+                    breakdownHtml += `<div class="compact-stat">
+                        <div class="compact-stat-value">${(overview.uptime_hours || 0).toFixed(1)}h</div>
+                        <div class="compact-stat-label">Uptime</div>
+                    </div>`;
+                    breakdownHtml += '</div>';
+                    document.getElementById('request-breakdown').innerHTML = breakdownHtml;
+                    
+                    // Top validators
+                    if (data.validators?.top_validators && data.validators.top_validators.length > 0) {
+                        let html = '<table><tr><th>Rank</th><th>Validator IP</th><th>Requests</th></tr>';
+                        data.validators.top_validators.forEach((v, idx) => {
+                            html += `<tr>
+                                <td>#${idx + 1}</td>
+                                <td><code>${v.ip}</code></td>
+                                <td>${v.requests}</td>
+                            </tr>`;
+                        });
+                        html += '</table>';
+                        document.getElementById('top-validators').innerHTML = html;
+                    } else {
+                        document.getElementById('top-validators').innerHTML = '<div class="loading">No validator data yet</div>';
+                    }
+                    
+                    // Task types
+                    if (data.task_types && Object.keys(data.task_types).length > 0) {
+                        let html = '<table><tr><th>Task Type</th><th>Success Rate</th><th>Total</th><th>Successful</th></tr>';
+                        for (const [type, stats] of Object.entries(data.task_types)) {
+                            const cls = stats.success_rate >= 80 ? 'status-good' : 'status-error';
+                            html += `<tr>
+                                <td><code>${type}</code></td>
+                                <td class="${cls}">${stats.success_rate.toFixed(1)}%</td>
+                                <td>${stats.total}</td>
+                                <td>${stats.success}</td>
+                            </tr>`;
+                        }
+                        html += '</table>';
+                        document.getElementById('task-types').innerHTML = html;
+                    } else {
+                        document.getElementById('task-types').innerHTML = '<div class="loading">No task type breakdown available yet. Task types will appear as validators send different task types.</div>';
                     }
                     
                     // Agent performance
@@ -251,19 +336,37 @@ async def dashboard():
                         html += '</table>';
                         document.getElementById('agent-performance').innerHTML = html || '<div class="loading">Waiting for requests...</div>';
                     } else {
-                        document.getElementById('agent-performance').innerHTML = '<div class="loading">Waiting for requests...</div>';
+                        document.getElementById('agent-performance').innerHTML = '<div class="loading">Using Hybrid Agent (Enhanced Template). Performance metrics will appear as requests are processed.</div>';
                     }
                     
-                    // Validator activity (only shows external validators, not localhost)
+                    // Validator activity (only shows external validators, not localhost) - show last 10
                     if (data.validators?.recent_activity?.length > 0) {
-                        let html = '<table><tr><th>Time</th><th>Validator IP</th><th>Status</th><th>Response</th></tr>';
-                        data.validators.recent_activity.slice(-5).reverse().forEach(a => {
+                        let html = '<table><tr><th>Time (Central)</th><th>Validator IP</th><th>Status</th><th>Response Time</th></tr>';
+                        data.validators.recent_activity.slice(-10).reverse().forEach(a => {
                             const status = a.success 
                                 ? '<span class="badge badge-success">OK</span>' 
                                 : '<span class="badge badge-error">FAIL</span>';
-                            const responseTime = a.response_time > 0 ? a.response_time.toFixed(3) + 's' : 'N/A';
+                            // Show response time if available, otherwise show "Recorded" to indicate it was logged
+                            const responseTime = a.response_time > 0 ? a.response_time.toFixed(3) + 's' : '<span style="color: #999;">Recorded</span>';
+                            // Convert to Central Time (America/Chicago)
+                            // Ensure the timestamp is treated as UTC by appending 'Z' if not present
+                            let timeStr = a.time;
+                            if (!timeStr.endsWith('Z') && !timeStr.includes('+') && !timeStr.includes('-', 10)) {
+                                timeStr = timeStr + 'Z'; // Treat as UTC
+                            }
+                            const date = new Date(timeStr);
+                            const timeStrFormatted = date.toLocaleString('en-US', { 
+                                timeZone: 'America/Chicago',
+                                year: 'numeric',
+                                month: '2-digit',
+                                day: '2-digit',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                                second: '2-digit',
+                                hour12: true
+                            });
                             html += `<tr>
-                                <td>${new Date(a.time).toLocaleTimeString()}</td>
+                                <td>${timeStrFormatted}</td>
                                 <td><code>${a.ip}</code></td>
                                 <td>${status}</td>
                                 <td>${responseTime}</td>
@@ -290,24 +393,69 @@ async def dashboard():
                     // Performance stats
                     const perf = data.performance || {};
                     let perfHtml = '<div class="compact-row">';
+                    const avgTime = perf.avg_response_time || 0;
                     perfHtml += `<div class="compact-stat">
-                        <div class="compact-stat-value">${(perf.p95_response_time || 0).toFixed(3)}s</div>
+                        <div class="compact-stat-value">${avgTime > 0 ? avgTime.toFixed(3) + 's' : 'N/A'}</div>
+                        <div class="compact-stat-label">Avg Response</div>
+                    </div>`;
+                    const p95 = perf.p95_response_time || 0;
+                    perfHtml += `<div class="compact-stat">
+                        <div class="compact-stat-value">${p95 > 0 ? p95.toFixed(3) + 's' : 'N/A'}</div>
                         <div class="compact-stat-label">P95</div>
                     </div>`;
+                    const p99 = perf.p99_response_time || 0;
                     perfHtml += `<div class="compact-stat">
-                        <div class="compact-stat-value">${(perf.p99_response_time || 0).toFixed(3)}s</div>
+                        <div class="compact-stat-value">${p99 > 0 ? p99.toFixed(3) + 's' : 'N/A'}</div>
                         <div class="compact-stat-label">P99</div>
                     </div>`;
+                    const rpm = perf.requests_per_minute || 0;
                     perfHtml += `<div class="compact-stat">
-                        <div class="compact-stat-value">${(perf.requests_per_minute || 0).toFixed(1)}</div>
+                        <div class="compact-stat-value">${rpm > 0 ? rpm.toFixed(1) : '0.0'}</div>
                         <div class="compact-stat-label">Req/min</div>
                     </div>`;
                     perfHtml += `<div class="compact-stat">
                         <div class="compact-stat-value">${(data.caching?.cache_hit_rate || 0).toFixed(1)}%</div>
-                        <div class="compact-stat-label">Cache</div>
+                        <div class="compact-stat-label">Cache Hit</div>
                     </div>`;
                     perfHtml += '</div>';
+                    if (avgTime === 0 && totalRequests > 0) {
+                        perfHtml += '<div style="margin-top: 10px; padding: 10px; background: #fff3cd; border-radius: 4px; font-size: 12px; color: #856404;">Note: Response times are calculated from in-memory metrics. Historical log data does not include response times.</div>';
+                    }
                     document.getElementById('performance-stats').innerHTML = perfHtml;
+                    
+                    // System info
+                    let systemHtml = '<table><tr><th>Metric</th><th>Value</th></tr>';
+                    systemHtml += `<tr><td>Miner UID</td><td><code>160</code></td></tr>`;
+                    systemHtml += `<tr><td>Server IP</td><td><code>134.199.203.133</code></td></tr>`;
+                    systemHtml += `<tr><td>API Port</td><td><code>8080</code></td></tr>`;
+                    systemHtml += `<tr><td>Axon Port</td><td><code>8091</code></td></tr>`;
+                    systemHtml += `<tr><td>Uptime</td><td>${(overview.uptime_hours || 0).toFixed(2)} hours</td></tr>`;
+                    systemHtml += `<tr><td>Total Requests</td><td>${totalRequests}</td></tr>`;
+                    systemHtml += `<tr><td>Successful</td><td class="status-good">${successful}</td></tr>`;
+                    systemHtml += `<tr><td>Failed</td><td class="status-error">${failed}</td></tr>`;
+                    systemHtml += `<tr><td>Unique Validators</td><td>${uniqueValidators}</td></tr>`;
+                    systemHtml += `<tr><td>Success Rate</td><td>${successRate}%</td></tr>`;
+                    systemHtml += `<tr><td>Health Score</td><td>${healthScore}</td></tr>`;
+                    // Last update in Central Time
+                    let timestamp = data.timestamp || new Date().toISOString();
+                    // Ensure timestamp is treated as UTC
+                    if (typeof timestamp === 'string' && !timestamp.endsWith('Z') && !timestamp.includes('+') && !timestamp.includes('-', 10)) {
+                        timestamp = timestamp + 'Z';
+                    }
+                    const lastUpdate = new Date(timestamp);
+                    const lastUpdateStr = lastUpdate.toLocaleString('en-US', { 
+                        timeZone: 'America/Chicago',
+                        year: 'numeric',
+                        month: '2-digit',
+                        day: '2-digit',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        second: '2-digit',
+                        hour12: true
+                    });
+                    systemHtml += `<tr><td>Last Update</td><td>${lastUpdateStr} CT</td></tr>`;
+                    systemHtml += '</table>';
+                    document.getElementById('system-info').innerHTML = systemHtml;
                     
                 } catch (error) {
                     console.error('Error:', error);
@@ -333,11 +481,18 @@ async def dashboard_metrics():
     from datetime import datetime
     
     advanced_metrics = get_advanced_metrics()
+    # Get current metrics first (may have response times)
     metrics = advanced_metrics.get_comprehensive_metrics()
     metrics["health_score"] = advanced_metrics.get_health_score()
     
-    # Always load historical activity from logs (even if metrics exist, to show full history)
-    # This ensures the dashboard shows all activity even after service restarts
+    # Store current metrics before rebuilding from logs
+    current_total = metrics["overview"]["total_requests"]
+    current_successful = metrics["overview"]["successful_requests"]
+    current_failed = metrics["overview"]["failed_requests"]
+    current_avg_time = metrics["performance"]["avg_response_time"]
+    current_response_times = list(advanced_metrics.response_times) if hasattr(advanced_metrics, 'response_times') else []
+    
+    # Rebuild metrics from logs (validator-only), but preserve response time data
     try:
         # Get successful requests from logs (last 24 hours)
         result = subprocess.run(
@@ -353,11 +508,12 @@ async def dashboard_metrics():
             
             for line in log_lines:
                 # Match: "Nov 18 09:06:44 ... INFO: 45.22.240.79:54712 - "POST /solve_task HTTP/1.1" 200 OK"
-                match = re.search(r'(\w+\s+\d+\s+\d+:\d+:\d+).*?INFO:\s+([\d.]+):\d+\s+-\s+"POST\s+/solve_task.*?"\s+(\d+)', line)
+                # Also match: "Nov 18 17:35:00 autoppia-miner python3[136214]: INFO:     84.247.180.192:48980 - "POST /solve_task HTTP/1.1" 200 OK"
+                match = re.search(r'(\w+\s+\d+\s+\d+:\d+:\d+).*?INFO:.*?([\d.]+):\d+\s+-\s+"POST\s+/solve_task.*?"\s+(\d+)', line)
                 if match:
                     timestamp_str, ip, status_code = match.groups()
                     # Skip localhost (127.0.0.1) - these are local tests
-                    if ip == "127.0.0.1":
+                    if ip in ["127.0.0.1", "localhost", "::1"]:
                         continue
                     # Parse timestamp (format: "Nov 18 09:06:44")
                     try:
@@ -371,46 +527,82 @@ async def dashboard_metrics():
                             "response_time": 0.0,  # Not available from logs
                             "source": "validator"  # Mark as validator (not localhost)
                         })
-                    except:
+                    except Exception as e:
+                        # Skip lines that can't be parsed
                         pass
             
             # Add historical activity to metrics if we found any
             if historical_activity:
-                # Filter to only validators (exclude localhost)
-                validator_activity = [a for a in historical_activity if a.get("source") == "validator" or a.get("ip") != "127.0.0.1"]
+                # Filter to ONLY validators (exclude ALL localhost/local IPs)
+                validator_activity = [
+                    a for a in historical_activity 
+                    if a.get("ip") not in ["127.0.0.1", "localhost", "::1"] 
+                    and not a.get("ip", "").startswith("192.168.")
+                    and not a.get("ip", "").startswith("10.")
+                    and not a.get("ip", "").startswith("172.16.")
+                    and a.get("ip") != "134.199.203.133"  # Exclude our own server IP
+                ]
                 
-                # Merge with existing metrics (if any) or replace if empty
-                if metrics["overview"]["total_requests"] == 0:
-                    # No current metrics, use historical data
+                # Only use validator activity (don't merge with current metrics that might include local tests)
+                # Replace metrics with ONLY validator data, but preserve response time calculations
+                if validator_activity:
                     metrics["overview"]["total_requests"] = len(validator_activity)
                     metrics["overview"]["successful_requests"] = sum(1 for a in validator_activity if a["success"])
                     metrics["overview"]["failed_requests"] = sum(1 for a in validator_activity if not a["success"])
+                    
+                    if metrics["overview"]["total_requests"] > 0:
+                        metrics["overview"]["success_rate"] = round(
+                            (metrics["overview"]["successful_requests"] / metrics["overview"]["total_requests"]) * 100, 2
+                        )
+                    
+                    # Calculate response times from current metrics if available
+                    # Use current response times if we have them (from in-memory metrics)
+                    if current_response_times and len(current_response_times) > 0:
+                        metrics["performance"]["avg_response_time"] = round(sum(current_response_times) / len(current_response_times), 3)
+                        sorted_times = sorted(current_response_times)
+                        if len(sorted_times) >= 20:
+                            metrics["performance"]["p95_response_time"] = round(sorted_times[int(len(sorted_times) * 0.95)], 3)
+                            metrics["performance"]["p99_response_time"] = round(sorted_times[int(len(sorted_times) * 0.99)], 3)
+                    
+                    # Calculate requests per minute from uptime
+                    uptime_hours = metrics["overview"].get("uptime_hours", 0.02)
+                    if uptime_hours > 0:
+                        metrics["performance"]["requests_per_minute"] = round(
+                            metrics["overview"]["total_requests"] / (uptime_hours * 60), 2
+                        )
+                    
+                    # Recalculate health score with validator-only data
+                    if metrics["overview"]["total_requests"] > 0:
+                        success_rate = metrics["overview"]["success_rate"]
+                        response_time_score = max(0, 100 - (metrics["performance"]["avg_response_time"] * 10))
+                        uptime_score = min(100, uptime_hours * 10)
+                        metrics["health_score"] = round(
+                            success_rate * 0.5 + response_time_score * 0.3 + uptime_score * 0.2, 2
+                        )
+                    
+                    # Use ONLY validator activity (no merging with potentially contaminated current metrics)
+                    # Sort by time (most recent first) and take most recent 20
+                    validator_activity.sort(key=lambda x: x.get("time", ""), reverse=True)
+                    metrics["validators"]["recent_activity"] = validator_activity[:20]
+                    metrics["validators"]["unique_validators"] = len(set(a["ip"] for a in validator_activity))
+                    
+                    # Update top validators from validator activity only
+                    from collections import Counter
+                    ip_counts = Counter(a["ip"] for a in validator_activity)
+                    metrics["validators"]["top_validators"] = [
+                        {"ip": ip, "requests": count} 
+                        for ip, count in ip_counts.most_common(5)
+                    ]
                 else:
-                    # Merge: add historical to current
-                    metrics["overview"]["total_requests"] += len(validator_activity)
-                    metrics["overview"]["successful_requests"] += sum(1 for a in validator_activity if a["success"])
-                    metrics["overview"]["failed_requests"] += sum(1 for a in validator_activity if not a["success"])
-                
-                if metrics["overview"]["total_requests"] > 0:
-                    metrics["overview"]["success_rate"] = round(
-                        (metrics["overview"]["successful_requests"] / metrics["overview"]["total_requests"]) * 100, 2
-                    )
-                
-                # Merge recent activity: combine current + historical, sort by time, take most recent 20
-                existing_activity = list(metrics.get("validators", {}).get("recent_activity", []))
-                combined_activity = existing_activity + validator_activity
-                # Sort by time (most recent first) and take top 20
-                combined_activity.sort(key=lambda x: x.get("time", ""), reverse=True)
-                metrics["validators"]["recent_activity"] = combined_activity[:20]
-                metrics["validators"]["unique_validators"] = len(set(a["ip"] for a in combined_activity))
-                
-                # Update top validators from combined activity
-                from collections import Counter
-                ip_counts = Counter(a["ip"] for a in combined_activity)
-                metrics["validators"]["top_validators"] = [
-                    {"ip": ip, "requests": count} 
-                    for ip, count in ip_counts.most_common(5)
-                ]
+                    # No validator activity found, reset to zeros but keep structure
+                    metrics["overview"]["total_requests"] = 0
+                    metrics["overview"]["successful_requests"] = 0
+                    metrics["overview"]["failed_requests"] = 0
+                    metrics["overview"]["success_rate"] = 0
+                    metrics["validators"]["recent_activity"] = []
+                    metrics["validators"]["unique_validators"] = 0
+                    metrics["validators"]["top_validators"] = []
+                    metrics["health_score"] = 0.0
     except Exception as e:
         # If log parsing fails, just use current metrics
         pass

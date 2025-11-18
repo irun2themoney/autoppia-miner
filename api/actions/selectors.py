@@ -23,13 +23,86 @@ def create_selector(
 class SelectorStrategy:
     """Generate multiple selector strategies with fallbacks"""
     
-    def get_strategies(self, prompt: str) -> List[Dict[str, Any]]:
+    def get_strategies(self, element_type: str, value: str = "") -> List[Dict[str, Any]]:
         """
         Generate multiple selector strategies with fallbacks.
         Returns list of selectors to try in order - if first fails, try next.
         IWA uses dynamic environments (D1-D4), so we need multiple strategies.
+        
+        Args:
+            element_type: Type of element (month_view, file_input, tab, etc.)
+            value: Optional value to match (e.g., tab name, button text)
         """
-        prompt_lower = prompt.lower()
+        element_lower = element_type.lower()
+        value_lower = value.lower() if value else ""
+        strategies = []
+        
+        # New pattern-specific selectors
+        if element_lower == "month_view":
+            strategies.append(create_selector("tagContainsSelector", "Month", case_sensitive=False))
+            strategies.append(create_selector("tagContainsSelector", "Month View", case_sensitive=False))
+            strategies.append(create_selector("attributeValueSelector", "month", attribute="data-testid", case_sensitive=False))
+            strategies.append(create_selector("attributeValueSelector", "month", attribute="aria-label", case_sensitive=False))
+            return strategies
+        
+        if element_lower == "file_input":
+            strategies.append(create_selector("attributeValueSelector", "file", attribute="type", case_sensitive=False))
+            strategies.append(create_selector("attributeValueSelector", "file", attribute="name", case_sensitive=False))
+            strategies.append(create_selector("tagContainsSelector", "Choose File", case_sensitive=False))
+            strategies.append(create_selector("tagContainsSelector", "Upload", case_sensitive=False))
+            return strategies
+        
+        if element_lower == "create_event":
+            strategies.append(create_selector("tagContainsSelector", value or "Create Event", case_sensitive=False))
+            strategies.append(create_selector("tagContainsSelector", "New Event", case_sensitive=False))
+            strategies.append(create_selector("attributeValueSelector", "create", attribute="data-testid", case_sensitive=False))
+            return strategies
+        
+        if element_lower == "date":
+            if value:
+                strategies.append(create_selector("tagContainsSelector", value, case_sensitive=False))
+            strategies.append(create_selector("attributeValueSelector", "date", attribute="type", case_sensitive=False))
+            strategies.append(create_selector("attributeValueSelector", "date", attribute="class", case_sensitive=False))
+            return strategies
+        
+        if element_lower == "tab":
+            if value:
+                strategies.append(create_selector("tagContainsSelector", value.title(), case_sensitive=False))
+                strategies.append(create_selector("attributeValueSelector", value.lower(), attribute="data-tab", case_sensitive=False))
+            strategies.append(create_selector("attributeValueSelector", "tab", attribute="role", case_sensitive=False))
+            return strategies
+        
+        if element_lower == "next_page":
+            strategies.append(create_selector("tagContainsSelector", "Next", case_sensitive=False))
+            strategies.append(create_selector("tagContainsSelector", ">", case_sensitive=False))
+            strategies.append(create_selector("attributeValueSelector", "next", attribute="aria-label", case_sensitive=False))
+            return strategies
+        
+        if element_lower == "previous_page":
+            strategies.append(create_selector("tagContainsSelector", "Previous", case_sensitive=False))
+            strategies.append(create_selector("tagContainsSelector", "<", case_sensitive=False))
+            strategies.append(create_selector("attributeValueSelector", "prev", attribute="aria-label", case_sensitive=False))
+            return strategies
+        
+        if element_lower == "page_number":
+            if value:
+                strategies.append(create_selector("tagContainsSelector", value, case_sensitive=False))
+            strategies.append(create_selector("attributeValueSelector", "page", attribute="class", case_sensitive=False))
+            return strategies
+        
+        if element_lower == "confirm":
+            strategies.append(create_selector("tagContainsSelector", value or "Confirm", case_sensitive=False))
+            strategies.append(create_selector("tagContainsSelector", "OK", case_sensitive=False))
+            strategies.append(create_selector("tagContainsSelector", "Accept", case_sensitive=False))
+            return strategies
+        
+        if element_lower == "cancel":
+            strategies.append(create_selector("tagContainsSelector", value or "Cancel", case_sensitive=False))
+            strategies.append(create_selector("attributeValueSelector", "cancel", attribute="class", case_sensitive=False))
+            return strategies
+        
+        # Fallback to original prompt-based logic
+        prompt_lower = element_type.lower()
         strategies = []
         
         # Calendar view selectors - multiple strategies
@@ -70,7 +143,9 @@ class SelectorStrategy:
             return strategies
         
         # Generic click targets - improved strategy
-        keywords = extract_keywords(prompt)
+        # Use element_type as prompt for keyword extraction
+        prompt_for_keywords = element_type if not value else f"{element_type} {value}"
+        keywords = extract_keywords(prompt_for_keywords)
         
         # Priority words with multiple variations
         priority_words = {

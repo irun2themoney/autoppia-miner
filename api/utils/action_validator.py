@@ -1,111 +1,177 @@
-"""Validate generated actions for correctness"""
-from typing import Dict, Any, List, Tuple, Optional
+"""Action validation and verification for quality assurance"""
+from typing import Dict, Any, List, Optional, Tuple
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class ActionValidator:
-    """Validate actions before returning them"""
+    """
+    Validates actions before execution and verifies after execution
+    to ensure quality and accuracy
+    """
     
-    REQUIRED_FIELDS = {
-        "NavigateAction": ["url"],
-        "ClickAction": ["selector"],
-        "TypeAction": ["selector", "text"],
-        "WaitAction": ["time_seconds"],
-        "ScreenshotAction": [],
-        "ScrollAction": [],
-    }
+    def __init__(self):
+        self.validation_history = []  # Track validation results
     
-    def validate_action(self, action: Dict[str, Any]) -> Tuple[bool, Optional[str]]:
-        """Validate a single action"""
-        action_type = action.get("type", "")
+    def validate_action(self, action: Dict[str, Any], context: Optional[Dict[str, Any]] = None) -> Tuple[bool, str]:
+        """
+        Validate action before execution
         
+        Returns:
+            (is_valid, reason)
+        """
+        action_type = action.get("action_type", "")
+        
+        # Basic validation
         if not action_type:
-            return False, "Action missing 'type' field"
-        
-        # Check if action type is valid
-        if action_type not in self.REQUIRED_FIELDS:
-            return False, f"Unknown action type: {action_type}"
-        
-        # Check required fields
-        required = self.REQUIRED_FIELDS[action_type]
-        for field in required:
-            if field not in action or not action[field]:
-                return False, f"{action_type} missing required field: {field}"
+            return False, "Missing action_type"
         
         # Type-specific validation
-        if action_type == "NavigateAction":
+        if action_type == "navigate":
             url = action.get("url", "")
+            if not url:
+                return False, "Navigate action missing URL"
             if not url.startswith(("http://", "https://")):
                 return False, f"Invalid URL format: {url}"
         
-        if action_type == "WaitAction":
-            time_seconds = action.get("time_seconds", 0)
-            if not isinstance(time_seconds, (int, float)) or time_seconds < 0:
-                return False, f"Invalid time_seconds: {time_seconds}"
-            if time_seconds > 10:
-                return False, f"Wait time too long: {time_seconds}s (max 10s)"
+        elif action_type == "click":
+            selector = action.get("selector")
+            if not selector:
+                return False, "Click action missing selector"
+            if not isinstance(selector, (dict, list)):
+                return False, "Selector must be dict or list"
         
-        if action_type in ["ClickAction", "TypeAction"]:
-            selector = action.get("selector", {})
-            if not isinstance(selector, dict):
-                return False, f"Selector must be a dict, got: {type(selector)}"
-            if "type" not in selector:
-                return False, "Selector missing 'type' field"
-            if "value" not in selector:
-                return False, "Selector missing 'value' field"
-        
-        if action_type == "TypeAction":
+        elif action_type == "type":
             text = action.get("text", "")
-            if not text or len(text) == 0:
-                return False, "TypeAction missing or empty 'text' field"
+            selector = action.get("selector")
+            if not text:
+                return False, "Type action missing text"
+            if not selector:
+                return False, "Type action missing selector"
         
-        return True, None
+        elif action_type == "wait":
+            duration = action.get("duration", 0)
+            if duration < 0:
+                return False, "Wait duration cannot be negative"
+            if duration > 30:
+                return False, "Wait duration too long (>30s)"
+        
+        elif action_type == "screenshot":
+            # Screenshot actions are always valid
+            pass
+        
+        # Context-based validation
+        if context:
+            # Check if action makes sense for context
+            if context.get("is_login_page") and action_type == "navigate":
+                # Navigation after login might be expected
+                pass
+        
+        return True, "Valid"
     
-    def validate_actions(self, actions: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], List[str]]:
-        """Validate list of actions, return valid actions and errors"""
-        valid_actions = []
+    def validate_action_sequence(
+        self,
+        actions: List[Dict[str, Any]],
+        context: Optional[Dict[str, Any]] = None
+    ) -> Tuple[bool, List[str]]:
+        """
+        Validate entire action sequence
+        
+        Returns:
+            (is_valid, list_of_errors)
+        """
         errors = []
         
         for i, action in enumerate(actions):
-            is_valid, error = self.validate_action(action)
-            if is_valid:
-                valid_actions.append(action)
-            else:
-                errors.append(f"Action {i}: {error}")
+            is_valid, reason = self.validate_action(action, context)
+            if not is_valid:
+                errors.append(f"Action {i}: {reason}")
         
-        return valid_actions, errors
+        return len(errors) == 0, errors
     
-    def fix_common_issues(self, action: Dict[str, Any]) -> Dict[str, Any]:
-        """Fix common issues in actions"""
-        action_type = action.get("type", "")
+    def should_add_verification(self, action: Dict[str, Any]) -> bool:
+        """Determine if action should be verified after execution"""
+        action_type = action.get("action_type", "")
         
-        # Ensure case_sensitive is set for selectors
-        if "selector" in action and isinstance(action["selector"], dict):
-            if "case_sensitive" not in action["selector"]:
-                action["selector"]["case_sensitive"] = False
+        # Verify important actions
+        important_actions = ["navigate", "click", "type", "submit"]
+        return action_type in important_actions
+    
+    def get_verification_action(self, original_action: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Get verification action for original action - Enhanced for quality"""
+        action_type = original_action.get("action_type", "")
         
-        # Normalize action type
-        if action_type and not action_type.endswith("Action"):
-            type_map = {
-                "click": "ClickAction",
-                "type": "TypeAction",
-                "wait": "WaitAction",
-                "navigate": "NavigateAction",
-                "screenshot": "ScreenshotAction",
-                "scroll": "ScrollAction",
+        if action_type == "navigate":
+            # Verify navigation with wait + screenshot (page needs time to load)
+            return {
+                "action_type": "wait",
+                "duration": 1.5  # Give page time to load
             }
-            normalized = action_type.lower().replace("action", "")
-            if normalized in type_map:
-                action["type"] = type_map[normalized]
         
-        # Fix WaitAction duration field
-        if action_type == "WaitAction" and "duration" in action and "time_seconds" not in action:
-            action["time_seconds"] = action.pop("duration")
+        elif action_type == "click":
+            # Verify click with wait + screenshot (UI needs time to update)
+            return {
+                "action_type": "wait",
+                "duration": 1.0  # Increased for better quality
+            }
         
-        # Ensure URL has protocol
-        if action_type == "NavigateAction" and "url" in action:
-            url = action["url"]
-            if url and not url.startswith(("http://", "https://")):
-                action["url"] = "https://" + url
+        elif action_type == "type":
+            # Verify typing with wait (text needs time to be entered)
+            return {
+                "action_type": "wait",
+                "duration": 0.5  # Increased for better quality
+            }
         
-        return action
+        elif action_type == "submit":
+            # Verify submit with longer wait (form submission takes time)
+            return {
+                "action_type": "wait",
+                "duration": 2.0  # Form submissions need more time
+            }
+        
+        return None
+    
+    def enhance_actions_with_verification(
+        self,
+        actions: List[Dict[str, Any]]
+    ) -> List[Dict[str, Any]]:
+        """
+        Enhance action sequence with verification steps
+        
+        Adds verification actions after important actions to ensure quality.
+        Balances speed with quality (target 2-5s response time).
+        """
+        enhanced = []
+        
+        for i, action in enumerate(actions):
+            enhanced.append(action)
+            
+            # Add verification if needed (but not for every action to balance speed)
+            if self.should_add_verification(action):
+                verification = self.get_verification_action(action)
+                if verification:
+                    enhanced.append(verification)
+                    # Add screenshot after verification wait for important actions
+                    action_type = action.get("action_type", "")
+                    important_actions = ["navigate", "click", "submit"]
+                    if verification.get("action_type") == "wait" and action_type in important_actions:
+                        enhanced.append({"action_type": "screenshot"})
+        
+        return enhanced
+    
+    def record_validation(self, action: Dict[str, Any], is_valid: bool, reason: str):
+        """Record validation result for learning"""
+        self.validation_history.append({
+            "action": action,
+            "is_valid": is_valid,
+            "reason": reason
+        })
+        
+        # Keep only last 100 validations
+        if len(self.validation_history) > 100:
+            self.validation_history.pop(0)
 
+
+# Global instance
+action_validator = ActionValidator()

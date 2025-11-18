@@ -1,10 +1,56 @@
 """Enhanced action sequence generation with expanded patterns"""
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from .selectors import SelectorStrategy, create_selector
 from ..utils.classification import TaskClassifier
 from ..utils.keywords import extract_keywords
 from ..utils.task_parser import TaskParser
 import re
+import logging
+
+logger = logging.getLogger(__name__)
+
+# Import smart wait strategy
+try:
+    from ..utils.smart_waits import smart_wait
+except ImportError:
+    # Fallback if smart_waits not available
+    smart_wait = None
+
+# Import context-aware agent
+try:
+    from ..utils.context_aware import context_aware
+except ImportError:
+    context_aware = None
+
+# Import task planner
+try:
+    from ..utils.task_planner import task_planner
+except ImportError:
+    task_planner = None
+
+# Import selector intelligence
+try:
+    from ..utils.selector_intelligence import selector_intelligence
+except ImportError:
+    selector_intelligence = None
+
+# Import website detector
+try:
+    from ..utils.website_detector import website_detector
+except ImportError:
+    website_detector = None
+
+# Import action validator
+try:
+    from ..utils.action_validator import action_validator
+except ImportError:
+    action_validator = None
+
+# Import error recovery
+try:
+    from ..utils.error_recovery import error_recovery
+except ImportError:
+    error_recovery = None
 
 
 class ActionGenerator:
@@ -16,9 +62,40 @@ class ActionGenerator:
         self.task_parser = TaskParser()  # Enhanced parsing
     
     def generate(self, prompt: str, url: str) -> List[Dict[str, Any]]:
-        """Generate action sequence based on prompt - Enhanced patterns"""
+        """Generate action sequence based on prompt - Enhanced patterns with context awareness, multi-step planning, and website-specific intelligence"""
         actions = []
         prompt_lower = prompt.lower()
+        
+        # Detect website (if website detector available)
+        detected_website = None
+        website_strategy = None
+        if website_detector:
+            detected_website = website_detector.detect_website(url, prompt)
+            if detected_website:
+                website_strategy = website_detector.get_site_specific_strategy()
+                logger.info(f"Detected website: {detected_website}")
+        
+        # Check if this is a multi-step task (if task planner available)
+        execution_plan = None
+        if task_planner:
+            execution_plan = task_planner.generate_execution_plan(prompt, url)
+            if execution_plan.get("is_multi_step"):
+                # Handle multi-step task
+                return self._generate_multistep_actions_from_plan(execution_plan, context_aware, detected_website, website_strategy)
+        
+        # Detect context (if context-aware agent available)
+        context = None
+        strategy = None
+        if context_aware:
+            context = context_aware.detect_context(url, prompt)
+            strategy = context_aware.adapt_strategy(context, parsed.get("task_type", "generic") if 'parsed' in locals() else "generic")
+            context_aware.track_context(context)
+            
+            # Merge website strategy with context strategy
+            if website_strategy and strategy:
+                strategy.update(website_strategy)
+            elif website_strategy:
+                strategy = website_strategy
         
         # Parse task to extract all information
         parsed = self.task_parser.parse_task(prompt, url)
@@ -28,73 +105,286 @@ class ActionGenerator:
         target_element = parsed.get("target_element")
         task_type = parsed.get("task_type", "generic")
         
-        # Navigate if URL provided
-        if task_url:
-            actions.append({"action_type": "navigate", "url": task_url})
-            actions.append({"action_type": "wait", "duration": 1.5})  # Wait for page load
+        # Update strategy with task type if we have context
+        if context_aware and context:
+            strategy = context_aware.adapt_strategy(context, task_type)
         
-        # Initial screenshot
-        actions.append({"action_type": "screenshot"})
+        # Navigate if URL provided (check context to see if navigation is needed)
+        should_navigate = True
+        if context and not context.get("requires_navigation", True):
+            should_navigate = False
+        
+        if task_url and should_navigate:
+            actions.append({"action_type": "navigate", "url": task_url})
+            # Use context-aware or smart wait for navigation
+            if context_aware and context and strategy:
+                nav_wait = context_aware.get_optimal_wait_time("NavigateAction", context, strategy)
+            elif smart_wait:
+                nav_wait = smart_wait.get_wait_time("NavigateAction", {"is_navigation": True})
+            else:
+                nav_wait = 1.5  # Default wait time
+            actions.append({"action_type": "wait", "duration": nav_wait})
+        
+        # Initial screenshot (context-aware)
+        if not context_aware or not context or context_aware.should_take_screenshot("NavigateAction", 0, 10, strategy or {}):
+            actions.append({"action_type": "screenshot"})
         
         # Enhanced pattern matching with priority order
         
+        # Helper function to finalize actions with validation and optimization
+        def finalize_actions(action_list: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+            """Apply validation, verification, and optimization to action sequence"""
+            optimized = self._apply_context_optimizations(action_list, context, strategy)
+            
+            # Validate and enhance with verification for quality
+            if action_validator:
+                is_valid, errors = action_validator.validate_action_sequence(optimized, context)
+                if not is_valid:
+                    logger.warning(f"Action validation errors: {errors}")
+                # Enhance with verification steps (adds quality checks)
+                optimized = action_validator.enhance_actions_with_verification(optimized)
+            
+            return optimized
+        
         # 1. LOGIN TASKS (highest priority - most specific)
         if task_type == "login" or "login" in prompt_lower or "sign in" in prompt_lower:
-            actions.extend(self._generate_login_actions(parsed, prompt_lower))
-            return actions
+            login_actions = self._generate_login_actions(parsed, prompt_lower, context, strategy)
+            actions.extend(login_actions)
+            return finalize_actions(actions)
         
         # 2. FORM FILLING TASKS
         if task_type == "form" or any(w in prompt_lower for w in ["fill", "submit", "enter"]):
             actions.extend(self._generate_form_actions(parsed, prompt_lower))
-            return actions
+            return finalize_actions(actions)
         
         # 3. MODIFY/EDIT TASKS
         if task_type == "modify" or any(w in prompt_lower for w in ["modify", "edit", "change", "update", "delete"]):
             actions.extend(self._generate_modify_actions(parsed, prompt_lower))
-            return actions
+            return finalize_actions(actions)
         
         # 4. SEARCH TASKS
         if task_type == "search" or any(w in prompt_lower for w in ["search", "find", "look for"]):
             actions.extend(self._generate_search_actions(parsed, prompt_lower))
-            return actions
+            return finalize_actions(actions)
         
         # 5. COMMENT/POST TASKS
         if any(w in prompt_lower for w in ["comment", "post", "reply", "write"]):
             actions.extend(self._generate_comment_actions(parsed, prompt_lower))
-            return actions
+            return finalize_actions(actions)
         
         # 6. CLICK/SELECT TASKS (most common)
         if any(w in prompt_lower for w in ["click", "select", "choose", "switch", "toggle", "view", "open"]):
-            actions.extend(self._generate_click_actions(parsed, prompt_lower, target_element))
-            return actions
+            click_actions = self._generate_click_actions(parsed, prompt_lower, target_element, context)
+            actions.extend(click_actions)
+            return finalize_actions(actions)
         
         # 7. TYPE/INPUT TASKS
         if any(w in prompt_lower for w in ["type", "enter", "input", "write"]):
             actions.extend(self._generate_type_actions(parsed, prompt_lower))
-            return actions
+            return finalize_actions(actions)
         
         # 8. SCROLL TASKS
         if any(w in prompt_lower for w in ["scroll", "move down", "move up"]):
             actions.extend(self._generate_scroll_actions(parsed, prompt_lower))
-            return actions
+            return finalize_actions(actions)
         
         # 9. EXTRACT/GET DATA TASKS
         if any(w in prompt_lower for w in ["extract", "get", "read", "retrieve", "fetch"]):
             actions.extend(self._generate_extract_actions(parsed, prompt_lower))
-            return actions
+            return finalize_actions(actions)
         
-        # 10. MULTI-STEP TASKS (handle "and", "then", "after")
+        # 10. CALENDAR TASKS
+        if any(w in prompt_lower for w in ["calendar", "month view", "date", "select date", "event"]):
+            actions.extend(self._generate_calendar_actions(parsed, prompt_lower))
+            return finalize_actions(actions)
+        
+        # 11. FILE UPLOAD TASKS
+        if any(w in prompt_lower for w in ["upload", "file", "choose file", "select file", "attach"]):
+            actions.extend(self._generate_file_upload_actions(parsed, prompt_lower))
+            return finalize_actions(actions)
+        
+        # 12. MODAL/DIALOG TASKS
+        if any(w in prompt_lower for w in ["modal", "dialog", "popup", "confirm", "alert", "close modal"]):
+            actions.extend(self._generate_modal_actions(parsed, prompt_lower))
+            return finalize_actions(actions)
+        
+        # 13. TAB TASKS
+        if any(w in prompt_lower for w in ["tab", "switch tab", "open tab", "close tab"]):
+            actions.extend(self._generate_tab_actions(parsed, prompt_lower))
+            return finalize_actions(actions)
+        
+        # 14. PAGINATION TASKS
+        if any(w in prompt_lower for w in ["next page", "previous page", "page", "pagination", "go to page"]):
+            actions.extend(self._generate_pagination_actions(parsed, prompt_lower))
+            return finalize_actions(actions)
+        
+        # 15. MULTI-STEP TASKS (handle "and", "then", "after")
         if any(w in prompt_lower for w in ["and", "then", "after", "before", "first", "next"]):
+            # Try task planner first
+            if task_planner:
+                execution_plan = task_planner.generate_execution_plan(prompt, url)
+                if execution_plan.get("is_multi_step"):
+                    return self._generate_multistep_actions_from_plan(execution_plan, context_aware, detected_website, website_strategy)
+            # Fallback to simple multi-step
             actions.extend(self._generate_multistep_actions(parsed, prompt_lower))
-            return actions
+            optimized_actions = self._apply_context_optimizations(actions, context, strategy)
+            # Validate and enhance
+            if action_validator:
+                is_valid, errors = action_validator.validate_action_sequence(optimized_actions, context)
+                if not is_valid:
+                    logger.warning(f"Action validation errors: {errors}")
+                optimized_actions = action_validator.enhance_actions_with_verification(optimized_actions)
+            return optimized_actions
         
         # Default: Screenshot only
         actions.append({"action_type": "wait", "duration": 0.5})
         actions.append({"action_type": "screenshot"})
         
+        # Apply context optimizations
+        optimized_actions = self._apply_context_optimizations(actions, context, strategy)
+        
+        # Validate actions (if validator available)
+        if action_validator:
+            is_valid, errors = action_validator.validate_action_sequence(optimized_actions, context)
+            if not is_valid:
+                logger.warning(f"Action validation errors: {errors}")
+            
+            # Enhance with verification steps for quality
+            optimized_actions = action_validator.enhance_actions_with_verification(optimized_actions)
+        
+        return optimized_actions
+    
+    def _apply_context_optimizations(
+        self,
+        actions: List[Dict[str, Any]],
+        context: Optional[Dict[str, Any]],
+        strategy: Optional[Dict[str, Any]]
+    ) -> List[Dict[str, Any]]:
+        """Apply context-aware optimizations to action sequence"""
+        if not context_aware or not context or not strategy:
+            return actions
+        
+        optimized = []
+        for i, action in enumerate(actions):
+            action_type = action.get("action_type", "")
+            
+            # Optimize wait times based on context
+            if action_type == "wait" and "duration" in action:
+                # Use context-aware wait time if available
+                prev_action = optimized[-1] if optimized else None
+                if prev_action:
+                    prev_type = prev_action.get("action_type", "").replace("_", "").title() + "Action"
+                    if prev_type == "Action":
+                        prev_type = "WaitAction"
+                    optimal_wait = context_aware.get_optimal_wait_time(
+                        prev_type,
+                        context,
+                        strategy
+                    )
+                    action["duration"] = optimal_wait
+            
+            optimized.append(action)
+            
+            # Add screenshots based on context-aware strategy
+            if context_aware.should_take_screenshot(action_type, i, len(actions), strategy):
+                # Check if next action is already a screenshot
+                if i + 1 < len(actions) and actions[i + 1].get("action_type") == "screenshot":
+                    continue  # Skip duplicate
+                optimized.append({"action_type": "screenshot"})
+        
+        return optimized
+    
+    def _generate_multistep_actions_from_plan(
+        self,
+        execution_plan: Dict[str, Any],
+        context_aware_agent: Optional[Any] = None,
+        detected_website: Optional[str] = None,
+        website_strategy: Optional[Dict[str, Any]] = None
+    ) -> List[Dict[str, Any]]:
+        """Generate actions from multi-step execution plan"""
+        actions = []
+        execution_order = execution_plan.get("execution_order", [])
+        
+        for i, step in enumerate(execution_order):
+            step_description = step.get("description", "")
+            step_type = step.get("task_type", "generic")
+            step_url = step.get("url", "")
+            
+            # Detect context for this step
+            context = None
+            strategy = None
+            if context_aware_agent:
+                context = context_aware_agent.detect_context(step_url, step_description)
+                strategy = context_aware_agent.adapt_strategy(context, step_type)
+            
+            # Add separator between steps (except first)
+            if i > 0:
+                actions.append({"action_type": "wait", "duration": 1.0})
+                actions.append({"action_type": "screenshot"})
+            
+            # Generate actions for this step
+            step_parsed = self.task_parser.parse_task(step_description, step_url)
+            step_actions = []
+            
+            # Route to appropriate generator based on step type
+            if step_type == "login":
+                step_actions = self._generate_login_actions(step_parsed, step_description.lower(), context, strategy)
+            elif step_type == "form":
+                step_actions = self._generate_form_actions(step_parsed, step_description.lower())
+            elif step_type == "click":
+                step_actions = self._generate_click_actions(step_parsed, step_description.lower(), step_parsed.get("target_element"), context)
+            elif step_type == "type":
+                step_actions = self._generate_type_actions(step_parsed, step_description.lower())
+            elif step_type == "modify":
+                step_actions = self._generate_modify_actions(step_parsed, step_description.lower())
+            elif step_type == "search":
+                step_actions = self._generate_search_actions(step_parsed, step_description.lower())
+            elif step_type == "navigate":
+                # Navigation is handled separately
+                if step_url:
+                    step_actions.append({"action_type": "navigate", "url": step_url})
+                    if context_aware_agent and context and strategy:
+                        nav_wait = context_aware_agent.get_optimal_wait_time("NavigateAction", context, strategy)
+                    else:
+                        nav_wait = 1.5
+                    step_actions.append({"action_type": "wait", "duration": nav_wait})
+                    step_actions.append({"action_type": "screenshot"})
+            else:
+                # Generic step - try to generate based on description
+                step_actions = self._generate_click_actions(step_parsed, step_description.lower(), step_parsed.get("target_element"), context)
+            
+            actions.extend(step_actions)
+        
+        # Apply context optimizations
+        if context_aware_agent and execution_order:
+            last_step = execution_order[-1]
+            last_context = context_aware_agent.detect_context(last_step.get("url", ""), last_step.get("description", ""))
+            last_strategy = context_aware_agent.adapt_strategy(last_context, last_step.get("task_type", "generic"))
+            
+            # Merge website strategy
+            if website_strategy and last_strategy:
+                last_strategy.update(website_strategy)
+            elif website_strategy:
+                last_strategy = website_strategy
+            
+            actions = self._apply_context_optimizations(actions, last_context, last_strategy)
+        
+        # Validate and enhance with verification
+        if action_validator:
+            is_valid, errors = action_validator.validate_action_sequence(actions)
+            if not is_valid:
+                logger.warning(f"Multi-step action validation errors: {errors}")
+            actions = action_validator.enhance_actions_with_verification(actions)
+        
         return actions
     
-    def _generate_login_actions(self, parsed: Dict[str, Any], prompt_lower: str) -> List[Dict[str, Any]]:
+    def _generate_login_actions(
+        self,
+        parsed: Dict[str, Any],
+        prompt_lower: str,
+        context: Optional[Dict[str, Any]] = None,
+        strategy: Optional[Dict[str, Any]] = None
+    ) -> List[Dict[str, Any]]:
         """Generate login action sequence"""
         actions = []
         credentials = parsed.get("credentials", {})
@@ -103,7 +393,12 @@ class ActionGenerator:
         password = credentials.get("password") or "password123"
         
         # Wait for page to be ready
-        actions.append({"action_type": "wait", "duration": 1.0})
+        # Use context-aware wait if available
+        if context_aware and context and strategy:
+            initial_wait = context_aware.get_optimal_wait_time("WaitAction", context, strategy)
+        else:
+            initial_wait = 1.0
+        actions.append({"action_type": "wait", "duration": initial_wait})
         
         # Username field - multiple selector strategies
         username_selectors = [
@@ -367,8 +662,14 @@ class ActionGenerator:
         
         return actions
     
-    def _generate_click_actions(self, parsed: Dict[str, Any], prompt_lower: str, target_element: str = None) -> List[Dict[str, Any]]:
-        """Generate click actions with enhanced selector strategies"""
+    def _generate_click_actions(
+        self,
+        parsed: Dict[str, Any],
+        prompt_lower: str,
+        target_element: Optional[str] = None,
+        context: Optional[Dict[str, Any]] = None
+    ) -> List[Dict[str, Any]]:
+        """Generate click actions with enhanced selector strategies and intelligence"""
         actions = []
         
         actions.append({"action_type": "wait", "duration": 1.0})  # Wait for dynamic content
@@ -379,6 +680,24 @@ class ActionGenerator:
         else:
             # Extract target from prompt
             selector_strategies = self.selector_strategy.get_strategies(prompt_lower)
+        
+        # Use selector intelligence to rank and select best selectors
+        if selector_intelligence and context:
+            best_selectors = selector_intelligence.get_best_selectors(
+                selector_strategies,
+                context,
+                max_selectors=3
+            )
+            if best_selectors:
+                selector_strategies = best_selectors
+        
+        # Add website-specific selectors if available
+        if website_detector and website_detector.detected_website:
+            # Try to get site-specific selectors for this element type
+            site_selectors = website_detector.get_site_specific_selectors(target_element or "click")
+            if site_selectors:
+                # Add site-specific selectors to the beginning (higher priority)
+                selector_strategies = site_selectors + selector_strategies
         
         # Use primary selector
         if selector_strategies:
@@ -486,6 +805,195 @@ class ActionGenerator:
         actions.append({"action_type": "screenshot"})
         actions.append({"action_type": "wait", "duration": 0.5})
         actions.append({"action_type": "screenshot"})  # Multiple screenshots for data
+        
+        return actions
+    
+    def _generate_calendar_actions(self, parsed: Dict[str, Any], prompt_lower: str) -> List[Dict[str, Any]]:
+        """Generate calendar-related actions (month view, date selection, event creation)"""
+        actions = []
+        target_element = parsed.get("target_element", "")
+        
+        # Month view selection
+        if "month view" in prompt_lower or "month" in prompt_lower:
+            selectors = self.selector_strategy.get_strategies("month_view", target_element)
+            for selector in selectors[:3]:  # Try up to 3 selectors
+                actions.append({
+                    "action_type": "click",
+                    "selector": selector
+                })
+                actions.append({"action_type": "wait", "duration": 1.0})
+        
+        # Date selection
+        if "date" in prompt_lower or "select date" in prompt_lower:
+            # Extract date if mentioned
+            import re
+            date_match = re.search(r'\d{1,2}[/-]\d{1,2}[/-]\d{2,4}', prompt_lower)
+            if date_match:
+                date_str = date_match.group()
+                # Click on date
+                selectors = self.selector_strategy.get_strategies("date", date_str)
+                for selector in selectors[:2]:
+                    actions.append({
+                        "action_type": "click",
+                        "selector": selector
+                    })
+                    actions.append({"action_type": "wait", "duration": 0.5})
+        
+        # Event creation
+        if "event" in prompt_lower or "create" in prompt_lower:
+            # Click create event button
+            selectors = self.selector_strategy.get_strategies("create_event", "Create Event")
+            for selector in selectors[:2]:
+                actions.append({
+                    "action_type": "click",
+                    "selector": selector
+                })
+                actions.append({"action_type": "wait", "duration": 1.0})
+        
+        # Final screenshot
+        if actions:
+            actions.append({"action_type": "screenshot"})
+        
+        return actions
+    
+    def _generate_file_upload_actions(self, parsed: Dict[str, Any], prompt_lower: str) -> List[Dict[str, Any]]:
+        """Generate file upload actions"""
+        actions = []
+        
+        # Find file input element
+        selectors = self.selector_strategy.get_strategies("file_input", "file")
+        for selector in selectors[:3]:
+            actions.append({
+                "action_type": "click",
+                "selector": selector
+            })
+            actions.append({"action_type": "wait", "duration": 0.5})
+        
+        # For file upload, we typically need to click the input
+        # The actual file selection happens in the browser
+        # Add a wait after clicking file input
+        actions.append({"action_type": "wait", "duration": 1.0})
+        actions.append({"action_type": "screenshot"})
+        
+        return actions
+    
+    def _generate_modal_actions(self, parsed: Dict[str, Any], prompt_lower: str) -> List[Dict[str, Any]]:
+        """Generate modal/dialog actions"""
+        actions = []
+        target_element = parsed.get("target_element", "")
+        
+        # Close modal
+        if "close" in prompt_lower or "dismiss" in prompt_lower:
+            # Try common close button selectors
+            close_selectors = [
+                create_selector("tagContainsSelector", "Close", case_sensitive=False),
+                create_selector("tagContainsSelector", "×", case_sensitive=False),
+                create_selector("tagContainsSelector", "X", case_sensitive=False),
+                create_selector("attributeValueSelector", "close", attribute="class", case_sensitive=False),
+            ]
+            for selector in close_selectors[:2]:
+                actions.append({
+                    "action_type": "click",
+                    "selector": selector
+                })
+                actions.append({"action_type": "wait", "duration": 0.5})
+        
+        # Confirm/OK button
+        elif "confirm" in prompt_lower or "ok" in prompt_lower or "accept" in prompt_lower:
+            selectors = self.selector_strategy.get_strategies("confirm", "Confirm")
+            for selector in selectors[:2]:
+                actions.append({
+                    "action_type": "click",
+                    "selector": selector
+                })
+                actions.append({"action_type": "wait", "duration": 1.0})
+        
+        # Cancel button
+        elif "cancel" in prompt_lower:
+            selectors = self.selector_strategy.get_strategies("cancel", "Cancel")
+            for selector in selectors[:2]:
+                actions.append({
+                    "action_type": "click",
+                    "selector": selector
+                })
+                actions.append({"action_type": "wait", "duration": 0.5})
+        
+        # Final screenshot
+        if actions:
+            actions.append({"action_type": "screenshot"})
+        
+        return actions
+    
+    def _generate_tab_actions(self, parsed: Dict[str, Any], prompt_lower: str) -> List[Dict[str, Any]]:
+        """Generate tab switching actions"""
+        actions = []
+        target_element = parsed.get("target_element", "")
+        
+        # Extract tab name if mentioned
+        tab_name = target_element if target_element else ""
+        if not tab_name:
+            # Try to extract from prompt
+            import re
+            tab_match = re.search(r'(?:tab|switch to|open)\s+([a-z]+)', prompt_lower)
+            if tab_match:
+                tab_name = tab_match.group(1)
+        
+        if tab_name:
+            selectors = self.selector_strategy.get_strategies("tab", tab_name)
+            for selector in selectors[:2]:
+                actions.append({
+                    "action_type": "click",
+                    "selector": selector
+                })
+                actions.append({"action_type": "wait", "duration": 1.0})
+        
+        # Final screenshot
+        if actions:
+            actions.append({"action_type": "screenshot"})
+        
+        return actions
+    
+    def _generate_pagination_actions(self, parsed: Dict[str, Any], prompt_lower: str) -> List[Dict[str, Any]]:
+        """Generate pagination actions"""
+        actions = []
+        
+        # Next page
+        if "next" in prompt_lower:
+            selectors = self.selector_strategy.get_strategies("next_page", "Next")
+            for selector in selectors[:2]:
+                actions.append({
+                    "action_type": "click",
+                    "selector": selector
+                })
+                actions.append({"action_type": "wait", "duration": 1.5})
+        
+        # Previous page
+        elif "previous" in prompt_lower or "prev" in prompt_lower:
+            selectors = self.selector_strategy.get_strategies("previous_page", "Previous")
+            for selector in selectors[:2]:
+                actions.append({
+                    "action_type": "click",
+                    "selector": selector
+                })
+                actions.append({"action_type": "wait", "duration": 1.5})
+        
+        # Go to specific page
+        elif "page" in prompt_lower:
+            import re
+            page_match = re.search(r'page\s+(\d+)', prompt_lower)
+            if page_match:
+                page_num = page_match.group(1)
+                selectors = self.selector_strategy.get_strategies("page_number", page_num)
+                for selector in selectors[:2]:
+                    actions.append({
+                        "action_type": "click",
+                        "selector": selector
+                    })
+                    actions.append({"action_type": "wait", "duration": 1.5})
+        
+        # Final screenshot
+        if actions:
+            actions.append({"action_type": "screenshot"})
         
         return actions
     

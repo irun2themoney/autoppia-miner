@@ -40,18 +40,40 @@ class TaskParser:
         ]
     
     def extract_credentials(self, prompt: str) -> Dict[str, Optional[str]]:
-        """Extract credentials from prompt"""
+        """Extract credentials from prompt - Enhanced with more patterns"""
         prompt_lower = prompt.lower()
         credentials = {}
         
-        for cred_type, patterns in self.credential_patterns.items():
+        # Enhanced patterns for better extraction
+        enhanced_patterns = {
+            "username": [
+                r"username[:\s=]+([^\s<,]+)",
+                r"user[:\s=]+([^\s<,]+)",
+                r"login[:\s=]+([^\s<,]+)",
+                r"user\s+name[:\s=]+([^\s<,]+)",
+                r"uname[:\s=]+([^\s<,]+)",
+            ],
+            "password": [
+                r"password[:\s=]+([^\s<,]+)",
+                r"pass[:\s=]+([^\s<,]+)",
+                r"pwd[:\s=]+([^\s<,]+)",
+            ],
+            "email": [
+                r"email[:\s=]+([^\s<,]+@[^\s<,]+)",
+                r"e-mail[:\s=]+([^\s<,]+@[^\s<,]+)",
+                r"mail[:\s=]+([^\s<,]+@[^\s<,]+)",
+            ],
+        }
+        
+        for cred_type, patterns in enhanced_patterns.items():
             for pattern in patterns:
                 match = re.search(pattern, prompt_lower, re.IGNORECASE)
                 if match:
                     value = match.group(1)
-                    # Clean up common placeholders
+                    # Clean up common placeholders and separators
                     value = value.replace("<web_agent_id>", "").strip()
-                    if value:
+                    value = value.rstrip(".,;:!?")  # Remove trailing punctuation
+                    if value and len(value) > 0:
                         credentials[cred_type] = value
                         break
         

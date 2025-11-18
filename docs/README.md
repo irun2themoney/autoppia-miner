@@ -1,56 +1,82 @@
-# Documentation Index
+# 📚 Documentation Index
 
-This directory contains all project documentation organized by category.
+**Auttoppia Miner - Complete Documentation**
 
-## 📚 Documentation Categories
+---
 
-### Compliance & Standards
-- `COMPLIANCE_CHECK.md` - Compliance status with official patterns
-- `COMPLIANCE_UPDATES.md` - Updates made for compliance
+## 🚀 **Getting Started**
 
-### Architecture & Implementation
-- `IMPLEMENTATION_GUIDE.md` - Complete implementation guide
-- `REBUILD_PLAN.md` - Rebuild plan from ground up
-- `PHASE1_STATUS.md` - Phase 1 completion status
+- **[Quick Start Guide](QUICK_START_GUIDE.md)** - Get up and running quickly
+- **[Project Organization](PROJECT_ORGANIZATION.md)** - Project structure overview
+- **[Security Audit](SECURITY_AUDIT.md)** - Security assessment
 
-### Features & Improvements
-- `CURRENT_RATING.md` - Current miner rating (8.5-9.0/10)
-- `IMPROVEMENTS_SUMMARY.md` - Summary of improvements
-- `LATEST_IMPROVEMENTS_V2.md` - Latest improvements v2
-- `ROADMAP_TO_8.md` - Roadmap to 8/10 rating
-- `MINER_RATING.md` - Detailed rating breakdown
+---
 
-### Deployment & Operations
-- `DEPLOYMENT.md` - Deployment guide
-- `DEPLOY_STEPS.md` - Step-by-step deployment
-- `QUICK_DEPLOY.md` - Quick deployment guide
-- `SIMPLE_HTTPS.md` - HTTPS setup guide
-- `MONITORING.md` - Monitoring guide
+## 📦 **Deployment**
 
-### API & Testing
-- `BENCHMARK_API_INFO.md` - Benchmark API information
-- `BENCHMARK_ANALYSIS.md` - Benchmark analysis
-- `FIND_BENCHMARK_API.md` - Finding benchmark API
-- `TEST_ON_PLAYGROUND.md` - Testing on playground
+- **[Deployment Guide](deployment/DEPLOYMENT.md)** - Complete deployment instructions
+- **[Deploy Now](deployment/DEPLOY_NOW.md)** - Quick deployment checklist
+- **[Deployment Status](deployment/FINAL_DEPLOYMENT_STATUS.md)** - Deployment status
 
-### Chutes Integration
-- `CHUTES_INTEGRATION.md` - Chutes API integration
-- `CHUTES_FIX.md` - Chutes API fixes
-- `CHUTES_MODELS.md` - Chutes model selection
-- `CHUTES_RATE_LIMIT_FIX.md` - Rate limit handling
+---
 
-### Troubleshooting
-- `FIX_FETCH_ERROR.md` - Fix fetch errors
-- `NEXT_STEPS.md` - Next steps
-- `IMPROVEMENTS_NEEDED.md` - Improvements needed
+## ✅ **Testing & Compliance**
 
-### Resources
-- `IMPORTANT_LINKS.md` - Important links and resources
-- `CLEANUP_SUMMARY.md` - Cleanup summary
+- **[Official Testing Guide](OFFICIAL_TESTING_GUIDE.md)** - Official test procedures
+- **[Quick Test Guide](QUICK_TEST_GUIDE.md)** - Quick testing
+- **[Pre-Deployment Testing](PRE_DEPLOYMENT_TESTING.md)** - Pre-deployment checks
+- **[Testing Summary](TESTING_SUMMARY.md)** - Test results summary
+- **[Compliance Status](COMPLIANCE_STATUS.md)** - Compliance verification
+- **[Ratings](ratings/)** - Rating and compliance documents
 
-## 🚀 Quick Links
+---
 
-- **Main README**: `/README.md`
-- **Official Docs**: https://luxit.gitbook.io/autoppia-docs
-- **IWA Playground**: https://infinitewebarena.autoppia.com/playground
+## 📊 **Monitoring**
 
+- **[Monitoring Guide](MONITORING.md)** - Monitoring your miner
+- **[Validator Discovery](VALIDATOR_DISCOVERY.md)** - Validator discovery process
+- **[Dashboard Completeness](DASHBOARD_COMPLETENESS.md)** - Dashboard information
+- **[Status Updates](status/)** - Status reports and updates
+
+---
+
+## 🔧 **Development**
+
+- **[Implementation Guide](IMPLEMENTATION_GUIDE.md)** - Implementation details
+- **[Top Miner Analysis](TOP_MINER_ANALYSIS.md)** - Analysis of top miners
+- **[Top Miner Learnings](TOP_MINER_LEARNINGS.md)** - Learnings from top miners
+- **[Competitive Advantages](COMPETITIVE_ADVANTAGES.md)** - Competitive analysis
+
+---
+
+## 🎯 **Features & Enhancements**
+
+- **[Dynamic 3 Optimizations](DYNAMIC_3_OPTIMIZATIONS.md)** - Dynamic 3 optimizations
+- **[Next Level Strategy](NEXT_LEVEL_STRATEGY.md)** - Advanced strategies
+- **[Improvements Made](IMPROVEMENTS_MADE.md)** - Completed improvements
+
+---
+
+## 🐛 **Troubleshooting**
+
+- **[Playground Testing](PLAYGROUND_TESTING_STRATEGY.md)** - Playground testing
+- **[Playground Errors](PLAYGROUND_ERRORS_EXPLAINED.md)** - Common errors
+- **[Validator Discovery](validator/)** - Validator discovery troubleshooting
+
+---
+
+## 📁 **Archived Documentation**
+
+- **[Archive](archive/)** - Historical documentation
+- **[Chutes Documentation](chutes/)** - Chutes-related docs (deprecated)
+- **[Status Updates](status/)** - Historical status updates
+
+---
+
+## 🔗 **Important Links**
+
+- **[Important Links](IMPORTANT_LINKS.md)** - Key links and resources
+
+---
+
+**Last Updated**: November 18, 2025
