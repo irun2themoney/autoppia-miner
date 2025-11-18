@@ -72,7 +72,7 @@ async def get_metrics():
 
 
 @router.post("/solve_task")
-async def solve_task(request: TaskRequest, http_request: Request = None):
+async def solve_task(request: TaskRequest, http_request: Request):
     """
     Main endpoint - matches ApifiedWebAgent expectations
     Input: task.clean_task() format
@@ -85,10 +85,20 @@ async def solve_task(request: TaskRequest, http_request: Request = None):
     validator_ip = None
     
     # Get validator IP if available
+    validator_ip = None
     try:
-        if http_request and hasattr(http_request, 'client'):
-            validator_ip = getattr(http_request.client, 'host', None)
-    except:
+        if http_request:
+            # Try to get client IP from request
+            if hasattr(http_request, 'client') and http_request.client:
+                validator_ip = getattr(http_request.client, 'host', None)
+            # Fallback to headers
+            if not validator_ip:
+                forwarded = http_request.headers.get("X-Forwarded-For")
+                if forwarded:
+                    validator_ip = forwarded.split(",")[0].strip()
+                else:
+                    validator_ip = http_request.headers.get("X-Real-IP")
+    except Exception as e:
         pass
     
     # Parse task for metrics
