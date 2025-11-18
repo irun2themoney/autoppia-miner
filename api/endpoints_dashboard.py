@@ -964,10 +964,13 @@ async def dashboard_metrics():
         metrics["anti_overfitting"] = {}
         metrics["task_diversity"] = {}
     
-    # Store current metrics before rebuilding from logs
+    # Store current in-memory metrics (source of truth)
+    current_total_requests = metrics["overview"]["total_requests"]
+    current_successful = metrics["overview"]["successful_requests"]
+    current_failed = metrics["overview"]["failed_requests"]
     current_response_times = list(advanced_metrics.response_times) if hasattr(advanced_metrics, 'response_times') else []
     
-    # Rebuild metrics from logs (validator-only), but preserve response time data
+    # Supplement with historical log data (for recent activity display), but don't replace in-memory counts
     try:
         result = subprocess.run(
             ["journalctl", "-u", "autoppia-api", "--since", "24 hours ago", "--no-pager"],
@@ -1008,15 +1011,34 @@ async def dashboard_metrics():
                 and a.get("ip") != "134.199.203.133"
             ]
             
-            if validator_activity:
-                metrics["overview"]["total_requests"] = len(validator_activity)
-                metrics["overview"]["successful_requests"] = sum(1 for a in validator_activity if a["success"])
-                metrics["overview"]["failed_requests"] = sum(1 for a in validator_activity if not a["success"])
+            # Use in-memory metrics as source of truth (they accumulate correctly)
+            # Only use log data for recent activity display and validator tracking
+            # Take the maximum to ensure count never decreases
+            log_count = len(validator_activity)
+            metrics["overview"]["total_requests"] = max(current_total_requests, log_count)
+            metrics["overview"]["successful_requests"] = max(
+                current_successful, 
+                sum(1 for a in validator_activity if a["success"])
+            )
+            metrics["overview"]["failed_requests"] = max(
+                current_failed,
+                sum(1 for a in validator_activity if not a["success"])
+            )
                 
+                # Recalculate success rate based on updated counts
                 if metrics["overview"]["total_requests"] > 0:
                     metrics["overview"]["success_rate"] = round(
                         (metrics["overview"]["successful_requests"] / metrics["overview"]["total_requests"]) * 100, 2
                     )
+                else:
+                    # Fallback to in-memory metrics if no log data
+                    metrics["overview"]["total_requests"] = current_total_requests
+                    metrics["overview"]["successful_requests"] = current_successful
+                    metrics["overview"]["failed_requests"] = current_failed
+                    if current_total_requests > 0:
+                        metrics["overview"]["success_rate"] = round(
+                            (current_successful / current_total_requests) * 100, 2
+                        )
                 
                 if current_response_times and len(current_response_times) > 0:
                     metrics["performance"]["avg_response_time"] = round(sum(current_response_times) / len(current_response_times), 3)
