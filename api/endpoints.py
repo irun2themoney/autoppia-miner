@@ -63,7 +63,7 @@ async def solve_task_options():
 @router.get("/metrics")
 async def get_metrics():
     """Get performance metrics"""
-    from ..utils.metrics import metrics
+    from api.utils.metrics import metrics
     return JSONResponse(
         content=metrics.get_metrics(),
         status_code=200,
