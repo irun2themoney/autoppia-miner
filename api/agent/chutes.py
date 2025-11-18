@@ -587,8 +587,8 @@ JSON only, no other text:"""
         max_attempts = 3
         for attempt in range(max_attempts):
             try:
-            # Parse task to extract information
-            parsed_task = self.task_parser.parse_task(prompt, url)
+                # Parse task to extract information
+                parsed_task = self.task_parser.parse_task(prompt, url)
             logging.info(f"Using Chutes LLM (model: {self.model}) for task: {prompt[:50]}...")
             
             # Use parsed URL if extracted
