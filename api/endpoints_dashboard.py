@@ -827,23 +827,47 @@ async def dashboard():
                     
                     // Recent activity
                     if (validators.recent_activity && validators.recent_activity.length > 0) {
-                        let html = '<table><tr><th>Time</th><th>IP</th><th>Status</th><th>Time</th></tr>';
+                        let html = '<table><tr><th>Time</th><th>IP</th><th>Status</th><th>Response Time</th></tr>';
                         validators.recent_activity.slice(-10).reverse().forEach(a => {
-                            const status = a.success ? '<span class="badge badge-success">OK</span>' : '<span class="badge badge-error">FAIL</span>';
-                            let timeStr = a.time;
-                            if (!timeStr.endsWith('Z') && !timeStr.includes('+') && !timeStr.includes('-', 10)) {
-                                timeStr = timeStr + 'Z';
+                            // Handle both Python boolean (True/False) and JavaScript boolean (true/false)
+                            const isSuccess = a.success === true || a.success === 'True' || a.success === 'true';
+                            const status = isSuccess ? '<span class="badge badge-success">OK</span>' : '<span class="badge badge-error">FAIL</span>';
+                            
+                            // Handle both 'time' and 'timestamp' fields
+                            let timeStr = a.time || a.timestamp || '';
+                            if (timeStr) {
+                                // Ensure timezone indicator for proper parsing
+                                if (!timeStr.endsWith('Z') && !timeStr.includes('+') && !timeStr.includes('-', 10)) {
+                                    timeStr = timeStr + 'Z';
+                                }
+                                
+                                try {
+                                    const date = new Date(timeStr);
+                                    // Check if date is valid
+                                    if (!isNaN(date.getTime())) {
+                                        const timeFormatted = date.toLocaleString('en-US', { 
+                                            timeZone: 'America/Chicago',
+                                            hour: '2-digit',
+                                            minute: '2-digit',
+                                            second: '2-digit',
+                                            hour12: true,
+                                            month: 'short',
+                                            day: 'numeric'
+                                        });
+                                        const respTime = (a.response_time && a.response_time > 0) ? a.response_time.toFixed(3) + 's' : '<span style="color: #86868b;">-</span>';
+                                        html += `<tr><td>${timeFormatted}</td><td><code>${a.ip || 'unknown'}</code></td><td>${status}</td><td>${respTime}</td></tr>`;
+                                    } else {
+                                        // Invalid date, show raw timestamp
+                                        html += `<tr><td>${timeStr}</td><td><code>${a.ip || 'unknown'}</code></td><td>${status}</td><td>-</td></tr>`;
+                                    }
+                                } catch (e) {
+                                    // Error parsing date, show raw timestamp
+                                    html += `<tr><td>${timeStr}</td><td><code>${a.ip || 'unknown'}</code></td><td>${status}</td><td>-</td></tr>`;
+                                }
+                            } else {
+                                // No timestamp, show what we have
+                                html += `<tr><td>-</td><td><code>${a.ip || 'unknown'}</code></td><td>${status}</td><td>-</td></tr>`;
                             }
-                            const date = new Date(timeStr);
-                            const timeFormatted = date.toLocaleString('en-US', { 
-                                timeZone: 'America/Chicago',
-                                hour: '2-digit',
-                                minute: '2-digit',
-                                second: '2-digit',
-                                hour12: true
-                            });
-                            const respTime = a.response_time > 0 ? a.response_time.toFixed(3) + 's' : '<span style="color: #666;">-</span>';
-                            html += `<tr><td>${timeFormatted}</td><td><code>${a.ip}</code></td><td>${status}</td><td>${respTime}</td></tr>`;
                         });
                         html += '</table>';
                         document.getElementById('recent-activity').innerHTML = html;
@@ -1199,15 +1223,33 @@ async def dashboard_metrics():
     # WALLET INFO: Add wallet balance and stake information
     try:
         wallet_info = get_wallet_info()
-        metrics["wallet"] = wallet_info
-    except Exception:
+        # Map the wallet_info keys to match what the dashboard expects
         metrics["wallet"] = {
-            "balance_tao": 0.0,
-            "stake_tao": 0.0,
+            "balance": wallet_info.get("balance_tao", 0.0),
+            "total_stake": wallet_info.get("stake_tao", 0.0),
+            "your_stake": wallet_info.get("your_stake_tao", 0.0),
+            "delegator_stake": wallet_info.get("delegator_stake_tao", 0.0),
+            "rank": wallet_info.get("rank", 0.0),
+            "trust": wallet_info.get("trust", 0.0),
+            "incentive": wallet_info.get("incentive", 0.0),
+            "uid": wallet_info.get("uid", None),
+            # Also include original keys for backwards compatibility
+            "balance_tao": wallet_info.get("balance_tao", 0.0),
+            "stake_tao": wallet_info.get("stake_tao", 0.0),
+            "your_stake_tao": wallet_info.get("your_stake_tao", 0.0),
+            "delegator_stake_tao": wallet_info.get("delegator_stake_tao", 0.0),
+        }
+    except Exception as e:
+        metrics["wallet"] = {
+            "balance": 0.0,
+            "total_stake": 0.0,
+            "your_stake": 0.0,
+            "delegator_stake": 0.0,
             "rank": 0.0,
             "trust": 0.0,
             "incentive": 0.0,
-            "uid": None
+            "uid": None,
+            "error": str(e)
         }
     
     # ROUND INFO: Add current round information
@@ -1317,10 +1359,13 @@ async def dashboard_metrics():
             
             validator_activity = list(combined_activity.values())
             
+            # Sort by time (most recent first) for display
+            validator_activity.sort(key=lambda x: x.get("time", x.get("timestamp", "")), reverse=True)
+            
             # Use validator activity from logs as source of truth (filters out localhost)
             # In-memory metrics may include old localhost data, so we prioritize filtered validator activity
             validator_total = len(validator_activity)
-            validator_successful = sum(1 for a in validator_activity if a.get("success", False))
+            validator_successful = sum(1 for a in validator_activity if a.get("success", False) or a.get("success") == "True" or a.get("success") == "true")
             validator_failed = validator_total - validator_successful
             
             # Always use validator activity counts (filters localhost correctly)
@@ -1382,7 +1427,20 @@ async def dashboard_metrics():
                 )
             
             validator_activity.sort(key=lambda x: x.get("time", ""), reverse=True)
-            metrics["validators"]["recent_activity"] = validator_activity[:20]
+            # Ensure recent_activity is sorted by time (most recent first) and limit to 20
+            # Also ensure boolean values are properly formatted for JSON
+            recent_activity_formatted = []
+            for activity in validator_activity[:20]:
+                formatted = {
+                    "time": activity.get("time", activity.get("timestamp", "")),
+                    "ip": activity.get("ip", "unknown"),
+                    "success": bool(activity.get("success", False) if isinstance(activity.get("success"), bool) else str(activity.get("success", "False")).lower() == "true"),
+                    "response_time": float(activity.get("response_time", 0.0)),
+                    "source": activity.get("source", "validator")
+                }
+                recent_activity_formatted.append(formatted)
+            
+            metrics["validators"]["recent_activity"] = recent_activity_formatted
             metrics["validators"]["unique_validators"] = len(set(a["ip"] for a in validator_activity))
             
             from collections import Counter
