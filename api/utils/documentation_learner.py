@@ -18,7 +18,8 @@ class DocumentationLearner:
     
     # Official Autoppia sources to monitor
     OFFICIAL_SOURCES = {
-        "github": "https://api.github.com/repos/autoppia/autoppia/contents/docs",
+        "github_subnet": "https://api.github.com/repos/autoppia/autoppia_web_agents_subnet",
+        "github_iwa": "https://api.github.com/repos/autoppia/autoppia_iwa",
         "substack": "https://autoppia.substack.com",
         "discord": None,  # Would need Discord API integration
         "iwa_platform": "https://infinitewebarena.autoppia.com",
