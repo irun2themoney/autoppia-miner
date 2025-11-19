@@ -1218,7 +1218,8 @@ async def dashboard_metrics():
     
     advanced_metrics = get_advanced_metrics()
     metrics = advanced_metrics.get_comprehensive_metrics()
-    metrics["health_score"] = advanced_metrics.get_health_score()
+    # Health score will be recalculated after we update metrics from logs
+    # Don't set it here as it might be based on stale data
     
     # WALLET INFO: Add wallet balance and stake information
     try:
@@ -1451,6 +1452,28 @@ async def dashboard_metrics():
             ]
     except Exception:
         pass
+    
+    # Calculate health score (even if log parsing failed)
+    # This ensures health score is always calculated based on current metrics
+    if "health_score" not in metrics or metrics.get("health_score", 0) == 0:
+        uptime_hours = metrics["overview"].get("uptime_hours", 0.0)
+        # If uptime is 0, try to calculate it from start_time
+        if uptime_hours == 0.0 and hasattr(advanced_metrics, 'start_time'):
+            import time
+            uptime_seconds = time.time() - advanced_metrics.start_time
+            uptime_hours = max(0.01, uptime_seconds / 3600)  # At least 0.01 hours
+            metrics["overview"]["uptime_hours"] = round(uptime_hours, 2)
+        
+        if metrics["overview"]["total_requests"] > 0:
+            success_rate = metrics["overview"].get("success_rate", 0)
+            avg_response_time = metrics["performance"].get("avg_response_time", 0.0)
+            response_time_score = max(0, 100 - (avg_response_time * 10))
+            uptime_score = min(100, uptime_hours * 10)
+            metrics["health_score"] = round(
+                success_rate * 0.5 + response_time_score * 0.3 + uptime_score * 0.2, 2
+            )
+        else:
+            metrics["health_score"] = 0.0
     
     # Ensure proper JSON serialization
     import json
