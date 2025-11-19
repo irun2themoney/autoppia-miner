@@ -101,31 +101,75 @@ class SelectorStrategy:
             strategies.append(create_selector("attributeValueSelector", "cancel", attribute="class", case_sensitive=False))
             return strategies
         
-        # Job-specific selectors (NEW - for AutoConnect)
+        # Job-specific selectors (Enhanced for AutoConnect - Tok's weak point)
         if element_lower == "job_search":
-            strategies.append(create_selector("tagSelector", "input", attributes={"type": "search"}))
-            strategies.append(create_selector("tagSelector", "input", attributes={"name": "search"}))
-            strategies.append(create_selector("tagSelector", "input", attributes={"placeholder": "*job*"}))
-            strategies.append(create_selector("attributeValueSelector", "job-search", attribute="id"))
-            strategies.append(create_selector("attributeValueSelector", "job-search", attribute="class"))
-            strategies.append(create_selector("attributeValueSelector", "search", attribute="data-testid"))
+            strategies.append(create_selector("attributeValueSelector", "search", attribute="type", case_sensitive=False))
+            strategies.append(create_selector("attributeValueSelector", "search", attribute="name", case_sensitive=False))
+            strategies.append(create_selector("attributeValueSelector", "job-search", attribute="id", case_sensitive=False))
+            strategies.append(create_selector("attributeValueSelector", "job-search", attribute="data-testid", case_sensitive=False))
+            strategies.append(create_selector("attributeValueSelector", "search", attribute="data-testid", case_sensitive=False))
+            strategies.append(create_selector("tagContainsSelector", "job", case_sensitive=False))
             return strategies
         
         if element_lower == "job_card":
-            strategies.append(create_selector("attributeValueSelector", "job-card", attribute="class"))
-            strategies.append(create_selector("attributeValueSelector", "job-listing", attribute="class"))
-            strategies.append(create_selector("attributeValueSelector", "job-item", attribute="class"))
-            strategies.append(create_selector("tagSelector", "div", attributes={"data-job-id": "*"}))
-            strategies.append(create_selector("attributeValueSelector", "job", attribute="data-testid"))
+            strategies.append(create_selector("attributeValueSelector", "job-card", attribute="class", case_sensitive=False))
+            strategies.append(create_selector("attributeValueSelector", "job-listing", attribute="class", case_sensitive=False))
+            strategies.append(create_selector("attributeValueSelector", "job-item", attribute="class", case_sensitive=False))
+            strategies.append(create_selector("attributeValueSelector", "job", attribute="data-testid", case_sensitive=False))
+            strategies.append(create_selector("attributeValueSelector", "job", attribute="data-job-id", case_sensitive=False))
+            strategies.append(create_selector("tagContainsSelector", "job", case_sensitive=False))
             return strategies
         
         if element_lower == "apply_button":
             strategies.append(create_selector("tagContainsSelector", "Apply", case_sensitive=False))
             strategies.append(create_selector("tagContainsSelector", "Apply Now", case_sensitive=False))
-            strategies.append(create_selector("attributeValueSelector", "apply", attribute="data-action"))
-            strategies.append(create_selector("attributeValueSelector", "apply-button", attribute="class"))
-            strategies.append(create_selector("tagSelector", "a", attributes={"href": "*apply*"}))
-            strategies.append(create_selector("attributeValueSelector", "apply", attribute="data-testid"))
+            strategies.append(create_selector("attributeValueSelector", "apply", attribute="data-action", case_sensitive=False))
+            strategies.append(create_selector("attributeValueSelector", "apply-button", attribute="class", case_sensitive=False))
+            strategies.append(create_selector("attributeValueSelector", "apply", attribute="data-testid", case_sensitive=False))
+            strategies.append(create_selector("tagContainsSelector", "apply", case_sensitive=False))
+            return strategies
+        
+        # AutoList-specific selectors (Tok's weak point - 50%)
+        if element_lower == "add_item" or element_lower == "add_button":
+            strategies.append(create_selector("tagContainsSelector", "Add", case_sensitive=False))
+            strategies.append(create_selector("tagContainsSelector", "New Item", case_sensitive=False))
+            strategies.append(create_selector("tagContainsSelector", "Add Item", case_sensitive=False))
+            strategies.append(create_selector("attributeValueSelector", "add", attribute="data-action", case_sensitive=False))
+            strategies.append(create_selector("attributeValueSelector", "add-item", attribute="data-testid", case_sensitive=False))
+            strategies.append(create_selector("attributeValueSelector", "add", attribute="aria-label", case_sensitive=False))
+            return strategies
+        
+        if element_lower == "list_item":
+            strategies.append(create_selector("attributeValueSelector", "list-item", attribute="class", case_sensitive=False))
+            strategies.append(create_selector("attributeValueSelector", "item", attribute="class", case_sensitive=False))
+            strategies.append(create_selector("attributeValueSelector", "item", attribute="data-item", case_sensitive=False))
+            strategies.append(create_selector("attributeValueSelector", "list-item", attribute="data-testid", case_sensitive=False))
+            strategies.append(create_selector("tagSelector", "li"))
+            return strategies
+        
+        # AutoMail-specific selectors (Tok's weak point - 50%)
+        if element_lower == "compose_button":
+            strategies.append(create_selector("tagContainsSelector", "Compose", case_sensitive=False))
+            strategies.append(create_selector("tagContainsSelector", "New Email", case_sensitive=False))
+            strategies.append(create_selector("tagContainsSelector", "New Message", case_sensitive=False))
+            strategies.append(create_selector("attributeValueSelector", "compose", attribute="data-action", case_sensitive=False))
+            strategies.append(create_selector("attributeValueSelector", "compose", attribute="data-testid", case_sensitive=False))
+            strategies.append(create_selector("attributeValueSelector", "compose", attribute="aria-label", case_sensitive=False))
+            return strategies
+        
+        if element_lower == "send_button":
+            strategies.append(create_selector("tagContainsSelector", "Send", case_sensitive=False))
+            strategies.append(create_selector("attributeValueSelector", "send", attribute="data-action", case_sensitive=False))
+            strategies.append(create_selector("attributeValueSelector", "send", attribute="data-testid", case_sensitive=False))
+            strategies.append(create_selector("attributeValueSelector", "send", attribute="type", case_sensitive=False))
+            return strategies
+        
+        if element_lower == "email_list" or element_lower == "email_item":
+            strategies.append(create_selector("attributeValueSelector", "email-list", attribute="class", case_sensitive=False))
+            strategies.append(create_selector("attributeValueSelector", "email-item", attribute="class", case_sensitive=False))
+            strategies.append(create_selector("attributeValueSelector", "email", attribute="data-email", case_sensitive=False))
+            strategies.append(create_selector("attributeValueSelector", "email-item", attribute="data-testid", case_sensitive=False))
+            strategies.append(create_selector("tagContainsSelector", "email", case_sensitive=False))
             return strategies
         
         # Fallback to original prompt-based logic

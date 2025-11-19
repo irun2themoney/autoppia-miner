@@ -24,52 +24,43 @@ async def dashboard():
         <style>
             * { margin: 0; padding: 0; box-sizing: border-box; }
             body { 
-                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-                background: linear-gradient(135deg, #f5f7fa 0%, #e8ecf1 100%);
-                padding: 12px;
-                color: #2c3e50;
-                font-size: 11px;
-                line-height: 1.4;
+                font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', sans-serif;
+                background: #f5f5f7;
+                padding: 20px;
+                color: #1d1d1f;
+                font-size: 14px;
+                line-height: 1.5;
+                min-height: 100vh;
             }
             .header { 
                 display: flex;
                 justify-content: space-between;
                 align-items: center;
-                margin-bottom: 12px;
-                padding: 12px 16px;
-                background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
-                border-radius: 12px;
-                box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-                border: 1px solid rgba(0,0,0,0.05);
-                transition: transform 0.2s ease, box-shadow 0.2s ease;
-            }
-            .header:hover {
-                transform: translateY(-1px);
-                box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+                margin-bottom: 24px;
+                padding: 16px 0;
+                background: transparent;
             }
             .header h1 { 
-                font-size: 18px; 
-                font-weight: 700; 
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                -webkit-background-clip: text;
-                -webkit-text-fill-color: transparent;
-                background-clip: text;
+                font-size: 32px; 
+                font-weight: 600; 
+                color: #1d1d1f;
+                letter-spacing: -0.5px;
             }
             .header-info { 
-                font-size: 11px; 
-                color: #6c757d;
+                font-size: 13px; 
+                color: #86868b;
                 display: flex;
                 align-items: center;
+                font-weight: 400;
             }
             .refresh-indicator {
                 display: inline-block;
-                width: 10px;
-                height: 10px;
+                width: 8px;
+                height: 8px;
                 border-radius: 50%;
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                background: #34c759;
                 margin-right: 8px;
-                animation: pulse 2s infinite, rotate 3s linear infinite;
-                box-shadow: 0 0 8px rgba(102, 126, 234, 0.4);
+                animation: pulse 2s infinite;
             }
             @keyframes pulse {
                 0%, 100% { opacity: 1; transform: scale(1); }
@@ -85,216 +76,147 @@ async def dashboard():
             }
             .grid { 
                 display: grid; 
-                grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); 
-                gap: 10px; 
-                margin-bottom: 12px; 
+                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); 
+                gap: 12px; 
+                margin-bottom: 24px; 
             }
             .card { 
-                background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
-                padding: 12px; 
+                background: #ffffff;
+                padding: 20px; 
                 border-radius: 12px; 
-                border: 1px solid rgba(0,0,0,0.05);
-                box-shadow: 0 2px 8px rgba(0,0,0,0.06);
-                transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-                animation: fadeIn 0.5s ease-out;
-                position: relative;
-                overflow: hidden;
-            }
-            .card::before {
-                content: '';
-                position: absolute;
-                top: 0;
-                left: 0;
-                right: 0;
-                height: 3px;
-                background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
-                transform: scaleX(0);
-                transition: transform 0.3s ease;
+                box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+                transition: all 0.2s ease;
             }
             .card:hover {
-                transform: translateY(-4px);
-                box-shadow: 0 8px 20px rgba(0,0,0,0.12);
-            }
-            .card:hover::before {
-                transform: scaleX(1);
+                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
             }
             .card-title { 
-                color: #6c757d; 
-                font-size: 9px; 
-                margin-bottom: 6px;
-                text-transform: uppercase;
-                letter-spacing: 0.8px;
-                font-weight: 600;
+                color: #86868b; 
+                font-size: 13px; 
+                margin-bottom: 8px;
+                font-weight: 400;
             }
             .card-value { 
-                font-size: 24px; 
-                font-weight: 700; 
-                color: #2c3e50;
+                font-size: 28px; 
+                font-weight: 600; 
+                color: #1d1d1f;
                 line-height: 1.2;
-                transition: all 0.3s ease;
-            }
-            .card:hover .card-value {
-                transform: scale(1.05);
+                letter-spacing: -0.3px;
             }
             .card-value.good { 
-                background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
-                -webkit-background-clip: text;
-                -webkit-text-fill-color: transparent;
-                background-clip: text;
+                color: #34c759;
             }
             .card-value.warning { 
-                background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-                -webkit-background-clip: text;
-                -webkit-text-fill-color: transparent;
-                background-clip: text;
+                color: #ff9500;
             }
             .card-value.error { 
-                background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
-                -webkit-background-clip: text;
-                -webkit-text-fill-color: transparent;
-                background-clip: text;
+                color: #ff3b30;
             }
             .card-sub { 
-                font-size: 10px; 
-                color: #868e96; 
+                font-size: 13px; 
+                color: #86868b; 
                 margin-top: 4px;
-                font-weight: 500;
+                font-weight: 400;
             }
             .section { 
-                background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
-                padding: 12px; 
+                background: #ffffff;
+                padding: 20px; 
                 border-radius: 12px; 
-                margin-bottom: 10px; 
-                border: 1px solid rgba(0,0,0,0.05);
-                box-shadow: 0 2px 8px rgba(0,0,0,0.06);
-                transition: all 0.3s ease;
-                animation: fadeIn 0.6s ease-out;
+                margin-bottom: 16px; 
+                box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+                transition: all 0.2s ease;
             }
             .section:hover {
-                box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
             }
             .section-title { 
-                font-size: 11px; 
-                font-weight: 700; 
-                margin-bottom: 10px; 
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                -webkit-background-clip: text;
-                -webkit-text-fill-color: transparent;
-                background-clip: text;
-                text-transform: uppercase;
-                letter-spacing: 0.8px;
+                font-size: 17px; 
+                font-weight: 600; 
+                margin-bottom: 16px; 
+                color: #1d1d1f;
+                letter-spacing: -0.2px;
             }
             table { 
                 width: 100%; 
                 border-collapse: collapse; 
-                font-size: 10px;
+                font-size: 14px;
             }
             th, td { 
-                padding: 8px 10px; 
+                padding: 12px 0; 
                 text-align: left; 
-                border-bottom: 1px solid rgba(0,0,0,0.05); 
+                border-bottom: 1px solid #f5f5f7; 
             }
             th { 
-                color: #6c757d;
-                font-weight: 700;
-                font-size: 9px;
-                text-transform: uppercase;
-                letter-spacing: 0.5px;
+                color: #86868b;
+                font-weight: 400;
+                font-size: 13px;
             }
             td { 
-                color: #495057; 
-                font-weight: 500;
-            }
-            tr { 
-                transition: all 0.2s ease;
+                color: #1d1d1f; 
+                font-weight: 400;
             }
             tr:hover { 
-                background: linear-gradient(90deg, rgba(102, 126, 234, 0.05) 0%, rgba(118, 75, 162, 0.05) 100%);
-                transform: translateX(4px);
+                background: #fafafa;
             }
             .status-good { 
-                color: #28a745; 
-                font-weight: 700; 
+                color: #34c759; 
+                font-weight: 400; 
             }
             .status-error { 
-                color: #dc3545; 
-                font-weight: 700; 
+                color: #ff3b30; 
+                font-weight: 400; 
             }
             .badge { 
                 padding: 4px 10px; 
-                border-radius: 20px; 
-                font-size: 9px; 
-                font-weight: 700; 
+                border-radius: 6px; 
+                font-size: 12px; 
+                font-weight: 400; 
                 display: inline-block;
-                transition: all 0.2s ease;
-            }
-            .badge:hover {
-                transform: scale(1.1);
             }
             .badge-success { 
-                background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+                background: #34c759;
                 color: white;
-                box-shadow: 0 2px 6px rgba(17, 153, 142, 0.3);
             }
             .badge-error { 
-                background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+                background: #ff3b30;
                 color: white;
-                box-shadow: 0 2px 6px rgba(250, 112, 154, 0.3);
             }
             .compact-row {
                 display: grid;
                 grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
-                gap: 8px;
-                margin-top: 8px;
+                gap: 6px;
+                margin-top: 4px;
             }
             .compact-stat {
                 text-align: center;
-                padding: 10px 8px;
-                background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
-                border-radius: 10px;
-                border: 1px solid rgba(0,0,0,0.05);
-                transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-                box-shadow: 0 2px 4px rgba(0,0,0,0.04);
-            }
-            .compact-stat:hover {
-                transform: translateY(-3px) scale(1.02);
-                box-shadow: 0 6px 12px rgba(0,0,0,0.1);
-            }
-            .compact-stat-value {
-                font-size: 16px;
-                font-weight: 700;
-                color: #2c3e50;
-                transition: all 0.3s ease;
-            }
-            .compact-stat:hover .compact-stat-value {
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                -webkit-background-clip: text;
-                -webkit-text-fill-color: transparent;
-                background-clip: text;
-            }
-            .compact-stat-label {
-                font-size: 9px;
-                color: #868e96;
-                margin-top: 4px;
-                font-weight: 600;
-                text-transform: uppercase;
-                letter-spacing: 0.5px;
-            }
-            code { 
-                background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-                padding: 3px 8px; 
-                border-radius: 6px; 
-                font-size: 9px; 
-                font-family: 'Monaco', 'Courier New', monospace;
-                color: #667eea;
-                font-weight: 600;
-                border: 1px solid rgba(102, 126, 234, 0.2);
+                padding: 12px;
+                background: #fafafa;
+                border-radius: 8px;
                 transition: all 0.2s ease;
             }
-            code:hover {
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                color: white;
-                transform: scale(1.05);
+            .compact-stat:hover {
+                background: #f5f5f7;
+            }
+            .compact-stat-value {
+                font-size: 20px;
+                font-weight: 600;
+                color: #1d1d1f;
+                letter-spacing: -0.3px;
+            }
+            .compact-stat-label {
+                font-size: 12px;
+                color: #86868b;
+                margin-top: 4px;
+                font-weight: 400;
+            }
+            code { 
+                background: #f5f5f7;
+                padding: 2px 6px; 
+                border-radius: 4px; 
+                font-size: 12px; 
+                font-family: 'SF Mono', 'Monaco', 'Courier New', monospace;
+                color: #1d1d1f;
+                font-weight: 400;
             }
             .mini-chart {
                 height: 40px;
@@ -324,28 +246,33 @@ async def dashboard():
             .loading { 
                 text-align: center; 
                 padding: 20px; 
-                color: #868e96; 
-                font-size: 11px; 
-                font-weight: 500;
+                color: #86868b; 
+                font-size: 14px; 
+                font-weight: 400;
             }
             .two-col {
                 display: grid;
                 grid-template-columns: 1fr 1fr;
-                gap: 10px;
+                gap: 12px;
+                margin-bottom: 16px;
             }
             @media (max-width: 768px) {
                 .two-col {
+                    grid-template-columns: 1fr;
+                }
+                .grid {
                     grid-template-columns: 1fr;
                 }
             }
             .chart-container {
                 position: relative;
                 height: 300px;
-                margin-top: 10px;
-                background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+                margin-top: 0;
+                margin-bottom: 16px;
+                background: #ffffff;
                 border-radius: 12px;
-                padding: 16px;
-                box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+                padding: 20px;
+                box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
             }
             .chart-wrapper {
                 position: relative;
@@ -409,6 +336,11 @@ async def dashboard():
                 <div class="card-title">🏆 Rank</div>
                 <div class="card-value" id="wallet-rank">-</div>
                 <div class="card-sub" id="wallet-rank-detail">Incentive: <span id="wallet-incentive">-</span></div>
+            </div>
+            <div class="card">
+                <div class="card-title">🔄 Current Round</div>
+                <div class="card-value" id="current-round">-</div>
+                <div class="card-sub" id="round-detail">Next round in: <span id="round-countdown">-</span></div>
             </div>
         </div>
         
@@ -749,6 +681,20 @@ async def dashboard():
                     if (!response.ok) throw new Error('Failed to fetch: ' + response.status);
                     const data = await response.json();
                     
+                    // Ensure all required sections exist with defaults
+                    if (!data.overview) data.overview = {};
+                    if (!data.performance) data.performance = {};
+                    if (!data.caching) data.caching = {};
+                    if (!data.validators) data.validators = {};
+                    if (!data.wallet) data.wallet = {};
+                    if (!data.round) data.round = {};
+                    if (!data.vector_memory) data.vector_memory = {};
+                    if (!data.mutations) data.mutations = {};
+                    if (!data.task_types) data.task_types = {};
+                    if (!data.errors) data.errors = {};
+                    if (!data.anti_overfitting) data.anti_overfitting = {};
+                    if (!data.task_diversity) data.task_diversity = {};
+                    
                     const now = new Date();
                     document.getElementById('last-update').textContent = now.toLocaleString('en-US', { 
                         timeZone: 'America/Chicago',
@@ -826,6 +772,37 @@ async def dashboard():
                     document.getElementById('wallet-rank').className = 'card-value' + (rank > 0 ? ' good' : '');
                     document.getElementById('wallet-incentive').textContent = incentive.toFixed(6);
                     
+                    // Round info
+                    const round = data.round || {};
+                    const currentRound = parseInt(round.current_round || 0);
+                    const secondsUntilNext = parseInt(round.seconds_until_next_round || 0);
+                    const roundProgress = parseFloat(round.round_progress || 0);
+                    
+                    document.getElementById('current-round').textContent = currentRound > 0 ? currentRound : '-';
+                    document.getElementById('current-round').className = 'card-value' + (currentRound > 0 ? ' good' : '');
+                    
+                    // Update countdown timer (will be updated every second)
+                    if (window.roundCountdownSeconds === undefined || secondsUntilNext > 0) {
+                        window.roundCountdownSeconds = secondsUntilNext;
+                    }
+                    
+                    function formatCountdown(seconds) {
+                        if (seconds <= 0) return 'Starting...';
+                        const hours = Math.floor(seconds / 3600);
+                        const minutes = Math.floor((seconds % 3600) / 60);
+                        const secs = seconds % 60;
+                        if (hours > 0) {
+                            return hours + 'h ' + minutes + 'm ' + secs + 's';
+                        } else if (minutes > 0) {
+                            return minutes + 'm ' + secs + 's';
+                        } else {
+                            return secs + 's';
+                        }
+                    }
+                    
+                    document.getElementById('round-countdown').textContent = formatCountdown(window.roundCountdownSeconds);
+                    document.getElementById('round-detail').innerHTML = 'Next round in: <span id="round-countdown">' + formatCountdown(window.roundCountdownSeconds) + '</span> | ' + roundProgress.toFixed(1) + '% complete';
+                    
                     // Performance
                     let perfHtml = '<div class="compact-row">';
                     perfHtml += `<div class="compact-stat"><div class="compact-stat-value">${avgTime}s</div><div class="compact-stat-label">Avg</div></div>`;
@@ -875,11 +852,13 @@ async def dashboard():
                     }
                     
                     // Task types
-                    if (data.task_types && Object.keys(data.task_types).length > 0) {
+                    const taskTypes = data.task_types || {};
+                    if (taskTypes && Object.keys(taskTypes).length > 0) {
                         let html = '<table><tr><th>Type</th><th>Rate</th><th>Total</th></tr>';
-                        for (const [type, stats] of Object.entries(data.task_types)) {
-                            const cls = stats.success_rate >= 80 ? 'status-good' : 'status-error';
-                            html += `<tr><td><code>${type}</code></td><td class="${cls}">${stats.success_rate.toFixed(1)}%</td><td>${stats.total}</td></tr>`;
+                        for (const [type, stats] of Object.entries(taskTypes)) {
+                            const successRate = stats.success_rate || (stats.success || 0) / (stats.total || 1) * 100;
+                            const cls = successRate >= 80 ? 'status-good' : 'status-error';
+                            html += `<tr><td><code>${type}</code></td><td class="${cls}">${successRate.toFixed(1)}%</td><td>${stats.total || 0}</td></tr>`;
                         }
                         html += '</table>';
                         document.getElementById('task-types').innerHTML = html;
@@ -966,14 +945,47 @@ async def dashboard():
                     }
                     
                 } catch (error) {
-                    console.error('Error:', error);
-                    document.getElementById('recent-activity').innerHTML = 
-                        '<div class="loading status-error">Error: ' + error.message + '</div>';
+                    console.error('Error loading metrics:', error);
+                    // Show error in all sections that might be blank
+                    const sections = ['performance', 'god-tier', 'recent-activity', 'task-types', 
+                                     'top-validators', 'errors', 'anti-overfitting', 'task-diversity'];
+                    sections.forEach(sectionId => {
+                        const el = document.getElementById(sectionId);
+                        if (el && (!el.innerHTML || el.innerHTML.trim() === '' || el.innerHTML.includes('Loading...'))) {
+                            el.innerHTML = '<div class="loading status-error">Error loading data</div>';
+                        }
+                    });
+                    if (document.getElementById('last-update')) {
+                        document.getElementById('last-update').textContent = 'Error: ' + error.message;
+                    }
+                }
+            }
+            
+            // Round countdown timer (updates every second)
+            function updateRoundCountdown() {
+                if (window.roundCountdownSeconds !== undefined && window.roundCountdownSeconds > 0) {
+                    window.roundCountdownSeconds--;
+                    const countdownEl = document.getElementById('round-countdown');
+                    if (countdownEl) {
+                        const hours = Math.floor(window.roundCountdownSeconds / 3600);
+                        const minutes = Math.floor((window.roundCountdownSeconds % 3600) / 60);
+                        const secs = window.roundCountdownSeconds % 60;
+                        let formatted = '';
+                        if (hours > 0) {
+                            formatted = hours + 'h ' + minutes + 'm ' + secs + 's';
+                        } else if (minutes > 0) {
+                            formatted = minutes + 'm ' + secs + 's';
+                        } else {
+                            formatted = secs + 's';
+                        }
+                        countdownEl.textContent = formatted;
+                    }
                 }
             }
             
             loadMetrics();
             setInterval(loadMetrics, 5000);
+            setInterval(updateRoundCountdown, 1000);  // Update countdown every second
         </script>
     </body>
     </html>
@@ -981,8 +993,100 @@ async def dashboard():
     return HTMLResponse(content=html_content)
 
 
+# Cache wallet info to avoid OOM issues
+_wallet_info_cache = {"data": None, "timestamp": 0}
+_wallet_info_cache_ttl = 60  # Cache for 60 seconds
+
+# Cache round info to avoid OOM issues
+_round_info_cache = {"data": None, "timestamp": 0}
+_round_info_cache_ttl = 30  # Cache for 30 seconds
+
+def get_round_info():
+    """Get current round information from Bittensor"""
+    import time
+    
+    # Return cached data if still valid
+    current_time = time.time()
+    if _round_info_cache["data"] and (current_time - _round_info_cache["timestamp"]) < _round_info_cache_ttl:
+        return _round_info_cache["data"]
+    
+    try:
+        import bittensor as bt
+        from config.settings import settings
+        
+        subtensor = bt.subtensor(network='finney')
+        
+        # Get current block number
+        current_block = subtensor.get_current_block()
+        
+        # IWA rounds are typically ~1080 blocks (1-2 hours at ~12s per block)
+        # Round 37 started at block 6,912,165 (from IWA Platform data)
+        # We can estimate current round based on block number
+        blocks_per_round = 1080  # Approximate, based on IWA Platform data
+        
+        # Estimate round number (this is approximate)
+        # Round 37 started at block 6,912,165
+        base_round = 37
+        base_block = 6912165
+        
+        if current_block >= base_block:
+            blocks_since_base = current_block - base_block
+            rounds_since_base = blocks_since_base // blocks_per_round
+            estimated_round = base_round + rounds_since_base
+            blocks_into_round = blocks_since_base % blocks_per_round
+        else:
+            # If current block is before our base, estimate backwards
+            blocks_before_base = base_block - current_block
+            rounds_before_base = blocks_before_base // blocks_per_round
+            estimated_round = base_round - rounds_before_base
+            blocks_into_round = blocks_per_round - (blocks_before_base % blocks_per_round)
+        
+        # Calculate time until next round
+        blocks_remaining = blocks_per_round - blocks_into_round
+        seconds_per_block = 12  # Bittensor block time
+        seconds_until_next_round = blocks_remaining * seconds_per_block
+        
+        result = {
+            "current_round": estimated_round,
+            "current_block": int(current_block),
+            "blocks_into_round": blocks_into_round,
+            "blocks_per_round": blocks_per_round,
+            "blocks_remaining": blocks_remaining,
+            "seconds_until_next_round": seconds_until_next_round,
+            "round_progress": round((blocks_into_round / blocks_per_round) * 100, 1)
+        }
+        
+        # Cache the result
+        _round_info_cache["data"] = result
+        _round_info_cache["timestamp"] = current_time
+        return result
+        
+    except Exception as e:
+        # Return cached data if available
+        if _round_info_cache["data"]:
+            return _round_info_cache["data"]
+        
+        # Return default values if error
+        return {
+            "current_round": 0,
+            "current_block": 0,
+            "blocks_into_round": 0,
+            "blocks_per_round": 1080,
+            "blocks_remaining": 1080,
+            "seconds_until_next_round": 12960,  # ~3.6 hours default
+            "round_progress": 0.0,
+            "error": str(e)
+        }
+
 def get_wallet_info():
-    """Get wallet balance and stake information from Bittensor"""
+    """Get wallet balance and stake information from Bittensor (cached)"""
+    import time
+    
+    # Return cached data if still valid
+    current_time = time.time()
+    if _wallet_info_cache["data"] and (current_time - _wallet_info_cache["timestamp"]) < _wallet_info_cache_ttl:
+        return _wallet_info_cache["data"]
+    
     try:
         import bittensor as bt
         from config.settings import settings
@@ -990,12 +1094,17 @@ def get_wallet_info():
         wallet = bt.wallet(name='default', hotkey='default')
         subtensor = bt.subtensor(network='finney')
         
-        # Get balance
+        # Get balance (lightweight operation)
         balance = subtensor.get_balance(wallet.coldkeypub.ss58_address)
         balance_tao = float(balance.tao) if hasattr(balance, 'tao') else float(balance)
         
-        # Get stake and other metrics
-        metagraph = subtensor.metagraph(settings.subnet_uid)
+        # Get stake and other metrics (memory-intensive, so we cache it)
+        # Note: sync parameter not available in all Bittensor versions
+        try:
+            metagraph = subtensor.metagraph(settings.subnet_uid, sync=False)  # Try with sync=False first
+        except TypeError:
+            # Fallback: sync parameter not supported, use default
+            metagraph = subtensor.metagraph(settings.subnet_uid)
         uid = metagraph.hotkeys.index(wallet.hotkey.ss58_address) if wallet.hotkey.ss58_address in metagraph.hotkeys else None
         
         if uid is not None:
@@ -1030,7 +1139,7 @@ def get_wallet_info():
             trust = metagraph.T[uid].item() if hasattr(metagraph, 'T') and uid < len(metagraph.T) else 0
             incentive = metagraph.I[uid].item() if hasattr(metagraph, 'I') and uid < len(metagraph.I) else 0
             
-            return {
+            result = {
                 "balance_tao": balance_tao,
                 "stake_tao": float(total_stake),  # Total stake (for backwards compatibility)
                 "your_stake_tao": float(your_stake),  # Your stake specifically
@@ -1041,19 +1150,33 @@ def get_wallet_info():
                 "uid": uid
             }
         else:
-            return {
+            result = {
                 "balance_tao": balance_tao,
                 "stake_tao": 0.0,
+                "your_stake_tao": 0.0,
+                "delegator_stake_tao": 0.0,
                 "rank": 0.0,
                 "trust": 0.0,
                 "incentive": 0.0,
                 "uid": None
             }
+        
+        # Cache the result
+        _wallet_info_cache["data"] = result
+        _wallet_info_cache["timestamp"] = current_time
+        return result
+        
     except Exception as e:
-        # Return zeros if there's an error (e.g., network issue)
+        # Return cached data if available, even if expired, to avoid showing errors
+        if _wallet_info_cache["data"]:
+            return _wallet_info_cache["data"]
+        
+        # Return zeros if there's an error and no cache
         return {
             "balance_tao": 0.0,
             "stake_tao": 0.0,
+            "your_stake_tao": 0.0,
+            "delegator_stake_tao": 0.0,
             "rank": 0.0,
             "trust": 0.0,
             "incentive": 0.0,
@@ -1085,6 +1208,17 @@ async def dashboard_metrics():
             "trust": 0.0,
             "incentive": 0.0,
             "uid": None
+        }
+    
+    # ROUND INFO: Add current round information
+    try:
+        round_info = get_round_info()
+        metrics["round"] = round_info
+    except Exception:
+        metrics["round"] = {
+            "current_round": 0,
+            "seconds_until_next_round": 0,
+            "round_progress": 0.0
         }
     
     # DYNAMIC ZERO: Add anti-overfitting metrics
@@ -1161,14 +1295,25 @@ async def dashboard_metrics():
             ]
             
             # Merge with in-memory validator activity (more recent, may not be in logs yet)
-            # Combine and deduplicate by time and IP
+            # Combine and deduplicate by time and IP, preserving response times from in-memory
             combined_activity = {}
             for activity in validator_activity + in_memory_validator_activity:
                 key = f"{activity.get('ip')}_{activity.get('time', '')}"
                 if key not in combined_activity:
                     combined_activity[key] = activity
-                elif activity.get("time", "") > combined_activity[key].get("time", ""):
-                    combined_activity[key] = activity  # Keep more recent
+                else:
+                    # Keep more recent, but preserve response_time if available
+                    existing = combined_activity[key]
+                    new_time = activity.get("time", "")
+                    existing_time = existing.get("time", "")
+                    if new_time > existing_time:
+                        # Newer activity - use it, but preserve response_time if existing has it and new doesn't
+                        if existing.get("response_time", 0.0) > 0 and activity.get("response_time", 0.0) == 0.0:
+                            activity["response_time"] = existing.get("response_time", 0.0)
+                        combined_activity[key] = activity
+                    elif existing.get("response_time", 0.0) == 0.0 and activity.get("response_time", 0.0) > 0:
+                        # Existing has no response_time but new one does - update it
+                        existing["response_time"] = activity.get("response_time", 0.0)
             
             validator_activity = list(combined_activity.values())
             
@@ -1198,14 +1343,31 @@ async def dashboard_metrics():
                     (metrics["overview"]["successful_requests"] / metrics["overview"]["total_requests"]) * 100, 2
                 )
             
+            # Calculate response times from in-memory data OR from validator activity
             if current_response_times and len(current_response_times) > 0:
                 metrics["performance"]["avg_response_time"] = round(sum(current_response_times) / len(current_response_times), 3)
                 sorted_times = sorted(current_response_times)
                 if len(sorted_times) >= 20:
                     metrics["performance"]["p95_response_time"] = round(sorted_times[int(len(sorted_times) * 0.95)], 3)
                     metrics["performance"]["p99_response_time"] = round(sorted_times[int(len(sorted_times) * 0.99)], 3)
+            else:
+                # Fallback: calculate from validator activity response times
+                activity_response_times = [a.get("response_time", 0.0) for a in validator_activity if a.get("response_time", 0.0) > 0]
+                if activity_response_times and len(activity_response_times) > 0:
+                    metrics["performance"]["avg_response_time"] = round(sum(activity_response_times) / len(activity_response_times), 3)
+                    sorted_times = sorted(activity_response_times)
+                    if len(sorted_times) >= 20:
+                        metrics["performance"]["p95_response_time"] = round(sorted_times[int(len(sorted_times) * 0.95)], 3)
+                        metrics["performance"]["p99_response_time"] = round(sorted_times[int(len(sorted_times) * 0.99)], 3)
             
-            uptime_hours = metrics["overview"].get("uptime_hours", 0.02)
+            uptime_hours = metrics["overview"].get("uptime_hours", 0.0)
+            # If uptime is 0, calculate it from start_time
+            if uptime_hours == 0.0 and hasattr(advanced_metrics, 'start_time'):
+                import time
+                uptime_seconds = time.time() - advanced_metrics.start_time
+                uptime_hours = max(0.01, uptime_seconds / 3600)  # At least 0.01 hours
+                metrics["overview"]["uptime_hours"] = round(uptime_hours, 2)
+            
             if uptime_hours > 0:
                 metrics["performance"]["requests_per_minute"] = round(
                     metrics["overview"]["total_requests"] / (uptime_hours * 60), 2

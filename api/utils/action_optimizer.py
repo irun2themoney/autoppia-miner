@@ -1,128 +1,239 @@
-"""Advanced action optimization"""
-from typing import Dict, Any, List
+"""Action sequence optimization - remove redundant actions and optimize flow"""
+from typing import Dict, Any, List, Optional
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class ActionOptimizer:
-    """Optimize action sequences for maximum efficiency"""
+    """
+    Optimize action sequences by removing redundant actions and improving flow
+    Tok-style: Clean, efficient action sequences without redundancy
+    """
     
-    def optimize(self, actions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """Apply all optimizations"""
-        optimized = actions.copy()
-        
-        # Remove redundant actions
-        optimized = self._remove_redundant(optimized)
-        
-        # Merge similar actions
-        optimized = self._merge_similar(optimized)
-        
-        # Optimize wait times
-        optimized = self._optimize_waits(optimized)
-        
-        # Ensure proper ordering
-        optimized = self._ensure_ordering(optimized)
-        
-        return optimized
+    def __init__(self):
+        self.optimization_history = []  # Track optimization results
     
-    def _remove_redundant(self, actions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """Remove redundant actions"""
+    def optimize_sequence(self, actions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Optimize action sequence by removing redundant actions
+        
+        Tok-style: Remove redundant waits, duplicate screenshots, unnecessary actions
+        """
         if not actions:
             return actions
         
         optimized = []
         prev_action = None
         
-        for action in actions:
-            action_type = action.get("type", "")
+        for i, action in enumerate(actions):
+            action_type = action.get("action_type", "")
             
-            # Skip duplicate consecutive screenshots
-            if action_type == "ScreenshotAction":
-                if prev_action and prev_action.get("type") == "ScreenshotAction":
+            # Skip redundant actions
+            if self._is_redundant(action, prev_action, optimized):
+                continue
+            
+            # Merge consecutive waits
+            if action_type == "wait" and prev_action and prev_action.get("action_type") == "wait":
+                # Merge waits (add durations)
+                prev_duration = prev_action.get("duration", 0)
+                curr_duration = action.get("duration", 0)
+                optimized[-1]["duration"] = prev_duration + curr_duration
+                prev_action = optimized[-1]
+                continue
+            
+            # Remove duplicate screenshots (keep only last one before important action)
+            if action_type == "screenshot":
+                # Check if next action is important
+                next_action = actions[i + 1] if i + 1 < len(actions) else None
+                if next_action and next_action.get("action_type") in ["navigate", "click", "submit"]:
+                    # Keep this screenshot (it's before important action)
+                    optimized.append(action)
+                    prev_action = action
+                    continue
+                elif prev_action and prev_action.get("action_type") == "screenshot":
+                    # Skip duplicate screenshot
                     continue
             
-            # Skip duplicate navigations
-            if action_type == "NavigateAction":
-                if prev_action and prev_action.get("type") == "NavigateAction":
-                    # Keep the latest navigation
-                    optimized.pop()
+            # Remove redundant navigation (if already on same URL)
+            if action_type == "navigate":
+                url = action.get("url", "")
+                # Check if we already navigated to this URL
+                if any(
+                    a.get("action_type") == "navigate" and a.get("url") == url
+                    for a in optimized
+                ):
+                    # Skip redundant navigation
+                    continue
             
+            # Remove redundant clicks (same selector, consecutive)
+            if action_type == "click":
+                selector = action.get("selector")
+                if prev_action and prev_action.get("action_type") == "click":
+                    prev_selector = prev_action.get("selector")
+                    if self._selectors_equal(selector, prev_selector):
+                        # Skip redundant click
+                        continue
+            
+            # Add action
             optimized.append(action)
             prev_action = action
         
-        return optimized
-    
-    def _merge_similar(self, actions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """Merge similar consecutive actions"""
-        if len(actions) < 2:
-            return actions
-        
-        optimized = []
-        i = 0
-        
-        while i < len(actions):
-            current = actions[i]
-            current_type = current.get("type", "")
-            
-            # Merge consecutive wait actions
-            if current_type == "WaitAction":
-                total_wait = current.get("time_seconds", 0)
-                j = i + 1
-                while j < len(actions) and actions[j].get("type") == "WaitAction":
-                    total_wait += actions[j].get("time_seconds", 0)
-                    j += 1
-                
-                # Cap at reasonable maximum
-                total_wait = min(total_wait, 5.0)
-                
-                if total_wait > 0:
-                    optimized.append({
-                        "type": "WaitAction",
-                        "time_seconds": total_wait
-                    })
-                
-                i = j
-                continue
-            
-            optimized.append(current)
-            i += 1
+        # Post-optimization: Remove unnecessary waits at start/end
+        optimized = self._remove_unnecessary_waits(optimized)
         
         return optimized
     
-    def _optimize_waits(self, actions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """Optimize wait times"""
-        optimized = []
+    def _is_redundant(
+        self,
+        action: Dict[str, Any],
+        prev_action: Optional[Dict[str, Any]],
+        optimized: List[Dict[str, Any]]
+    ) -> bool:
+        """Check if action is redundant"""
+        action_type = action.get("action_type", "")
         
-        for action in actions:
-            if action.get("type") == "WaitAction":
-                time_seconds = action.get("time_seconds", 0)
-                # Remove very short waits (< 0.1s)
-                if time_seconds < 0.1:
-                    continue
-                # Cap excessive waits
-                if time_seconds > 5.0:
-                    action["time_seconds"] = 5.0
-            
-            optimized.append(action)
+        # Very short waits (<0.1s) are usually redundant
+        if action_type == "wait":
+            duration = action.get("duration", 0)
+            if duration < 0.1:
+                return True
         
-        return optimized
+        # Duplicate actions (same type, same selector) are redundant
+        if action_type in ["click", "type"] and prev_action:
+            if prev_action.get("action_type") == action_type:
+                prev_selector = prev_action.get("selector")
+                curr_selector = action.get("selector")
+                if self._selectors_equal(prev_selector, curr_selector):
+                    # Check if text is also the same (for type actions)
+                    if action_type == "type":
+                        if prev_action.get("text") == action.get("text"):
+                            return True
+                    else:
+                        return True
+        
+        return False
     
-    def _ensure_ordering(self, actions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """Ensure actions are in proper order"""
+    def _selectors_equal(self, sel1: Any, sel2: Any) -> bool:
+        """Check if two selectors are equal"""
+        if sel1 is None or sel2 is None:
+            return False
+        
+        # Convert to string for comparison
+        return str(sel1) == str(sel2)
+    
+    def _remove_unnecessary_waits(self, actions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Remove unnecessary waits at start and end of sequence"""
         if not actions:
             return actions
         
-        # Find navigation action
-        nav_action = None
-        nav_index = -1
+        optimized = actions.copy()
         
-        for i, action in enumerate(actions):
-            if action.get("type") == "NavigateAction":
-                nav_action = action
-                nav_index = i
+        # Remove waits at the start (unless they're significant)
+        while optimized and optimized[0].get("action_type") == "wait":
+            if optimized[0].get("duration", 0) < 0.5:
+                optimized.pop(0)
+            else:
                 break
         
-        # Move navigation to front if not already
-        if nav_action and nav_index > 0:
-            actions = [nav_action] + [a for i, a in enumerate(actions) if i != nav_index]
+        # Remove waits at the end (unless they're significant)
+        while optimized and optimized[-1].get("action_type") == "wait":
+            if optimized[-1].get("duration", 0) < 0.5:
+                optimized.pop()
+            else:
+                break
         
-        return actions
+        return optimized
+    
+    def optimize_for_task_type(
+        self,
+        actions: List[Dict[str, Any]],
+        task_type: str
+    ) -> List[Dict[str, Any]]:
+        """
+        Optimize action sequence for specific task type
+        Tok-style: Task-specific optimizations
+        """
+        optimized = self.optimize_sequence(actions)
+        
+        # Task-specific optimizations
+        if task_type == "login":
+            # Login tasks: Ensure navigation is first, remove redundant waits
+            optimized = self._optimize_login_sequence(optimized)
+        elif task_type == "form":
+            # Form tasks: Ensure proper field order, remove redundant clicks
+            optimized = self._optimize_form_sequence(optimized)
+        elif task_type == "search":
+            # Search tasks: Optimize search input and button clicks
+            optimized = self._optimize_search_sequence(optimized)
+        
+        return optimized
+    
+    def _optimize_login_sequence(self, actions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Optimize login sequence"""
+        optimized = []
+        has_navigation = False
+        
+        # Ensure navigation is first
+        for action in actions:
+            if action.get("action_type") == "navigate" and not has_navigation:
+                optimized.append(action)
+                has_navigation = True
+            elif action.get("action_type") != "navigate" or has_navigation:
+                optimized.append(action)
+        
+        return optimized
+    
+    def _optimize_form_sequence(self, actions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Optimize form filling sequence"""
+        # Remove redundant clicks before type actions
+        optimized = []
+        i = 0
+        while i < len(actions):
+            action = actions[i]
+            next_action = actions[i + 1] if i + 1 < len(actions) else None
+            
+            # If click is followed by type on same selector, keep both
+            if (action.get("action_type") == "click" and
+                next_action and next_action.get("action_type") == "type" and
+                self._selectors_equal(action.get("selector"), next_action.get("selector"))):
+                optimized.append(action)
+                optimized.append(next_action)
+                i += 2
+            else:
+                optimized.append(action)
+                i += 1
+        
+        return optimized
+    
+    def _optimize_search_sequence(self, actions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Optimize search sequence"""
+        # Ensure type comes before click for search button
+        optimized = []
+        type_action = None
+        click_action = None
+        
+        for action in actions:
+            if action.get("action_type") == "type":
+                type_action = action
+            elif action.get("action_type") == "click" and type_action:
+                click_action = action
+                # Add type before click
+                optimized.append(type_action)
+                optimized.append(click_action)
+                type_action = None
+                click_action = None
+            else:
+                optimized.append(action)
+        
+        # Add any remaining actions
+        if type_action:
+            optimized.append(type_action)
+        if click_action:
+            optimized.append(click_action)
+        
+        return optimized
 
+
+# Global instance
+action_optimizer = ActionOptimizer()

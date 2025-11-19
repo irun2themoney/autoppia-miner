@@ -9,14 +9,15 @@ class SmartWaitStrategy:
     """Intelligent wait time calculation based on action type and context"""
     
     # Base wait times by action type (in seconds)
+    # Enhanced to match Tok's quality-focused approach (target 5-8s response time)
     ACTION_WAITS = {
-        "NavigateAction": 1.5,  # Page load time
-        "ClickAction": 1.0,     # Element interaction + page update
-        "TypeAction": 0.3,      # Text input (fast)
+        "NavigateAction": 2.5,  # Page load time (increased from 1.5s - ensure full load)
+        "ClickAction": 1.5,     # Element interaction + page update (increased from 1.0s)
+        "TypeAction": 0.8,      # Text input (increased from 0.3s - ensure text entered)
         "WaitAction": 0.0,      # Already a wait, no additional
-        "ScreenshotAction": 0.1, # Screenshot capture (very fast)
-        "ScrollAction": 0.5,    # Scroll animation
-        "GoBackAction": 1.0,    # Page navigation
+        "ScreenshotAction": 0.2, # Screenshot capture (increased from 0.1s)
+        "ScrollAction": 0.8,    # Scroll animation (increased from 0.5s)
+        "GoBackAction": 1.5,    # Page navigation (increased from 1.0s)
     }
     
     # Context-based multipliers
@@ -105,9 +106,10 @@ class SmartWaitStrategy:
             # Blend learned and calculated (70% learned, 30% calculated)
             base_wait = learned_wait * 0.7 + base_wait * 0.3
         
-        # Ensure minimum wait time
-        min_wait = 0.1
-        max_wait = 5.0
+        # Ensure minimum wait time (Tok-style: conservative minimums)
+        # Target: 5-8s response time (matching Tok's 6.6s average)
+        min_wait = 0.3  # Increased from 0.2s - ensure actions have time to complete
+        max_wait = 10.0  # Increased from 8.0s - allow longer waits for complex actions (Tok takes time for quality)
         
         return max(min_wait, min(base_wait, max_wait))
     
@@ -167,10 +169,10 @@ class SmartWaitStrategy:
             if wait_key not in self.adaptive_waits:
                 self.adaptive_waits[wait_key] = actual_wait * 1.5
             else:
-                # Increase wait slightly
+                # Increase wait slightly (Tok-style: learn from failures)
                 self.adaptive_waits[wait_key] = min(
                     self.adaptive_waits[wait_key] * 1.1,
-                    5.0  # Cap at 5 seconds
+                    10.0  # Cap at 10 seconds (Tok allows longer waits for quality)
                 )
 
 

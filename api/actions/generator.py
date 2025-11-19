@@ -52,6 +52,12 @@ try:
 except ImportError:
     error_recovery = None
 
+# Import action optimizer
+try:
+    from ..utils.action_optimizer import action_optimizer
+except ImportError:
+    action_optimizer = None
+
 
 class ActionGenerator:
     """Generate action sequences based on task - Enhanced with more patterns"""
@@ -133,15 +139,29 @@ class ActionGenerator:
         
         # Helper function to finalize actions with validation and optimization
         def finalize_actions(action_list: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-            """Apply validation, verification, and optimization to action sequence"""
+            """
+            Apply validation, verification, and optimization to action sequence
+            Enhanced with Tok-style quality checks (target 5-8s response time)
+            """
             optimized = self._apply_context_optimizations(action_list, context, strategy)
             
-            # Validate and enhance with verification for quality
+            # Step 0: Optimize action sequence (remove redundant actions) - Tok-style efficiency
+            if action_optimizer:
+                task_type = parsed.get("task_type", "generic") if 'parsed' in locals() else "generic"
+                optimized = action_optimizer.optimize_for_task_type(optimized, task_type)
+            
+            # Validate and enhance with verification for quality (Tok-style quality focus)
             if action_validator:
+                # Step 1: Pre-action validation (Tok-style: validate selectors before using)
+                optimized = action_validator.add_pre_action_validation(optimized)
+                
+                # Step 2: Validate action sequence (check logical flow)
                 is_valid, errors = action_validator.validate_action_sequence(optimized, context)
                 if not is_valid:
                     logger.warning(f"Action validation errors: {errors}")
-                # Enhance with verification steps (adds quality checks)
+                
+                # Step 3: Enhance with verification steps (adds wait times and screenshots)
+                # This ensures actions complete before proceeding (Tok-style quality focus)
                 optimized = action_validator.enhance_actions_with_verification(optimized)
             
             return optimized

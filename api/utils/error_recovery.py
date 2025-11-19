@@ -72,36 +72,91 @@ class ErrorRecovery:
         context: Optional[Dict[str, Any]] = None
     ) -> Optional[Dict[str, Any]]:
         """
-        Get alternative action when primary action fails
-        
-        Returns:
-            Alternative action or None
+        Get alternative action when primary action fails - Enhanced with more strategies
+        Tok-style: Multiple alternative strategies for better recovery
         """
         action_type = failed_action.get("action_type", "")
         
-        # Action-specific alternatives
+        # Action-specific alternatives (enhanced strategies)
         if action_type == "click":
-            # Try alternative selectors
             selector = failed_action.get("selector")
             if selector:
-                # Return same action but with alternative selector strategy
-                return {
-                    **failed_action,
-                    "retry": True,
-                    "retry_count": failed_action.get("retry_count", 0) + 1
-                }
+                # Strategy 1: Try alternative selectors (already handled by get_alternative_selectors)
+                # Strategy 2: Try clicking parent element
+                # Strategy 3: Try scrolling to element first, then clicking
+                retry_count = failed_action.get("retry_count", 0)
+                
+                if retry_count == 0:
+                    # First retry: Try with alternative selector strategy
+                    return {
+                        **failed_action,
+                        "retry": True,
+                        "retry_count": retry_count + 1,
+                        "_alternative_strategy": "alternative_selector"
+                    }
+                elif retry_count == 1:
+                    # Second retry: Try scrolling first
+                    return {
+                        "action_type": "scroll",
+                        "direction": "down",
+                        "pixels": 200
+                    }
+                else:
+                    # Third retry: Try clicking with wait
+                    return {
+                        **failed_action,
+                        "retry": True,
+                        "retry_count": retry_count + 1,
+                        "_wait_before": 1.0  # Wait before clicking
+                    }
         
         elif action_type == "type":
-            # Try clicking field first, then typing
+            selector = failed_action.get("selector")
+            text = failed_action.get("text", "")
+            retry_count = failed_action.get("retry_count", 0)
+            
+            if selector:
+                if retry_count == 0:
+                    # First retry: Try clicking field first, then typing
+                    return {
+                        "action_type": "click",
+                        "selector": selector
+                    }
+                elif retry_count == 1:
+                    # Second retry: Try clearing field first, then typing
+                    return {
+                        "action_type": "type",
+                        "selector": selector,
+                        "text": "",  # Clear first
+                        "retry": True,
+                        "retry_count": retry_count + 1
+                    }
+                else:
+                    # Third retry: Try with longer wait
+                    return {
+                        "action_type": "wait",
+                        "duration": 1.5
+                    }
+        
+        elif action_type == "submit":
+            # Submit failures: Try clicking submit button explicitly
             selector = failed_action.get("selector")
             if selector:
                 return {
                     "action_type": "click",
-                    "selector": selector
+                    "selector": selector,
+                    "retry": True
                 }
         
         elif action_type == "navigate":
-            # Navigation failures are usually fatal
+            # Navigation failures are usually fatal, but try once more
+            retry_count = failed_action.get("retry_count", 0)
+            if retry_count == 0:
+                return {
+                    **failed_action,
+                    "retry": True,
+                    "retry_count": retry_count + 1
+                }
             return None
         
         return None
@@ -110,30 +165,88 @@ class ErrorRecovery:
         self,
         action: Dict[str, Any],
         error_type: str,
-        retry_count: int = 0
+        retry_count: int = 0,
+        task_type: Optional[str] = None
     ) -> bool:
-        """Determine if action should be retried - Enhanced for better recovery"""
-        max_retries = 3  # Increased from 2 to 3 for better recovery
+        """
+        Determine if action should be retried - Enhanced with task-specific retry logic
+        Tok-style: Different retry strategies for different task types
+        """
+        action_type = action.get("action_type", "")
+        
+        # Task-specific max retries (Tok-style: different retries for different tasks)
+        task_specific_retries = {
+            "login": 2,  # Login failures are usually fatal, fewer retries
+            "form": 3,   # Forms can have transient issues, more retries
+            "click": 3,  # Clicks can fail due to timing, more retries
+            "type": 2,   # Typing failures are usually selector issues, fewer retries
+            "navigate": 1,  # Navigation failures are usually fatal, minimal retries
+            "search": 3,  # Search can have timing issues, more retries
+            "job_apply": 3,  # Job applications can have complex flows, more retries
+        }
+        
+        max_retries = task_specific_retries.get(task_type or action_type, 3)
         
         # Don't retry navigation failures (usually fatal)
-        if action.get("action_type") == "navigate":
+        if action_type == "navigate":
             return False
         
         # Don't retry if already retried too many times
         if retry_count >= max_retries:
             return False
         
-        # Retry transient errors (expanded list)
-        retryable_errors = [
-            "element_not_found",
-            "element_not_clickable",
-            "element_not_visible",
-            "timeout",
-            "stale_element",
-            "element_not_interactable",
-            "invalid_selector",
-            "network_error",  # Network issues might be transient
-        ]
+        # Task-specific retryable errors (Tok-style: different errors for different tasks)
+        retryable_errors_by_task = {
+            "login": [
+                "element_not_found",
+                "element_not_clickable",
+                "timeout",
+                "stale_element",
+            ],
+            "form": [
+                "element_not_found",
+                "element_not_clickable",
+                "element_not_visible",
+                "timeout",
+                "stale_element",
+                "element_not_interactable",
+            ],
+            "click": [
+                "element_not_found",
+                "element_not_clickable",
+                "element_not_visible",
+                "timeout",
+                "stale_element",
+                "element_not_interactable",
+            ],
+            "type": [
+                "element_not_found",
+                "element_not_visible",
+                "timeout",
+                "stale_element",
+            ],
+            "search": [
+                "element_not_found",
+                "element_not_clickable",
+                "timeout",
+                "stale_element",
+            ],
+        }
+        
+        # Get task-specific retryable errors, fallback to general list
+        retryable_errors = retryable_errors_by_task.get(
+            task_type or action_type,
+            [
+                "element_not_found",
+                "element_not_clickable",
+                "element_not_visible",
+                "timeout",
+                "stale_element",
+                "element_not_interactable",
+                "invalid_selector",
+                "network_error",
+            ]
+        )
         
         return error_type in retryable_errors
     

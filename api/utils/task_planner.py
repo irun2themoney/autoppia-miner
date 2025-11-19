@@ -18,13 +18,35 @@ class TaskPlanner:
         "also", "plus", "followed by", "subsequently"
     ]
     
-    # Task dependencies (what tasks require other tasks first)
+    # Task dependencies (what tasks require other tasks first) - Enhanced for better dependency resolution
     DEPENDENCIES = {
         "edit_profile": ["login"],
         "post_comment": ["login"],
         "submit_form": ["fill_form"],
         "view_dashboard": ["login"],
         "modify_settings": ["login", "navigate_to_settings"],
+        "apply_job": ["login", "navigate_to_job"],
+        "book_movie": ["login", "navigate_to_movie"],
+        "reserve_table": ["login", "navigate_to_restaurant"],
+        "upload_file": ["login", "navigate_to_upload"],
+        "delete_item": ["login", "navigate_to_item"],
+        "edit_item": ["login", "navigate_to_item"],
+        "create_event": ["login", "navigate_to_calendar"],
+        "send_message": ["login", "navigate_to_compose"],
+    }
+    
+    # Task type dependencies (enhanced dependency detection)
+    TASK_TYPE_DEPENDENCIES = {
+        "modify": ["login"],
+        "edit": ["login"],
+        "delete": ["login"],
+        "create": ["login"],
+        "post": ["login"],
+        "submit": ["login", "fill_form"],
+        "upload": ["login"],
+        "book": ["login"],
+        "reserve": ["login"],
+        "apply": ["login"],
     }
     
     def __init__(self):
@@ -152,40 +174,75 @@ class TaskPlanner:
             return "low"
     
     def _detect_dependencies(self, step: Dict[str, Any], previous_steps: List[Dict[str, Any]]) -> List[str]:
-        """Detect dependencies for a step"""
+        """
+        Detect dependencies for a step - Enhanced with better dependency resolution
+        Tok-style: Understand task dependencies and ensure proper execution order
+        """
         dependencies = []
         step_type = step.get("task_type", "")
         description = step.get("description", "").lower()
         
-        # Check explicit dependencies
+        # Check explicit dependencies (enhanced matching)
         for dep_type, required_tasks in self.DEPENDENCIES.items():
-            if dep_type in description:
-                dependencies.extend(required_tasks)
+            # More flexible matching (partial matches, word boundaries)
+            if dep_type in description or any(word in description for word in dep_type.split("_")):
+                for req_task in required_tasks:
+                    # Check if dependency already met
+                    if req_task == "login":
+                        has_login = any(s.get("task_type") == "login" for s in previous_steps)
+                        if not has_login and "login" not in dependencies:
+                            dependencies.append("login")
+                    elif req_task == "navigate":
+                        has_navigation = any(s.get("task_type") == "navigate" for s in previous_steps)
+                        if not has_navigation and "navigate" not in dependencies:
+                            dependencies.append("navigate")
+                    elif req_task not in dependencies:
+                        dependencies.append(req_task)
         
-        # Check if this step requires login
-        if step_type in ["modify", "edit", "post_comment", "submit_form"]:
-            # Check if login was already done in previous steps
+        # Check task type dependencies (enhanced detection)
+        for task_pattern, required_tasks in self.TASK_TYPE_DEPENDENCIES.items():
+            if task_pattern in step_type or task_pattern in description:
+                for req_task in required_tasks:
+                    if req_task == "login":
+                        has_login = any(s.get("task_type") == "login" for s in previous_steps)
+                        if not has_login and "login" not in dependencies:
+                            dependencies.append("login")
+                    elif req_task == "navigate":
+                        has_navigation = any(s.get("task_type") == "navigate" for s in previous_steps)
+                        if not has_navigation and "navigate" not in dependencies:
+                            dependencies.append("navigate")
+                    elif req_task not in dependencies:
+                        dependencies.append(req_task)
+        
+        # Check if this step requires login (enhanced detection)
+        login_indicators = ["modify", "edit", "post", "submit", "delete", "create", "upload", "book", "reserve", "apply"]
+        if any(indicator in step_type or indicator in description for indicator in login_indicators):
             has_login = any(s.get("task_type") == "login" for s in previous_steps)
-            if not has_login:
+            if not has_login and "login" not in dependencies:
                 dependencies.append("login")
         
-        # Check if this step requires navigation
+        # Check if this step requires navigation (enhanced detection)
         if step_type not in ["navigate", "login"] and "navigate" not in description:
-            # Might need navigation if URL is provided
-            if step.get("url"):
-                # Check if navigation was already done
+            # Might need navigation if URL is provided or if it's a location-specific action
+            if step.get("url") or any(word in description for word in ["go to", "open", "visit", "navigate"]):
                 has_navigation = any(s.get("task_type") == "navigate" for s in previous_steps)
-                if not has_navigation:
+                if not has_navigation and "navigate" not in dependencies:
                     dependencies.append("navigate")
         
-        return dependencies
+        # Remove duplicates while preserving order
+        seen = set()
+        unique_dependencies = []
+        for dep in dependencies:
+            if dep not in seen:
+                seen.add(dep)
+                unique_dependencies.append(dep)
+        
+        return unique_dependencies
     
     def plan_execution(self, steps: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
-        Plan optimal execution order for steps
-        
-        Returns:
-            Ordered list of steps with execution plan
+        Plan optimal execution order for steps - Enhanced with better dependency resolution
+        Tok-style: Properly handle dependencies and ensure correct execution order
         """
         if not steps:
             return []
@@ -193,30 +250,51 @@ class TaskPlanner:
         if len(steps) == 1:
             return steps
         
-        # Build dependency graph
+        # Build dependency graph with enhanced resolution
         execution_order = []
         remaining_steps = steps.copy()
-        completed_steps = set()
+        completed_task_types = set()  # Track completed task types
         
-        # Topological sort to handle dependencies
-        while remaining_steps:
+        # Topological sort to handle dependencies (enhanced)
+        max_iterations = len(steps) * 2  # Prevent infinite loops
+        iteration = 0
+        
+        while remaining_steps and iteration < max_iterations:
+            iteration += 1
+            
             # Find steps with no unmet dependencies
             ready_steps = []
             for step in remaining_steps:
-                step_id = step.get("step_number")
                 dependencies = step.get("dependencies", [])
                 
-                # Check if all dependencies are met
+                # Check if all dependencies are met (enhanced checking)
                 dependencies_met = True
                 for dep in dependencies:
                     if dep == "login":
-                        # Check if login was completed
-                        if not any(s.get("task_type") == "login" for s in execution_order):
+                        # Check if login was completed (check both task_type and description)
+                        has_login = any(
+                            s.get("task_type") == "login" or "login" in s.get("description", "").lower()
+                            for s in execution_order
+                        )
+                        if not has_login:
                             dependencies_met = False
                             break
                     elif dep == "navigate":
                         # Check if navigation was completed
-                        if not any(s.get("task_type") == "navigate" for s in execution_order):
+                        has_navigation = any(
+                            s.get("task_type") == "navigate" or "navigate" in s.get("description", "").lower()
+                            for s in execution_order
+                        )
+                        if not has_navigation:
+                            dependencies_met = False
+                            break
+                    else:
+                        # Check for other dependencies (by task type or description)
+                        dep_met = any(
+                            dep in s.get("task_type", "") or dep in s.get("description", "").lower()
+                            for s in execution_order
+                        )
+                        if not dep_met:
                             dependencies_met = False
                             break
                 
@@ -224,15 +302,27 @@ class TaskPlanner:
                     ready_steps.append(step)
             
             if not ready_steps:
-                # No ready steps - execute remaining in order (circular dependency)
+                # No ready steps - try to break circular dependency
+                # Prioritize steps with fewer dependencies
+                remaining_steps.sort(key=lambda s: len(s.get("dependencies", [])))
                 ready_steps = [remaining_steps[0]]
+                logger.warning(f"Circular dependency detected, executing: {ready_steps[0].get('description', 'unknown')}")
             
-            # Execute ready steps (in order if multiple)
-            ready_steps.sort(key=lambda s: s.get("step_number", 0))
+            # Execute ready steps (prioritize by step number, then by complexity)
+            ready_steps.sort(key=lambda s: (
+                s.get("step_number", 999),
+                {"high": 3, "medium": 2, "low": 1}.get(s.get("estimated_complexity", "low"), 1)
+            ))
+            
             for step in ready_steps:
                 execution_order.append(step)
-                completed_steps.add(step.get("step_number"))
+                completed_task_types.add(step.get("task_type", ""))
                 remaining_steps.remove(step)
+        
+        if remaining_steps:
+            # Add remaining steps at the end (shouldn't happen, but handle gracefully)
+            logger.warning(f"Some steps could not be ordered: {[s.get('description') for s in remaining_steps]}")
+            execution_order.extend(remaining_steps)
         
         return execution_order
     
