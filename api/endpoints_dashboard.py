@@ -1461,6 +1461,7 @@ async def dashboard_metrics():
                 # This handles the case where service just restarted but has historical data
                 metrics["performance"]["requests_per_minute"] = 0.0
             
+            # Health score should only be calculated if we have requests
             if metrics["overview"]["total_requests"] > 0:
                 success_rate = metrics["overview"]["success_rate"]
                 avg_response_time = metrics["performance"].get("avg_response_time", 0.0)
@@ -1475,6 +1476,9 @@ async def dashboard_metrics():
                 metrics["health_score"] = round(
                     success_rate * 0.5 + response_time_score * 0.3 + uptime_score * 0.2, 2
                 )
+            else:
+                # No requests = no health score (can't evaluate performance)
+                metrics["health_score"] = 0.0
             
             # Ensure recent_activity is sorted by time (most recent first) and limit to 20
             # (Already sorted above, but ensure it's still sorted)
@@ -1513,6 +1517,7 @@ async def dashboard_metrics():
         metrics["overview"]["uptime_hours"] = round(uptime_hours, 2)
     
     # Recalculate health score with proper bounds checking
+    # Health score should be 0 if no requests have been processed
     if metrics["overview"]["total_requests"] > 0:
         success_rate = metrics["overview"].get("success_rate", 0)
         avg_response_time = metrics["performance"].get("avg_response_time", 0.0)
@@ -1524,6 +1529,7 @@ async def dashboard_metrics():
             success_rate * 0.5 + response_time_score * 0.3 + uptime_score * 0.2, 2
         )
     else:
+        # No requests = no health score (can't evaluate performance)
         metrics["health_score"] = 0.0
     
     # Add metadata about data freshness
