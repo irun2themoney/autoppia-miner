@@ -26,7 +26,9 @@
 - **[Quick Test Guide](QUICK_TEST_GUIDE.md)** - Quick testing
 - **[Pre-Deployment Testing](PRE_DEPLOYMENT_TESTING.md)** - Pre-deployment checks
 - **[Testing Summary](TESTING_SUMMARY.md)** - Test results summary
+- **[100% Test Pass Rate](100_PERCENT_TEST_PASS.md)** - Perfect test results
 - **[Compliance Status](COMPLIANCE_STATUS.md)** - Compliance verification
+- **[Confidence & Compliance Assessment](CONFIDENCE_AND_COMPLIANCE_ASSESSMENT.md)** - Full assessment
 - **[Ratings](ratings/)** - Rating and compliance documents
 
 ---
@@ -36,6 +38,7 @@
 - **[Monitoring Guide](MONITORING.md)** - Monitoring your miner
 - **[Validator Discovery](VALIDATOR_DISCOVERY.md)** - Validator discovery process
 - **[Dashboard Completeness](DASHBOARD_COMPLETENESS.md)** - Dashboard information
+- **[Round Lifecycle Explained](ROUND_LIFECYCLE_EXPLAINED.md)** - How rounds work
 - **[Status Updates](status/)** - Status reports and updates
 
 ---
@@ -52,6 +55,10 @@
 ## 🎯 **Features & Enhancements**
 
 - **[Dynamic 3 Optimizations](DYNAMIC_3_OPTIMIZATIONS.md)** - Dynamic 3 optimizations
+- **[Dynamic Zero Implementation](DYNAMIC_ZERO_IMPLEMENTATION.md)** - Anti-overfitting system
+- **[God-Tier Roadmap](GOD_TIER_ROADMAP.md)** - Advanced features roadmap
+- **[Top-Tier Upgrades](TOP_TIER_UPGRADES.md)** - Performance upgrades
+- **[Tok Analysis & Implementation](TOK_ALL_PHASES_COMPLETE.md)** - Top miner learnings
 - **[Next Level Strategy](NEXT_LEVEL_STRATEGY.md)** - Advanced strategies
 - **[Improvements Made](IMPROVEMENTS_MADE.md)** - Completed improvements
 
@@ -79,4 +86,14 @@
 
 ---
 
-**Last Updated**: November 18, 2025
+## 💰 **Staking & Rewards**
+
+- **[Staking Recommendations](STAKING_RECOMMENDATIONS.md)** - How much to stake
+- **[Low Stake Strategy](LOW_STAKE_STRATEGY.md)** - Strategy for low stake
+- **[Rewards & Payouts](REWARDS_AND_PAYOUTS.md)** - How rewards work
+- **[Reinvestment Strategy](REINVESTMENT_STRATEGY.md)** - Reinvestment plan
+- **[Increase Validator Selection](INCREASE_VALIDATOR_SELECTION.md)** - Boost visibility
+
+---
+
+**Last Updated**: November 19, 2025
