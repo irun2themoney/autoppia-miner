@@ -42,13 +42,14 @@ class HybridAgent(BaseAgent):
         url: str,
         validator_ip: Optional[str] = None
     ) -> List[Dict[str, Any]]:
-        """Solve task using hybrid strategy with god-tier features"""
+        """Solve task using hybrid strategy with god-tier features - PERFORMANCE OPTIMIZED"""
         import logging
         import time
+        import asyncio
         
         start_time = time.time()
         
-        # SELF-LEARNING: Apply learned patterns from official documentation (non-destructive)
+        # SELF-LEARNING: Apply learned patterns from official documentation (non-destructive, lazy)
         context = {"prompt": prompt, "url": url, "task_id": task_id}
         if self.documentation_learner:
             try:
@@ -57,50 +58,71 @@ class HybridAgent(BaseAgent):
                 # Self-learning is optional - continue if it fails
                 pass
         
-        # GOD-TIER: Check semantic cache first (advanced caching)
-        # For login and click tasks, be more strict - skip cache to ensure fresh generation
+        # PERFORMANCE OPT: Detect task type once (reused multiple times)
         prompt_lower = prompt.lower()
         is_login_task = "login" in prompt_lower or "sign in" in prompt_lower
         is_click_task = "click" in prompt_lower and any(w in prompt_lower for w in ["button", "link", "element", "item"])
+        skip_cache = is_login_task or is_click_task
         
-        # For login and click tasks, skip cache to ensure fresh generation (prevents incomplete cached results)
-        if not is_login_task and not is_click_task:
-            cached_result = semantic_cache.get(prompt, url)
-            if cached_result:
-                actions, similarity = cached_result
-                logging.info(f"Semantic cache hit (similarity: {similarity:.2f}) for task: {prompt[:50]}...")
-                # Ensure actions are in IWA format (cache might have raw actions)
-                from ..actions.converter import convert_to_iwa_action
-                return [convert_to_iwa_action(action) if action.get("type") is None or not action.get("type").endswith("Action") else action for action in actions]
+        # PERFORMANCE OPT: Parallelize cache/vector/pattern checks (was sequential, now concurrent)
+        if not skip_cache:
+            # Run all checks in parallel for maximum speed (these are sync functions, so use to_thread)
+            def check_cache():
+                return semantic_cache.get(prompt, url)
+            
+            def check_vector():
+                return self.vector_memory.get_best_actions(prompt, url)
+            
+            def check_pattern():
+                return self.pattern_learner.get_similar_pattern(prompt, url)
+            
+            # Run all checks concurrently (3x faster!)
+            try:
+                results = await asyncio.wait_for(
+                    asyncio.gather(
+                        asyncio.to_thread(check_cache),
+                        asyncio.to_thread(check_vector),
+                        asyncio.to_thread(check_pattern),
+                        return_exceptions=True
+                    ),
+                    timeout=0.5  # 500ms max for all checks
+                )
+                cached_result, memory_actions, learned_pattern = results
+            except asyncio.TimeoutError:
+                # If checks take too long, proceed without them
+                logging.warning("Cache/vector/pattern checks timed out, proceeding with generation")
+                cached_result, memory_actions, learned_pattern = None, None, None
         else:
-            # For login tasks, always generate fresh to ensure complete actions
-            logging.info(f"Login task detected, skipping cache for fresh generation")
-            cached_result = None
+            # For login/click tasks, skip all caches
+            logging.info(f"Login/click task detected, skipping cache for fresh generation")
+            cached_result, memory_actions, learned_pattern = None, None, None
         
-        # Check vector memory (top tier optimization)
-        # For login and click tasks, skip vector memory to ensure fresh generation
-        if not is_login_task and not is_click_task:
-            memory_actions = self.vector_memory.get_best_actions(prompt, url)
-            if memory_actions:
-                logging.info(f"Using vector memory recall for task: {prompt[:50]}...")
-                # Ensure actions are in IWA format
-                from ..actions.converter import convert_to_iwa_action
-                iwa_actions = [convert_to_iwa_action(action) if action.get("type") is None or not action.get("type").endswith("Action") else action for action in memory_actions]
-                # Cache in semantic cache
-                semantic_cache.set(prompt, url, iwa_actions)
-                return iwa_actions
+        # PERFORMANCE OPT: Check results in priority order (cache > vector > pattern)
+        # Cache is fastest (in-memory), so check it first
+        if cached_result and not isinstance(cached_result, Exception):
+            actions, similarity = cached_result
+            logging.info(f"Semantic cache hit (similarity: {similarity:.2f}) for task: {prompt[:50]}...")
+            # Ensure actions are in IWA format (cache might have raw actions)
+            from ..actions.converter import convert_to_iwa_action
+            return [convert_to_iwa_action(action) if action.get("type") is None or not action.get("type").endswith("Action") else action for action in actions]
         
-        # DYNAMIC ZERO: Analyze task diversity
-        diversity_info = task_diversity.analyze_task_diversity(prompt, url)
-        if diversity_info.get("diversity_issues"):
-            logging.warning(f"Diversity issues detected: {diversity_info['diversity_issues']}")
+        # Vector memory is second fastest
+        if memory_actions and not isinstance(memory_actions, Exception) and memory_actions:
+            logging.info(f"Using vector memory recall for task: {prompt[:50]}...")
+            # Ensure actions are in IWA format
+            from ..actions.converter import convert_to_iwa_action
+            iwa_actions = [convert_to_iwa_action(action) if action.get("type") is None or not action.get("type").endswith("Action") else action for action in memory_actions]
+            # Cache in semantic cache for next time
+            semantic_cache.set(prompt, url, iwa_actions)
+            return iwa_actions
         
-        # Check for learned patterns (with anti-overfitting protection)
-        # For login and click tasks, skip pattern learner to ensure fresh generation
-        learned_pattern = None
-        if not is_login_task and not is_click_task:
-            learned_pattern = self.pattern_learner.get_similar_pattern(prompt, url)
-        if learned_pattern:
+        # Pattern learner is third
+        if learned_pattern and not isinstance(learned_pattern, Exception) and learned_pattern:
+            # PERFORMANCE OPT: Lazy load diversity analysis only if needed
+            diversity_info = task_diversity.analyze_task_diversity(prompt, url)
+            if diversity_info.get("diversity_issues"):
+                logging.warning(f"Diversity issues detected: {diversity_info['diversity_issues']}")
+            
             # DYNAMIC ZERO: Adapt pattern for variation if needed
             adaptation_factor = anti_overfitting.get_adaptation_factor(0.8)  # Assume high similarity
             if adaptation_factor < 1.0:

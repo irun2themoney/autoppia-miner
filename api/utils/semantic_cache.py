@@ -180,21 +180,54 @@ class SemanticCache:
         best_similarity = 0.0
         
         current_time = time.time()
-        for key, (actions, timestamp, cached_prompt) in self.cache.items():
+        # PERFORMANCE OPT: Early exit optimization - if we find a perfect match, stop searching
+        # Also optimize: check most recently accessed items first (they're more likely to match)
+        sorted_items = sorted(
+            self.cache.items(),
+            key=lambda x: self.access_times.get(x[0], 0),
+            reverse=True  # Most recently accessed first
+        )
+        
+        domain = self._get_domain(url)  # Calculate once, reuse
+        
+        for key, (actions, timestamp, cached_prompt) in sorted_items:
             # Check TTL
             if current_time - timestamp >= self.ttl:
                 continue
             
+            # PERFORMANCE OPT: Quick domain check first (faster than similarity calculation)
+            if domain:
+                cached_domain = self._get_domain(cached_prompt)
+                domain_match = domain == cached_domain
+            else:
+                domain_match = False
+            
             # Calculate similarity
             similarity = self._calculate_similarity(normalized_prompt, cached_prompt)
             
-            # Also check domain match
-            domain = self._get_domain(url)
-            cached_domain = self._get_domain(cached_prompt)  # Try to extract from cached prompt
-            if domain and cached_domain and domain == cached_domain:
-                similarity += 0.05  # Small boost for same domain
+            # Boost for same domain
+            if domain_match:
+                similarity += 0.05
             
-            # DYNAMIC ZERO: Check for overfitting
+            # PERFORMANCE OPT: Early exit if we find a near-perfect match (>= 0.99)
+            if similarity >= 0.99:
+                # DYNAMIC ZERO: Quick overfitting check
+                if has_anti_overfitting:
+                    should_use, adjusted_confidence = anti_overfitting.should_use_pattern(
+                        similarity, key, prompt, url
+                    )
+                    if should_use and adjusted_confidence >= 0.5:
+                        best_similarity = adjusted_confidence
+                        best_match = (key, actions)
+                        break  # Early exit - found near-perfect match
+                    else:
+                        continue  # Overfitting detected, skip
+                else:
+                    best_similarity = similarity
+                    best_match = (key, actions)
+                    break  # Early exit - found near-perfect match
+            
+            # DYNAMIC ZERO: Check for overfitting (only for threshold matches)
             if has_anti_overfitting and similarity >= self.similarity_threshold:
                 should_use, adjusted_confidence = anti_overfitting.should_use_pattern(
                     similarity, key, prompt, url

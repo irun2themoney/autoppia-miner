@@ -46,8 +46,29 @@ class DocumentationLearner:
         self.learned_patterns = self._load_learned_patterns()
         self.last_check_times = self._load_last_check_times()
         
+        # PERFORMANCE OPT: Connection pooling for HTTP requests
+        self._session: Optional[aiohttp.ClientSession] = None
+        
         # Background task
         self._background_task: Optional[asyncio.Task] = None
+    
+    def _get_session(self) -> aiohttp.ClientSession:
+        """Get or create HTTP session with connection pooling"""
+        if self._session is None or self._session.closed:
+            # PERFORMANCE OPT: Connection pooling with keep-alive
+            connector = aiohttp.TCPConnector(
+                limit=10,  # Max 10 connections
+                limit_per_host=5,  # Max 5 per host
+                ttl_dns_cache=300,  # DNS cache for 5 minutes
+                keepalive_timeout=30,  # Keep connections alive for 30s
+                enable_cleanup_closed=True
+            )
+            timeout = aiohttp.ClientTimeout(total=30, connect=10)
+            self._session = aiohttp.ClientSession(
+                connector=connector,
+                timeout=timeout
+            )
+        return self._session
         
     def _load_learned_patterns(self) -> Dict[str, Any]:
         """Load previously learned patterns"""
@@ -98,14 +119,15 @@ class DocumentationLearner:
             return []
         
         try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(
-                    self.OFFICIAL_SOURCES["github"],
-                    timeout=aiohttp.ClientTimeout(total=10)
-                ) as response:
-                    if response.status == 200:
-                        data = await response.json()
-                        return data if isinstance(data, list) else []
+            # PERFORMANCE OPT: Use connection pooling
+            session = self._get_session()
+            async with session.get(
+                self.OFFICIAL_SOURCES["github_subnet"] + "/contents",
+                timeout=aiohttp.ClientTimeout(total=10)
+            ) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    return data if isinstance(data, list) else []
         except Exception as e:
             logger.debug(f"Failed to fetch GitHub docs: {e}")
         return []
@@ -313,6 +335,23 @@ class DocumentationLearner:
                 pass
             self._background_task = None
             logger.info("Background documentation learning stopped")
+        
+        # PERFORMANCE OPT: Close HTTP session on shutdown
+        if self._session and not self._session.closed:
+            try:
+                # Schedule session close (can't await in sync method)
+                import asyncio
+                try:
+                    loop = asyncio.get_event_loop()
+                    if loop.is_running():
+                        asyncio.create_task(self._session.close())
+                    else:
+                        loop.run_until_complete(self._session.close())
+                except RuntimeError:
+                    # No event loop, create one
+                    asyncio.run(self._session.close())
+            except Exception as e:
+                logger.warning(f"Error closing HTTP session: {e}")
     
     def get_learned_patterns(self) -> Dict[str, Any]:
         """Get all learned patterns"""
