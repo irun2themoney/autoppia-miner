@@ -1,0 +1,24 @@
+[Unit]
+Description=Autoppia Miner API Server
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/autoppia-miner
+Environment="PATH=/opt/autoppia-miner/venv/bin:/usr/local/bin:/usr/bin:/bin"
+EnvironmentFile=/opt/autoppia-miner/.env
+ExecStart=/opt/autoppia-miner/venv/bin/python3 -m api.server
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=autoppia-api
+
+# Resource limits
+LimitNOFILE=65536
+MemoryMax=2G
+
+[Install]
+WantedBy=multi-user.target

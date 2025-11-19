@@ -84,12 +84,23 @@ pip install -r requirements.txt
 ```bash
 cp env.example .env
 # Edit .env with your settings:
-# - WALLET_NAME
-# - WALLET_HOTKEY
+# - WALLET_NAME (REQUIRED)
+# - WALLET_HOTKEY (REQUIRED)
 # - API_HOST, API_PORT
 ```
 
-### 4. Run Tests
+**⚠️ IMPORTANT**: You must set `WALLET_NAME` and `WALLET_HOTKEY` for validators to discover your miner!
+
+### 4. Register on Subnet 36
+```bash
+# Check if already registered
+./scripts/utils/check_registration.sh
+
+# If not registered, register now (requires 0.1+ TAO)
+btcli subnet register --netuid 36 --wallet.name your_wallet --wallet.hotkey your_hotkey
+```
+
+### 5. Run Tests (Optional)
 ```bash
 # Start API server
 python3 -m api.server
@@ -98,11 +109,18 @@ python3 -m api.server
 python3 tests/test_ultimate.py http://localhost:8080
 ```
 
-### 5. Deploy
+### 6. Deploy to Production
 ```bash
 # Deploy to server
 ./scripts/deploy/deploy_latest.sh
+
+# Verify deployment
+ssh root@your-server
+cd /opt/autoppia-miner
+./scripts/utils/verify_visibility.sh
 ```
+
+**📋 Full Deployment Guide**: See [DEPLOYMENT_CHECKLIST.md](docs/DEPLOYMENT_CHECKLIST.md) for complete step-by-step instructions.
 
 ---
 
@@ -267,6 +285,8 @@ WALLET_HOTKEY=your_hotkey
 
 ## 📚 **Documentation**
 
+- **[Deployment Checklist](docs/DEPLOYMENT_CHECKLIST.md)** - Complete deployment guide
+- **[Validator Visibility Guide](docs/VALIDATOR_VISIBILITY_GUIDE.md)** - Troubleshoot visibility issues
 - [Deployment Guide](docs/deployment/DEPLOYMENT.md)
 - [Testing Guide](docs/OFFICIAL_TESTING_GUIDE.md)
 - [Dynamic Zero Implementation](docs/DYNAMIC_ZERO_IMPLEMENTATION.md)

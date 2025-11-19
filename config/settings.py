@@ -25,6 +25,10 @@ class Settings(BaseSettings):
     api_url: str = "http://localhost:8080"
     api_timeout: float = 30.0
     
+    # Wallet Configuration
+    wallet_name: Optional[str] = None
+    wallet_hotkey: Optional[str] = None
+    
     # Logging
     log_level: str = "INFO"
     
