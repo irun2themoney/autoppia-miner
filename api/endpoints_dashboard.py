@@ -53,6 +53,16 @@ async def dashboard():
                 align-items: center;
                 font-weight: 400;
             }
+            .stale-warning {
+                background: #fff3cd;
+                border: 1px solid #ffc107;
+                color: #856404;
+                padding: 8px 12px;
+                border-radius: 8px;
+                margin-bottom: 16px;
+                font-size: 13px;
+                display: none;
+            }
             .refresh-indicator {
                 display: inline-block;
                 width: 8px;
@@ -290,7 +300,7 @@ async def dashboard():
                 <span id="last-update">Loading...</span> | Auto-refresh: 5s
             </div>
         </div>
-        
+        <div id="stale-data-warning" class="stale-warning"></div>
         <div class="grid">
             <div class="card">
                 <div class="card-title">Success Rate</div>
@@ -694,6 +704,21 @@ async def dashboard():
                     if (!data.errors) data.errors = {};
                     if (!data.anti_overfitting) data.anti_overfitting = {};
                     if (!data.task_diversity) data.task_diversity = {};
+                    
+                    // Check data freshness
+                    const freshness = data.data_freshness || {};
+                    if (freshness.is_stale) {
+                        const staleMsg = document.getElementById('stale-data-warning');
+                        if (staleMsg) {
+                            staleMsg.style.display = 'block';
+                            staleMsg.textContent = `⚠️ Data is ${freshness.hours_since_activity?.toFixed(1) || 'unknown'} hours old. Last activity: ${freshness.latest_activity || 'unknown'}`;
+                        }
+                    } else {
+                        const staleMsg = document.getElementById('stale-data-warning');
+                        if (staleMsg) {
+                            staleMsg.style.display = 'none';
+                        }
+                    }
                     
                     const now = new Date();
                     document.getElementById('last-update').textContent = now.toLocaleString('en-US', { 
@@ -1390,21 +1415,33 @@ async def dashboard_metrics():
                 )
             
             # Calculate response times from in-memory data OR from validator activity
+            # Priority: in-memory response_times > in-memory validator_activity > log-based validator_activity
+            response_times_to_use = []
+            
+            # First, try in-memory response_times (most accurate)
             if current_response_times and len(current_response_times) > 0:
-                metrics["performance"]["avg_response_time"] = round(sum(current_response_times) / len(current_response_times), 3)
-                sorted_times = sorted(current_response_times)
+                response_times_to_use = list(current_response_times)
+            
+            # Second, try in-memory validator_activity response times
+            if not response_times_to_use and in_memory_validator_activity:
+                response_times_to_use = [a.get("response_time", 0.0) for a in in_memory_validator_activity if a.get("response_time", 0.0) > 0]
+            
+            # Third, try log-based validator_activity response times
+            if not response_times_to_use:
+                activity_response_times = [a.get("response_time", 0.0) for a in validator_activity if a.get("response_time", 0.0) > 0]
+                if activity_response_times:
+                    response_times_to_use = activity_response_times
+            
+            # Calculate metrics from response times
+            if response_times_to_use and len(response_times_to_use) > 0:
+                metrics["performance"]["avg_response_time"] = round(sum(response_times_to_use) / len(response_times_to_use), 3)
+                sorted_times = sorted(response_times_to_use)
                 if len(sorted_times) >= 20:
                     metrics["performance"]["p95_response_time"] = round(sorted_times[int(len(sorted_times) * 0.95)], 3)
                     metrics["performance"]["p99_response_time"] = round(sorted_times[int(len(sorted_times) * 0.99)], 3)
-            else:
-                # Fallback: calculate from validator activity response times
-                activity_response_times = [a.get("response_time", 0.0) for a in validator_activity if a.get("response_time", 0.0) > 0]
-                if activity_response_times and len(activity_response_times) > 0:
-                    metrics["performance"]["avg_response_time"] = round(sum(activity_response_times) / len(activity_response_times), 3)
-                    sorted_times = sorted(activity_response_times)
-                    if len(sorted_times) >= 20:
-                        metrics["performance"]["p95_response_time"] = round(sorted_times[int(len(sorted_times) * 0.95)], 3)
-                        metrics["performance"]["p99_response_time"] = round(sorted_times[int(len(sorted_times) * 0.99)], 3)
+                elif len(sorted_times) >= 5:
+                    # Use available data for p95 even if less than 20 samples
+                    metrics["performance"]["p95_response_time"] = round(sorted_times[int(len(sorted_times) * 0.95)], 3)
             
             uptime_hours = metrics["overview"].get("uptime_hours", 0.0)
             # If uptime is 0, calculate it from start_time
@@ -1414,15 +1451,27 @@ async def dashboard_metrics():
                 uptime_hours = max(0.01, uptime_seconds / 3600)  # At least 0.01 hours
                 metrics["overview"]["uptime_hours"] = round(uptime_hours, 2)
             
-            if uptime_hours > 0:
+            # Calculate requests per minute (only if we have requests and uptime)
+            if uptime_hours > 0 and metrics["overview"]["total_requests"] > 0:
                 metrics["performance"]["requests_per_minute"] = round(
                     metrics["overview"]["total_requests"] / (uptime_hours * 60), 2
                 )
+            elif metrics["overview"]["total_requests"] > 0:
+                # If uptime is 0 but we have requests, use a default calculation
+                # This handles the case where service just restarted but has historical data
+                metrics["performance"]["requests_per_minute"] = 0.0
             
             if metrics["overview"]["total_requests"] > 0:
                 success_rate = metrics["overview"]["success_rate"]
-                response_time_score = max(0, 100 - (metrics["performance"]["avg_response_time"] * 10))
-                uptime_score = min(100, uptime_hours * 10)
+                avg_response_time = metrics["performance"].get("avg_response_time", 0.0)
+                # Response time score: 100% for <1s, decreasing for slower responses
+                # Formula: max(0, 100 - (response_time * 10))
+                # This gives: 1s = 90%, 2s = 80%, 5s = 50%, 10s = 0%
+                response_time_score = max(0, min(100, 100 - (avg_response_time * 10)))
+                # Uptime score: increases with uptime, capped at 100%
+                # Formula: min(100, uptime_hours * 10)
+                # This gives: 0.1h = 1%, 1h = 10%, 10h = 100%
+                uptime_score = min(100, max(0, uptime_hours * 10))
                 metrics["health_score"] = round(
                     success_rate * 0.5 + response_time_score * 0.3 + uptime_score * 0.2, 2
                 )
@@ -1463,16 +1512,36 @@ async def dashboard_metrics():
         uptime_hours = max(0.01, uptime_seconds / 3600)  # At least 0.01 hours
         metrics["overview"]["uptime_hours"] = round(uptime_hours, 2)
     
+    # Recalculate health score with proper bounds checking
     if metrics["overview"]["total_requests"] > 0:
         success_rate = metrics["overview"].get("success_rate", 0)
         avg_response_time = metrics["performance"].get("avg_response_time", 0.0)
-        response_time_score = max(0, 100 - (avg_response_time * 10))
-        uptime_score = min(100, uptime_hours * 10)
+        # Response time score: 100% for <1s, decreasing for slower responses
+        response_time_score = max(0, min(100, 100 - (avg_response_time * 10)))
+        # Uptime score: increases with uptime, capped at 100%
+        uptime_score = min(100, max(0, uptime_hours * 10))
         metrics["health_score"] = round(
             success_rate * 0.5 + response_time_score * 0.3 + uptime_score * 0.2, 2
         )
     else:
         metrics["health_score"] = 0.0
+    
+    # Add metadata about data freshness
+    if validator_activity:
+        latest_activity_time = validator_activity[0].get("time", "")
+        if latest_activity_time:
+            try:
+                from datetime import datetime, timezone
+                latest_dt = datetime.fromisoformat(latest_activity_time.replace('Z', '+00:00'))
+                now_dt = datetime.now(timezone.utc)
+                hours_since_activity = (now_dt - latest_dt).total_seconds() / 3600
+                metrics["data_freshness"] = {
+                    "latest_activity": latest_activity_time,
+                    "hours_since_activity": round(hours_since_activity, 2),
+                    "is_stale": hours_since_activity > 1.0  # Consider stale if > 1 hour
+                }
+            except Exception:
+                pass
     
     # Ensure proper JSON serialization
     import json
