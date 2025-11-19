@@ -28,6 +28,10 @@ class Settings(BaseSettings):
     # Logging
     log_level: str = "INFO"
     
+    # Self-Learning Configuration
+    self_learning_enabled: bool = True  # Enable self-learning from official docs
+    self_learning_interval: int = 3600  # Check for updates every hour (seconds)
+    
     class Config:
         env_file = ".env"
         case_sensitive = False

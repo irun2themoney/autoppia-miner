@@ -20,6 +20,20 @@ class HybridAgent(BaseAgent):
         self.complexity_analyzer = TaskComplexityAnalyzer()
         self.pattern_learner = PatternLearner()
         self.vector_memory = VectorMemory(max_memories=1000)  # Top tier: vector store memory
+        
+        # Self-learning from official documentation (optional, non-blocking)
+        self.documentation_learner = None
+        try:
+            from config.settings import settings
+            if settings.self_learning_enabled:
+                from ..utils.documentation_learner import DocumentationLearner
+                self.documentation_learner = DocumentationLearner(
+                    enabled=settings.self_learning_enabled,
+                    check_interval=settings.self_learning_interval
+                )
+        except Exception:
+            # Self-learning is optional - continue without it if it fails
+            pass
     
     async def solve_task(
         self,
@@ -33,6 +47,15 @@ class HybridAgent(BaseAgent):
         import time
         
         start_time = time.time()
+        
+        # SELF-LEARNING: Apply learned patterns from official documentation (non-destructive)
+        context = {"prompt": prompt, "url": url, "task_id": task_id}
+        if self.documentation_learner:
+            try:
+                context = self.documentation_learner.apply_learned_patterns(context)
+            except Exception:
+                # Self-learning is optional - continue if it fails
+                pass
         
         # GOD-TIER: Check semantic cache first (advanced caching)
         # For login and click tasks, be more strict - skip cache to ensure fresh generation

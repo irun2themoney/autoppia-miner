@@ -5,13 +5,55 @@ from fastapi.responses import JSONResponse
 from .endpoints import router
 from .endpoints_feedback import router as feedback_router
 from .endpoints_dashboard import router as dashboard_router
+from .endpoints_learning import router as learning_router
 from config.settings import settings
+import logging
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="IWA Miner API",
     version="1.0.0",
     description="Infinite Web Arena Miner API - ApifiedWebAgent Pattern"
 )
+
+# Initialize self-learning system (optional, non-blocking)
+_documentation_learner = None
+if settings.self_learning_enabled:
+    try:
+        from api.utils.documentation_learner import DocumentationLearner
+        _documentation_learner = DocumentationLearner(
+            enabled=settings.self_learning_enabled,
+            check_interval=settings.self_learning_interval
+        )
+        logger.info("Self-learning system initialized (will start in background)")
+    except Exception as e:
+        logger.warning(f"Failed to initialize self-learning system: {e} (continuing without it)")
+
+
+@app.on_event("startup")
+async def startup_event():
+    """Start background tasks on server startup"""
+    if _documentation_learner:
+        try:
+            # Start background learning in a way that doesn't block
+            import asyncio
+            loop = asyncio.get_event_loop()
+            _documentation_learner.start_background_learning()
+            logger.info("Background documentation learning started")
+        except Exception as e:
+            logger.warning(f"Failed to start background learning: {e} (continuing without it)")
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Stop background tasks on server shutdown"""
+    if _documentation_learner:
+        try:
+            _documentation_learner.stop_background_learning()
+            logger.info("Background documentation learning stopped")
+        except Exception as e:
+            logger.warning(f"Failed to stop background learning: {e}")
 
 # CORS middleware
 app.add_middleware(
@@ -25,6 +67,7 @@ app.add_middleware(
 app.include_router(router)
 app.include_router(feedback_router, prefix="/api")
 app.include_router(dashboard_router, prefix="/api")  # Real-time dashboard
+app.include_router(learning_router)  # Self-learning endpoints
 
 
 @app.get("/health")
