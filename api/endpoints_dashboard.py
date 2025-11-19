@@ -1426,8 +1426,8 @@ async def dashboard_metrics():
                     success_rate * 0.5 + response_time_score * 0.3 + uptime_score * 0.2, 2
                 )
             
-            validator_activity.sort(key=lambda x: x.get("time", ""), reverse=True)
             # Ensure recent_activity is sorted by time (most recent first) and limit to 20
+            # (Already sorted above, but ensure it's still sorted)
             # Also ensure boolean values are properly formatted for JSON
             recent_activity_formatted = []
             for activity in validator_activity[:20]:
