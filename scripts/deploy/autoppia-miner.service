@@ -10,7 +10,7 @@ User=root
 WorkingDirectory=/opt/autoppia-miner
 Environment="PATH=/opt/autoppia-miner/venv/bin:/usr/local/bin:/usr/bin:/bin"
 EnvironmentFile=/opt/autoppia-miner/.env
-ExecStart=/opt/autoppia-miner/venv/bin/python3 -m miner.miner --wallet.name $WALLET_NAME --wallet.hotkey $WALLET_HOTKEY --netuid $SUBNET_UID --subtensor.network $NETWORK --axon.port $AXON_PORT
+ExecStart=/opt/autoppia-miner/scripts/start_miner_wrapper.sh
 Restart=always
 RestartSec=10
 StandardOutput=journal
