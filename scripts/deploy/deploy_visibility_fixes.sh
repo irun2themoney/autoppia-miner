@@ -1,93 +1,93 @@
 #!/bin/bash
-# Quick deployment script - Run this to deploy validator visibility fixes
-# This script will guide you through the deployment process
+# Final fixed deployment script - removes untracked files blocking merge
 
 set -e
 
+SERVER="root@134.199.203.133"
+
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "🚀 Deploying Validator Visibility Fixes"
+echo "🚀 Deploying Validator Visibility Fixes (Final Fix)"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
-echo "This will deploy to: root@134.199.203.133"
-echo "You'll be prompted for your SSH password multiple times."
+echo "This will deploy all validator visibility fixes to production."
 echo ""
 read -p "Press Enter to continue..."
 echo ""
 
-# Step 1: Pull latest code
-echo "📥 Step 1: Pulling latest code from GitHub..."
-ssh root@134.199.203.133 << 'EOF'
+# Do everything in one SSH session
+echo "🔧 Deploying to $SERVER..."
+ssh "$SERVER" << 'ENDSSH'
+set -e
+
 cd /opt/autoppia-miner
-git pull origin main
-echo "✅ Code pulled"
-EOF
+
+echo "📥 Step 1: Cleaning up conflicting files..."
+rm -f api/utils/website_error_handler.py scripts/stake_tao.py
+echo "   ✅ Conflicting files removed"
 echo ""
 
-# Step 2: Add wallet configuration to .env
-echo "🔧 Step 2: Adding wallet configuration to .env..."
-ssh root@134.199.203.133 << 'EOF'
-cd /opt/autoppia-miner
-# Check if wallet config already exists
+echo "📥 Step 2: Pulling latest code..."
+git pull origin main
+echo "   ✅ Code pulled successfully"
+echo ""
+
+echo "🔧 Step 3: Configuring wallet..."
 if grep -q "WALLET_NAME" .env 2>/dev/null; then
-    echo "   ⚠️  Wallet config already exists in .env"
+    echo "   ℹ️  Wallet config already exists"
 else
     echo "" >> .env
     echo "# Wallet Configuration" >> .env
     echo "WALLET_NAME=default" >> .env
     echo "WALLET_HOTKEY=default" >> .env
-    echo "   ✅ Wallet config added to .env"
+    echo "   ✅ Wallet config added"
 fi
-EOF
 echo ""
 
-# Step 3: Install systemd services
-echo "📦 Step 3: Installing systemd services..."
-ssh root@134.199.203.133 << 'EOF'
-cd /opt/autoppia-miner
+echo "📦 Step 4: Installing systemd services..."
 sudo cp scripts/deploy/autoppia-api.service /etc/systemd/system/
 sudo cp scripts/deploy/autoppia-miner.service /etc/systemd/system/
 sudo systemctl daemon-reload
-echo "   ✅ Systemd services installed"
-EOF
+echo "   ✅ Services installed"
 echo ""
 
-# Step 4: Restart services
-echo "🔄 Step 4: Restarting services..."
-ssh root@134.199.203.133 << 'EOF'
+echo "🔄 Step 5: Restarting services..."
 sudo systemctl restart autoppia-api
-echo "   ✅ API service restarted"
 sudo systemctl restart autoppia-miner
-echo "   ✅ Miner service restarted"
-EOF
+echo "   ✅ Services restarted"
 echo ""
 
-# Step 5: Wait for services to start
-echo "⏳ Step 5: Waiting for services to start..."
+echo "⏳ Waiting 5 seconds for services to start..."
 sleep 5
 echo ""
 
-# Step 6: Check registration
-echo "📋 Step 6: Checking registration status..."
-ssh root@134.199.203.133 << 'EOF'
-cd /opt/autoppia-miner
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "📋 Checking Registration Status"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 ./scripts/utils/check_registration.sh
-EOF
 echo ""
 
-# Step 7: Verify visibility
-echo "🔍 Step 7: Verifying validator visibility..."
-ssh root@134.199.203.133 << 'EOF'
-cd /opt/autoppia-miner
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "🔍 Verifying Visibility"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 ./scripts/utils/verify_visibility.sh
-EOF
-echo ""
 
+ENDSSH
+
+echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "✅ Deployment Complete!"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
-echo "Next steps:"
-echo "  - Monitor logs: ssh root@134.199.203.133 'journalctl -u autoppia-miner -f'"
-echo "  - Check dashboard: http://134.199.203.133:8080/dashboard"
-echo "  - Wait 5-10 minutes for validators to discover you"
+echo "🎉 Your miner is now configured for validator visibility!"
+echo ""
+echo "What happens next:"
+echo "  ⏱️  0-2 min: Services restart with new configuration"
+echo "  ⏱️  2-5 min: Metagraph syncs, validators discover your miner"
+echo "  ⏱️  5-10 min: First validator requests should appear"
+echo ""
+echo "Monitor validator activity:"
+echo "  ssh $SERVER 'journalctl -u autoppia-miner -f | grep Processing'"
+echo ""
+echo "Check dashboard:"
+echo "  http://134.199.203.133:8080/dashboard"
 echo ""

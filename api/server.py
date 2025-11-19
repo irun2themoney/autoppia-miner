@@ -17,6 +17,13 @@ app = FastAPI(
     description="Infinite Web Arena Miner API - ApifiedWebAgent Pattern"
 )
 
+# Mount static files for dashboard
+from fastapi.staticfiles import StaticFiles
+import os
+if os.path.exists("api/static"):
+    app.mount("/static", StaticFiles(directory="api/static"), name="static")
+
+
 # Initialize self-learning system (optional, non-blocking)
 _documentation_learner = None
 if settings.self_learning_enabled:
