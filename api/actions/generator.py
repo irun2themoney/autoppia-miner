@@ -58,6 +58,12 @@ try:
 except ImportError:
     action_optimizer = None
 
+# Import Live Analyzer
+try:
+    from ..utils.live_analyzer import live_analyzer
+except ImportError:
+    live_analyzer = None
+
 
 class ActionGenerator:
     """Generate action sequences based on task - Enhanced with more patterns"""
@@ -67,7 +73,7 @@ class ActionGenerator:
         self.selector_strategy = SelectorStrategy()
         self.task_parser = TaskParser()  # Enhanced parsing
     
-    def generate(self, prompt: str, url: str) -> List[Dict[str, Any]]:
+    async def generate(self, prompt: str, url: str) -> List[Dict[str, Any]]:
         """Generate action sequence based on prompt - Enhanced patterns with context awareness, multi-step planning, and website-specific intelligence"""
         actions = []
         prompt_lower = prompt.lower()
@@ -102,6 +108,25 @@ class ActionGenerator:
                 strategy.update(website_strategy)
             elif website_strategy:
                 strategy = website_strategy
+        
+        # LIVE ANALYSIS: Fetch and analyze page if URL is provided
+        live_selectors = []
+        if live_analyzer and url and url.startswith("http"):
+            try:
+                # Async fetch
+                html = await live_analyzer.fetch_page(url)
+                if html:
+                    # Analyze DOM for intent
+                    # Determine intent from prompt keywords
+                    intent = prompt_lower
+                    parsed_task_type = parsed.get("task_type", "generic") if 'parsed' in locals() else "generic"
+                    
+                    live_selectors = live_analyzer.analyze_dom(html, intent, parsed_task_type)
+                    if live_selectors:
+                        logger.info(f"Live Analysis found {len(live_selectors)} candidates for {url}")
+                        # We'll use these to override heuristic selectors later
+            except Exception as e:
+                logger.warning(f"Live analysis failed: {e}")
         
         # Parse task to extract all information
         parsed = self.task_parser.parse_task(prompt, url)
@@ -143,6 +168,52 @@ class ActionGenerator:
             Apply validation, verification, and optimization to action sequence
             Enhanced with Tok-style quality checks (target 5-8s response time)
             """
+            # LIVE ANALYSIS OVERRIDE
+            if live_selectors:
+                for action in action_list:
+                    # If action needs a selector and we have a better one from live analysis
+                    if "selector" in action and action.get("action_type") in ["click", "type", "select"]:
+                        # Find best matching live selector
+                        # Simple heuristic: use top confidence selector if type matches
+                        # (In a real implementation, we'd match specific fields like 'username' vs 'password')
+                        
+                        # Try to match by field type if available
+                        selector_val = action.get("selector", "")
+                        if isinstance(selector_val, dict):
+                            action_target = selector_val.get("value", "").lower()
+                        else:
+                            action_target = str(selector_val).lower()
+                            
+                        best_live = None
+                        
+                        for live in live_selectors:
+                            # If we have type info (e.g. from login analysis)
+                            live_type = live.get("type", "unknown")
+                            if live_type != "unknown":
+                                # Map action target to live type
+                                if "user" in action_target and live_type == "username":
+                                    best_live = live
+                                    break
+                                if "pass" in action_target and live_type == "password":
+                                    best_live = live
+                                    break
+                                if "submit" in action_target and live_type == "submit":
+                                    best_live = live
+                                    break
+                                if "apply" in action_target and live_type == "apply_button":
+                                    best_live = live
+                                    break
+                        
+                        # If no specific match, fallback to highest confidence generic
+                        if not best_live and live_selectors:
+                            best_live = live_selectors[0]
+                            
+                        if best_live:
+                            logger.info(f"Overriding selector {action_target} with live selector {best_live['selector']}")
+                            # Use cssSelector type for live selectors
+                            from .selectors import create_selector
+                            action["selector"] = create_selector("cssSelector", best_live["selector"])
+
             optimized = self._apply_context_optimizations(action_list, context, strategy)
             
             # Step 0: Optimize action sequence (remove redundant actions) - Tok-style efficiency

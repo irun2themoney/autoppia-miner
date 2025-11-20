@@ -19,7 +19,7 @@ class TemplateAgent(BaseAgent):
     ) -> List[Dict[str, Any]]:
         """Solve task using template-based action generation"""
         # Generate actions using templates
-        raw_actions = self.action_generator.generate(prompt, url)
+        raw_actions = await self.action_generator.generate(prompt, url)
         
         # Convert to IWA format
         iwa_actions = [
