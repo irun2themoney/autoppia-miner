@@ -199,45 +199,141 @@ class LiveAnalyzer:
         return sorted(selectors, key=lambda x: x["confidence"], reverse=True)
 
     def _generate_selector(self, tag) -> Optional[str]:
-        """Generate a robust CSS selector for a BeautifulSoup tag"""
+        """Generate a robust CSS selector for a BeautifulSoup tag (returns best candidate)"""
+        candidates = self._generate_selector_candidates(tag)
+        return candidates[0]['selector'] if candidates else None
+    
+    def _generate_selector_candidates(self, tag) -> List[Dict[str, Any]]:
+        """
+        Generate multiple selector strategies for a tag with confidence scores.
+        Returns list of candidates sorted by confidence (highest first).
+        """
+        candidates = []
+        
         try:
-            # 1. ID selector (Best)
+            # Strategy 1: ID selector (Highest confidence - 0.95)
             if tag.has_attr("id"):
-                # Check if ID looks dynamic (too long, random chars)
                 id_val = tag["id"]
+                # Check if ID looks stable (not dynamic/random)
                 if len(id_val) < 30 and not re.search(r'\d{5,}', id_val):
-                    return f"#{id_val}"
+                    candidates.append({
+                        'selector': f"#{id_val}",
+                        'confidence': 0.95,
+                        'strategy': 'id'
+                    })
             
-            # 2. Unique Class selector
+            # Strategy 2: Name attribute (High confidence - 0.85)
+            if tag.has_attr("name"):
+                name_val = tag["name"]
+                candidates.append({
+                    'selector': f'{tag.name}[name="{name_val}"]',
+                    'confidence': 0.85,
+                    'strategy': 'name'
+                })
+            
+            # Strategy 3: Data attributes (High confidence - 0.80)
+            for attr in ["data-testid", "data-id", "data-test"]:
+                if tag.has_attr(attr):
+                    candidates.append({
+                        'selector': f'[{attr}="{tag[attr]}"]',
+                        'confidence': 0.80,
+                        'strategy': 'data_attr'
+                    })
+                    break  # Only use first data attribute found
+            
+            # Strategy 4: Class selector (Medium confidence - 0.70)
             if tag.has_attr("class"):
                 classes = tag["class"]
                 # Filter out common utility classes
-                valid_classes = [c for c in classes if c not in ["btn", "button", "active", "hidden", "visible"]]
+                valid_classes = [c for c in classes 
+                               if c not in ["btn", "button", "active", "hidden", "visible", "disabled"]]
                 if valid_classes:
-                    return f".{'.'.join(valid_classes)}"
+                    # Use first 2 classes for specificity
+                    class_str = '.'.join(valid_classes[:2])
+                    candidates.append({
+                        'selector': f".{class_str}",
+                        'confidence': 0.70,
+                        'strategy': 'class'
+                    })
             
-            # 3. Attribute selector (Name, Type, Data-*)
-            for attr in ["name", "type", "data-testid", "data-id", "aria-label", "placeholder"]:
+            # Strategy 5: Type + Placeholder (for inputs - 0.75)
+            if tag.name == "input" and tag.has_attr("type"):
+                input_type = tag["type"]
+                if tag.has_attr("placeholder"):
+                    candidates.append({
+                        'selector': f'input[type="{input_type}"][placeholder="{tag["placeholder"]}"]',
+                        'confidence': 0.75,
+                        'strategy': 'type_placeholder'
+                    })
+                else:
+                    candidates.append({
+                        'selector': f'input[type="{input_type}"]',
+                        'confidence': 0.65,
+                        'strategy': 'type'
+                    })
+            
+            # Strategy 6: Aria-label (Accessibility - 0.75)
+            if tag.has_attr("aria-label"):
+                candidates.append({
+                    'selector': f'[aria-label="{tag["aria-label"]}"]',
+                    'confidence': 0.75,
+                    'strategy': 'aria'
+                })
+            
+            # Strategy 7: Tag + specific attributes (Medium-low - 0.60)
+            for attr in ["role", "title"]:
                 if tag.has_attr(attr):
-                    return f'{tag.name}[{attr}="{tag[attr]}"]'
+                    candidates.append({
+                        'selector': f'{tag.name}[{attr}="{tag[attr]}"]',
+                        'confidence': 0.60,
+                        'strategy': f'tag_{attr}'
+                    })
             
-            # 4. Text content selector (Pseudo-selector for Playwright/Puppeteer)
-            # Note: Standard CSS doesn't support :text, but many automation tools do.
-            # We'll stick to standard CSS or XPath if needed, but for now let's try a specific attribute path
-            
-            # 5. Fallback: Tag + Hierarchy (simplified)
-            # This is weak, but better than nothing
+            # Strategy 8: Positional/Hierarchical (Fallback - 0.50)
+            # Build a simple parent > child path
             path = []
             parent = tag
-            while parent and parent.name != "[document]":
-                path.insert(0, parent.name)
+            depth = 0
+            while parent and parent.name != "[document]" and depth < 3:
+                if parent.has_attr("id"):
+                    path.insert(0, f"#{parent['id']}")
+                    break
+                elif parent.has_attr("class") and parent["class"]:
+                    path.insert(0, f"{parent.name}.{parent['class'][0]}")
+                else:
+                    path.insert(0, parent.name)
                 parent = parent.parent
-                if len(path) > 3: break # Limit depth
-                
-            return " > ".join(path)
+                depth += 1
             
-        except Exception:
-            return None
+            if path:
+                candidates.append({
+                    'selector': " > ".join(path),
+                    'confidence': 0.50,
+                    'strategy': 'positional'
+                })
+            
+            # Sort by confidence (highest first)
+            candidates.sort(key=lambda x: x['confidence'], reverse=True)
+            
+            # If no candidates, return tag name as last resort
+            if not candidates:
+                candidates.append({
+                    'selector': tag.name,
+                    'confidence': 0.30,
+                    'strategy': 'tag_only'
+                })
+            
+            return candidates
+            
+        except Exception as e:
+            logger.error(f"Error generating selector candidates: {e}")
+            # Return minimal fallback
+            return [{
+                'selector': tag.name if tag else 'body',
+                'confidence': 0.20,
+                'strategy': 'error_fallback'
+            }]
+
 
 # Global instance
 live_analyzer = LiveAnalyzer()

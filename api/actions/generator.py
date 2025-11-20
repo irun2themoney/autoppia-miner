@@ -72,6 +72,63 @@ class ActionGenerator:
         self.classifier = TaskClassifier()
         self.selector_strategy = SelectorStrategy()
         self.task_parser = TaskParser()  # Enhanced parsing
+        self.live_analysis_timeout = 3.0  # seconds
+        self.max_retries = 2
+    
+    def _validate_actions(self, actions: List[Dict[str, Any]]) -> bool:
+        """Validate generated actions before returning"""
+        if not actions:
+            return False
+        
+        for action in actions:
+            # Must have required fields
+            if not action.get('selector'):
+                return False
+            if not action.get('action'):
+                return False
+            
+            # Selector must be valid format
+            selector = action['selector']
+            if isinstance(selector, dict):
+                if not selector.get('value'):
+                    return False
+        
+        return True
+    
+    def _safe_fallback(self, prompt: str) -> List[Dict[str, Any]]:
+        """Return minimal safe actions when all else fails"""
+        logger.warning(f"Using safe fallback for prompt: {prompt[:50]}...")
+        return [{
+            "action": "wait",
+            "selector": create_selector("body"),
+            "value": ""
+        }]
+    
+    async def generate_with_retry(self, prompt: str, url: str, max_retries: int = None) -> List[Dict[str, Any]]:
+        """Generate actions with retry logic and validation"""
+        if max_retries is None:
+            max_retries = self.max_retries
+        
+        for attempt in range(max_retries):
+            try:
+                actions = await self.generate(prompt, url)
+                
+                if self._validate_actions(actions):
+                    return actions
+                
+                logger.warning(f"Invalid actions on attempt {attempt + 1}/{max_retries}, retrying...")
+                
+            except Exception as e:
+                logger.error(f"Generation failed on attempt {attempt + 1}/{max_retries}: {e}")
+                
+                if attempt == max_retries - 1:
+                    # Final fallback: return safe empty state
+                    return self._safe_fallback(prompt)
+                
+                import asyncio
+                await asyncio.sleep(0.5)  # Brief pause before retry
+        
+        return self._safe_fallback(prompt)
     
     async def generate(self, prompt: str, url: str) -> List[Dict[str, Any]]:
         """Generate action sequence based on prompt - Enhanced patterns with context awareness, multi-step planning, and website-specific intelligence"""
@@ -116,15 +173,34 @@ class ActionGenerator:
                 # Async fetch
                 html = await live_analyzer.fetch_page(url)
                 if html:
-                    # Analyze DOM for intent
+                    # Analyze DOM for intent with timeout
                     # Determine intent from prompt keywords
                     intent = prompt_lower
                     parsed_task_type = parsed.get("task_type", "generic") if 'parsed' in locals() else "generic"
                     
-                    live_selectors = live_analyzer.analyze_dom(html, intent, parsed_task_type)
-                    if live_selectors:
-                        logger.info(f"Live Analysis found {len(live_selectors)} candidates for {url}")
-                        # We'll use these to override heuristic selectors later
+                    try:
+                        import asyncio
+                        import time
+                        start_time = time.time()
+                        
+                        # Attempt Live Analysis with timeout
+                        live_selectors = await asyncio.wait_for(
+                            asyncio.to_thread(live_analyzer.analyze_dom, html, intent, parsed_task_type),
+                            timeout=self.live_analysis_timeout
+                        )
+                        
+                        elapsed = time.time() - start_time
+                        if live_selectors:
+                            logger.info(f"✅ Live Analysis found {len(live_selectors)} candidates in {elapsed:.2f}s")
+                        else:
+                            logger.info(f"Live Analysis completed in {elapsed:.2f}s but found no candidates")
+                            
+                    except asyncio.TimeoutError:
+                        logger.warning(f"⏱️ Live Analysis timeout ({self.live_analysis_timeout}s), will use heuristics")
+                        live_selectors = []
+                    except Exception as e:
+                        logger.error(f"❌ Live Analysis error: {e}, falling back to heuristics")
+                        live_selectors = []
             except Exception as e:
                 logger.warning(f"Live analysis failed: {e}")
         

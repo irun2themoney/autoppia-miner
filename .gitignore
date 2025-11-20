@@ -56,6 +56,7 @@ logs/
 *.temp
 tests/temp/
 scripts/temp/
+scripts/archive/
 
 # Pattern learning cache
 /tmp/autoppia_patterns.json
