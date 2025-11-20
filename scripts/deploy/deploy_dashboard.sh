@@ -25,6 +25,10 @@ ssh -t $USER@$SERVER_IP "bash -c '
     git stash
     git pull origin main
     
+    echo -e \"${YELLOW}📦 Installing dependencies...${NC}\"
+    source venv/bin/activate
+    pip install -r requirements.txt
+    
     echo -e \"${YELLOW}🔄 Restarting API service...${NC}\"
     systemctl restart autoppia-api
     
