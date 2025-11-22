@@ -234,11 +234,11 @@ async def solve_task(request: TaskRequest, http_request: Request):
             # OPTIMIZATION: Use shorter timeout for faster test responses
             # For production, validators use 90s, but for tests we want faster responses
             # Detect if this is a test request (localhost or test ID pattern)
+            # CRITICAL FIX: Don't treat validator_ip=None as test request - playground/validators might not send IP
+            # Only treat as test if explicitly localhost or test ID pattern
             is_test_request = (
-                validator_ip is None or 
                 validator_ip in ["127.0.0.1", "localhost", "::1"] or
-                request.id.startswith("test-") or
-                request.id.startswith("cache-test-")
+                (request.id and (request.id.startswith("test-") or request.id.startswith("cache-test-")))
             )
             timeout_seconds = 10.0 if is_test_request else 90.0  # Fast for tests, longer for validators
             
