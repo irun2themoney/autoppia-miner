@@ -133,7 +133,7 @@ class TaskDiversityHandler:
                 return "autolodge"
             else:
                 return domain.split('.')[0] if '.' in domain else domain
-        except:
+        except Exception:
             return "unknown"
     
     def adapt_actions_for_variation(

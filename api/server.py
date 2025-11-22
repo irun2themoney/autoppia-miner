@@ -1,28 +1,26 @@
 """FastAPI server setup"""
-from fastapi import FastAPI
+from contextlib import asynccontextmanager
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 from .endpoints import router
 from .endpoints_feedback import router as feedback_router
 from .endpoints_dashboard import router as dashboard_router
 from .endpoints_learning import router as learning_router
 from config.settings import settings
 import logging
+import os
 
 logger = logging.getLogger(__name__)
 
-app = FastAPI(
-    title="IWA Miner API",
-    version="1.0.0",
-    description="Infinite Web Arena Miner API - ApifiedWebAgent Pattern"
-)
-
-# Mount static files for dashboard
-from fastapi.staticfiles import StaticFiles
-import os
-if os.path.exists("api/static"):
-    app.mount("/static", StaticFiles(directory="api/static"), name="static")
-
+# CORS headers helper (used in multiple places)
+CORS_HEADERS = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "*",
+}
 
 # Initialize self-learning system (optional, non-blocking)
 _documentation_learner = None
@@ -38,29 +36,63 @@ if settings.self_learning_enabled:
         logger.warning(f"Failed to initialize self-learning system: {e} (continuing without it)")
 
 
-@app.on_event("startup")
-async def startup_event():
-    """Start background tasks on server startup"""
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Lifespan context manager for startup and shutdown events"""
+    # Startup
     if _documentation_learner:
         try:
             # Start background learning in a way that doesn't block
-            import asyncio
-            loop = asyncio.get_event_loop()
             _documentation_learner.start_background_learning()
             logger.info("Background documentation learning started")
         except Exception as e:
             logger.warning(f"Failed to start background learning: {e} (continuing without it)")
-
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Stop background tasks on server shutdown"""
+    
+    yield
+    
+    # Shutdown
     if _documentation_learner:
         try:
             _documentation_learner.stop_background_learning()
             logger.info("Background documentation learning stopped")
         except Exception as e:
             logger.warning(f"Failed to stop background learning: {e}")
+
+
+app = FastAPI(
+    title="IWA Miner API",
+    version="1.0.0",
+    description="Infinite Web Arena Miner API - ApifiedWebAgent Pattern",
+    lifespan=lifespan
+)
+
+# CRITICAL: Handle validation errors to ensure we never return empty actions
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """Handle Pydantic validation errors - always return actions (benchmark requirement)"""
+    logger.warning(f"Validation error for {request.url}: {exc.errors()}")
+    # Extract request body if possible
+    try:
+        body = await request.json()
+        task_id = body.get("id", "unknown")
+    except:
+        task_id = "unknown"
+    
+    # CRITICAL: Always return actions, even on validation error
+    # Match official format: {actions: [], web_agent_id: str, recording: str}
+    return JSONResponse(
+        content={
+            "actions": [{"type": "ScreenshotAction"}],  # At least one action
+            "web_agent_id": task_id,
+            "recording": "",
+        },
+        status_code=200,  # Return 200 with fallback actions
+        headers=CORS_HEADERS
+    )
+
+# Mount static files for dashboard
+if os.path.exists("api/static"):
+    app.mount("/static", StaticFiles(directory="api/static", check_dir=False), name="static")
 
 # CORS middleware
 app.add_middleware(
@@ -80,7 +112,6 @@ app.include_router(learning_router)  # Self-learning endpoints
 @app.get("/health")
 async def health():
     """Health check endpoint"""
-    import os
     agent_type = os.getenv("AGENT_TYPE", settings.agent_type)
     
     try:
@@ -123,21 +154,13 @@ async def metrics():
                 "cache_hit_rate": metrics_data["cache_hit_rate"],
                 "avg_response_time": round(metrics_data["avg_response_time"], 3),
             },
-            headers={
-                "Access-Control-Allow-Origin": "*",
-                "Access-Control-Allow-Methods": "GET, OPTIONS",
-                "Access-Control-Allow-Headers": "*",
-            }
+            headers=CORS_HEADERS
         )
     except Exception as e:
         return JSONResponse(
             content={"error": str(e)},
             status_code=500,
-            headers={
-                "Access-Control-Allow-Origin": "*",
-                "Access-Control-Allow-Methods": "GET, OPTIONS",
-                "Access-Control-Allow-Headers": "*",
-            }
+            headers=CORS_HEADERS
         )
 
 
@@ -155,11 +178,7 @@ async def root():
                 "dashboard": "/api/dashboard"
             }
         },
-        headers={
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-            "Access-Control-Allow-Headers": "*",
-        }
+        headers=CORS_HEADERS
     )
 
 

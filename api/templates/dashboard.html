@@ -6,8 +6,6 @@
     <title>Autoppia Miner Dashboard</title>
     <link rel="stylesheet" href="/static/css/dashboard.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 </head>
 <body>
     <div class="app-container">
@@ -16,7 +14,7 @@
                 <div class="logo-section">
                     <div class="status-dot active"></div>
                     <h1>Autoppia Miner</h1>
-                    <span class="version-badge">v2.0</span>
+                    <span class="version-badge">v4.0</span>
                 </div>
                 <div class="header-controls">
                     <div class="refresh-timer">
@@ -64,15 +62,17 @@
                 <div class="card-sub" id="response-detail">-</div>
             </div>
 
-            <!-- Secondary Metrics -->
-            <div class="card metric-card secondary">
-                <div class="card-header">
-                    <span class="card-label">Cache Hit Rate</span>
+            <!-- Rewards Earned - MOTIVATIONAL! -->
+            <div class="card metric-card" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); border: 2px solid #10b981; grid-column: span 1;">
+                <div class="card-header" style="color: #ffffff !important;">
+                    <span class="card-label" style="color: #ffffff !important;">💰 Rewards Earned</span>
+                    <span class="trend-indicator" style="color: #ffffff !important;">🎉</span>
                 </div>
-                <div class="card-value" id="cache-hit">-</div>
-                <div class="card-sub" id="cache-detail">-</div>
+                <div class="card-value" id="rewards-earned" style="color: #ffffff !important; font-size: 2.5em; font-weight: 700;">-</div>
+                <div class="card-sub" id="rewards-detail" style="color: rgba(255,255,255,0.8);">TAO from mining</div>
             </div>
 
+            <!-- Secondary Metrics - Simplified -->
             <div class="card metric-card secondary">
                 <div class="card-header">
                     <span class="card-label">Validators</span>
@@ -97,58 +97,46 @@
                 <div class="card-sub" id="round-detail">-</div>
             </div>
 
-            <!-- Charts & Detailed Sections -->
-            <div class="card chart-section">
-                <div class="section-header">
-                    <h2>Real-Time Performance</h2>
-                    <div class="chart-legend">
-                        <span class="legend-item"><span class="dot success"></span>Success</span>
-                        <span class="legend-item"><span class="dot response"></span>Latency</span>
-                        <span class="legend-item"><span class="dot requests"></span>Req/min</span>
-                    </div>
-                </div>
-                <div class="chart-container">
-                    <canvas id="performanceChart"></canvas>
-                </div>
-            </div>
-
-            <div class="card info-section">
-                <div class="section-header">
-                    <h2>⚡ God-Tier Features</h2>
-                </div>
-                <div id="god-tier" class="compact-grid">Loading...</div>
-            </div>
-
-            <div class="card info-section">
-                <div class="section-header">
-                    <h2>🛡️ Dynamic Zero</h2>
-                </div>
-                <div id="anti-overfitting" class="compact-grid">Loading...</div>
-            </div>
-
+            <!-- Simplified Validator Log -->
             <div class="card table-section wide">
                 <div class="section-header">
-                    <h2>Recent Activity</h2>
-                    <span class="badge">Last 10</span>
+                    <h2>📜 Validator Interactions</h2>
+                    <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                        <span class="badge" id="total-interactions">0</span>
+                        <input type="text" id="log-search" placeholder="Search by IP, URL, or prompt..." style="padding: 4px 8px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-secondary); color: var(--text-primary); font-size: 12px; width: 200px;">
+                        <select id="log-filter" style="padding: 4px 8px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-secondary); color: var(--text-primary); font-size: 12px;">
+                            <option value="all">All</option>
+                            <option value="success">Success Only</option>
+                            <option value="failed">Failed Only</option>
+                        </select>
+                    </div>
                 </div>
-                <div id="recent-activity" class="table-wrapper">Loading...</div>
+                <div id="validator-log" class="table-wrapper" style="max-height: 400px; overflow-y: auto; overflow-x: auto; width: 100%;">Loading...</div>
             </div>
 
-            <div class="card table-section">
-                <div class="section-header">
-                    <h2>Top Validators</h2>
-                </div>
-                <div id="top-validators" class="table-wrapper">Loading...</div>
-            </div>
-
-            <div class="card table-section">
-                <div class="section-header">
-                    <h2>Task Types</h2>
-                </div>
-                <div id="task-types" class="table-wrapper">Loading...</div>
-            </div>
         </main>
     </div>
-    <script src="/static/js/dashboard.js"></script>
+    <style>
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateX(-10px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+        .activity-item {
+            animation: slideIn 0.3s ease-out;
+            padding: 8px;
+            margin-bottom: 6px;
+            border-left: 3px solid;
+            border-radius: 4px;
+            background: var(--bg-primary);
+        }
+        .activity-item.success { border-left-color: #10b981; }
+        .activity-item.failed { border-left-color: #ef4444; }
+        .activity-item.new { background: rgba(16, 185, 129, 0.1); }
+    </style>
+    <script src="/static/js/dashboard.js?v=4.2"></script>
 </body>
 </html>

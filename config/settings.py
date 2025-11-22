@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     network: str = "finney"
     axon_port: int = 8091
     api_url: str = "http://localhost:8080"
-    api_timeout: float = 30.0
+    api_timeout: float = 90.0  # Updated to match validators (Nov 2025: increased from 30s to 90s)
     
     # Wallet Configuration
     wallet_name: Optional[str] = None
@@ -35,6 +35,10 @@ class Settings(BaseSettings):
     # Self-Learning Configuration
     self_learning_enabled: bool = True  # Enable self-learning from official docs
     self_learning_interval: int = 3600  # Check for updates every hour (seconds)
+    
+    # Browser Automation Configuration
+    enable_browser_automation: bool = True  # Enable Playwright browser automation (better accuracy, slower)
+    browser_automation_timeout: float = 15.0  # Timeout for browser page loads (seconds)
     
     class Config:
         env_file = ".env"

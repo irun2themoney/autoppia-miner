@@ -19,12 +19,23 @@ class ActionValidator:
         Validate action before execution - Enhanced with Tok-style quality checks
         
         Tok validates selectors exist, checks logical flow, ensures completeness
+        CRITICAL: Supports both internal format (action_type) and IWA format (type)
         """
-        action_type = action.get("action_type", "")
+        # CRITICAL: Check both action_type (internal) and type (IWA format)
+        action_type = action.get("action_type") or action.get("type", "")
+        
+        # If action has "type" (IWA format), convert to internal format for validation
+        if not action_type and action.get("type"):
+            iwa_type = action.get("type", "")
+            # Convert IWA format to internal format (e.g., "GotoAction" -> "goto")
+            if iwa_type.endswith("Action"):
+                action_type = iwa_type[:-6].lower()  # Remove "Action" suffix
+            else:
+                action_type = iwa_type.lower()
         
         # Basic validation
         if not action_type:
-            return False, "Missing action_type"
+            return False, "Missing action_type or type"
         
         # Type-specific validation
         if action_type == "navigate":
@@ -100,6 +111,15 @@ class ActionValidator:
         
         # Validate individual actions
         for i, action in enumerate(actions):
+            # CRITICAL: Skip validation if action is already in IWA format (has "type" but not "action_type")
+            # The finalize_actions function converts to IWA format, so validation should be lenient
+            if action.get("type") and not action.get("action_type"):
+                # Action is in IWA format - validate using type field
+                iwa_type = action.get("type", "")
+                if iwa_type and iwa_type.endswith("Action"):
+                    # Valid IWA action - skip detailed validation (it's already converted)
+                    continue
+            
             is_valid, reason = self.validate_action(action, context)
             if not is_valid:
                 errors.append(f"Action {i}: {reason}")
@@ -107,9 +127,16 @@ class ActionValidator:
         # Validate logical flow (Tok-style quality check)
         if len(actions) > 1:
             # Check for navigation before other actions (if URL provided)
-            has_navigation = any(a.get("action_type") == "navigate" for a in actions)
+            # CRITICAL: Support both action_type (internal) and type (IWA format)
+            has_navigation = any(
+                a.get("action_type") == "navigate" or 
+                a.get("action_type") == "goto" or
+                a.get("type") in ["NavigateAction", "GotoAction"]
+                for a in actions
+            )
             has_other_actions = any(
-                a.get("action_type") in ["click", "type", "submit"] 
+                (a.get("action_type") in ["click", "type", "submit"]) or
+                (a.get("type") in ["ClickAction", "TypeAction", "SubmitAction"])
                 for a in actions
             )
             

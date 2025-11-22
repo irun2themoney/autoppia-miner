@@ -21,7 +21,7 @@ async def learning_status():
         try:
             from api.server import _documentation_learner
             learner = _documentation_learner
-        except:
+        except Exception:
             learner = DocumentationLearner(
                 enabled=settings.self_learning_enabled,
                 check_interval=settings.self_learning_interval
@@ -60,7 +60,7 @@ async def trigger_learning():
         try:
             from api.server import _documentation_learner
             learner = _documentation_learner
-        except:
+        except Exception:
             learner = DocumentationLearner(
                 enabled=settings.self_learning_enabled,
                 check_interval=settings.self_learning_interval
@@ -95,7 +95,7 @@ async def get_learned_patterns():
         try:
             from api.server import _documentation_learner
             learner = _documentation_learner
-        except:
+        except Exception:
             learner = DocumentationLearner(
                 enabled=settings.self_learning_enabled,
                 check_interval=settings.self_learning_interval

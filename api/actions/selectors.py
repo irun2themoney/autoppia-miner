@@ -9,15 +9,35 @@ def create_selector(
     attribute: str = None, 
     case_sensitive: bool = False
 ) -> Dict[str, Any]:
-    """Create IWA selector object"""
-    selector = {
-        "type": selector_type,
-        "value": value,
-        "case_sensitive": case_sensitive
-    }
-    if attribute:
-        selector["attribute"] = attribute
-    return selector
+    """Create IWA selector object - Returns format expected by validator"""
+    # Validator expects keys like "cssSelector", "tagSelector", "attributeValueSelector" directly
+    # Not {"type": "cssSelector", "value": "..."}
+    
+    if selector_type == "cssSelector":
+        return {"cssSelector": value}
+    elif selector_type == "tagSelector":
+        return {"tagSelector": value}
+    elif selector_type == "tagContainsSelector":
+        return {"tagContainsSelector": value}
+    elif selector_type == "textSelector":
+        return {"textSelector": value}
+    elif selector_type == "xpathSelector":
+        return {"xpathSelector": value}
+    elif selector_type == "attributeValueSelector":
+        if attribute:
+            return {
+                "attributeValueSelector": {
+                    "attribute": attribute,
+                    "value": value,
+                    "case_sensitive": case_sensitive
+                }
+            }
+        else:
+            # Fallback to cssSelector if no attribute
+            return {"cssSelector": value}
+    else:
+        # Unknown type - default to cssSelector
+        return {"cssSelector": value}
 
 
 class SelectorStrategy:

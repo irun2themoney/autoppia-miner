@@ -304,8 +304,30 @@ class WebsiteDetector:
         Returns:
             Website name (e.g., "autocalendar") or None
         """
+        # CRITICAL: Ensure url is always a string (not a dict)
+        if url is None:
+            url = ""
+        elif isinstance(url, dict):
+            url = url.get("url", url.get("href", "")) if isinstance(url, dict) else str(url)
+        elif not isinstance(url, str):
+            url = str(url) if url else ""
+        
         url_lower = url.lower() if url else ""
         prompt_lower = prompt.lower() if prompt else ""
+        
+        # Check if this is a test server (IWA test environments)
+        is_test_server = (
+            "84.247.180.192" in url or 
+            "test" in url_lower or 
+            "localhost" in url_lower or
+            "127.0.0.1" in url or
+            ":8000" in url or ":8005" in url or ":8004" in url or ":8010" in url
+        )
+        
+        # For test servers, rely heavily on prompt keywords (URL patterns won't match)
+        if is_test_server:
+            logger.info(f"Test server detected: {url} - Using prompt-based detection")
+            return self._detect_from_prompt_only(prompt_lower)
         
         # Score each website (enhanced scoring)
         website_scores = {}
@@ -358,6 +380,68 @@ class WebsiteDetector:
                 self.detected_website = detected
                 self.website_context = self.WEBSITE_PATTERNS[detected]
                 logger.info(f"Detected website: {detected} (score: {website_scores[detected]})")
+                return detected
+        
+        return None
+    
+    def _detect_from_prompt_only(self, prompt_lower: str) -> Optional[str]:
+        """
+        Detect website from prompt keywords only (for test servers where URL doesn't match)
+        Enhanced keyword matching with synonyms and context awareness
+        """
+        if not prompt_lower:
+            return None
+        
+        # Enhanced keyword scoring with synonyms
+        website_scores = {}
+        
+        # Synonym dictionaries for better matching
+        synonyms = {
+            "autocalendar": ["calendar", "event", "schedule", "date", "appointment", "meeting", "month view", "day view", "create event", "new event"],
+            "autocinema": ["movie", "cinema", "theater", "showtime", "ticket", "booking", "film", "watch", "book ticket"],
+            "autodelivery": ["delivery", "order", "address", "shipping", "track", "package", "ship", "deliver"],
+            "autozone": ["product", "cart", "checkout", "buy", "add to cart", "purchase", "shop", "store"],
+            "autowork": ["job", "application", "resume", "apply", "position", "career", "hiring", "employment"],
+            "autolist": ["list", "item", "add", "create", "entry", "todo", "task", "checklist", "add to list", "create list", "new item", "list item"],
+            "autobooks": ["book", "library", "read", "borrow", "return", "checkout", "check in"],
+            "autolodge": ["hotel", "booking", "reservation", "check-in", "room", "lodge", "accommodation"],
+            "autoconnect": ["job", "apply", "application", "career", "position", "hiring", "job posting", "job listing", "job search", "search jobs"],
+            "autocrm": ["crm", "contact", "customer", "calendar", "meeting", "appointment", "client", "lead"],
+            "autodrive": ["drive", "file", "upload", "download", "folder", "document", "storage", "cloud"],
+            "automail": ["mail", "email", "message", "inbox", "compose", "send", "reply", "send email", "new email", "compose email", "email message"],
+            "autodining": ["restaurant", "dining", "reservation", "booking", "menu", "table", "reserve", "book table", "dine"],
+        }
+        
+        for website, keywords in synonyms.items():
+            score = 0
+            matches = 0
+            
+            for keyword in keywords:
+                # Exact word match (strongest)
+                if re.search(rf"\b{re.escape(keyword)}\b", prompt_lower, re.IGNORECASE):
+                    score += 5  # Higher weight for prompt-only detection
+                    matches += 1
+                # Partial match (weaker)
+                elif keyword in prompt_lower:
+                    score += 2
+            
+            # Bonus for multiple keyword matches
+            if matches >= 2:
+                score += 10  # Strong indicator when multiple keywords match
+            if matches >= 3:
+                score += 5   # Even stronger
+            
+            if score > 0:
+                website_scores[website] = score
+        
+        # Return highest scoring website (with threshold)
+        if website_scores:
+            detected = max(website_scores.items(), key=lambda x: x[1])[0]
+            # Lower threshold for prompt-only (test servers)
+            if website_scores[detected] >= 3:  # Lower threshold for test servers
+                self.detected_website = detected
+                self.website_context = self.WEBSITE_PATTERNS[detected]
+                logger.info(f"Detected website from prompt: {detected} (score: {website_scores[detected]})")
                 return detected
         
         return None
@@ -498,7 +582,23 @@ class WebsiteDetector:
             },
         }
         
-        return strategies.get(self.detected_website, {})
+        # Generic test server strategy (when website can't be detected)
+        generic_test_server_strategy = {
+            "wait_after_navigation": 3.0,  # Test servers may be slower
+            "wait_between_actions": 1.5,   # More time between actions
+            "screenshot_frequency": "always",  # Always capture state for debugging
+            "verification_enabled": True,  # Verify actions
+            "retry_strategy": "multiple",  # Multiple retries for flaky test environments
+            "selector_strategy": "aggressive",  # Try multiple selectors (test UIs vary)
+        }
+        
+        detected_strategy = strategies.get(self.detected_website, {})
+        
+        # If no website detected, use generic test server strategy
+        if not detected_strategy:
+            return generic_test_server_strategy
+        
+        return detected_strategy
     
     def get_website_error_recovery(
         self,

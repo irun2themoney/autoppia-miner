@@ -72,21 +72,50 @@ class TaskParser:
                     value = match.group(1)
                     # Clean up common placeholders and separators
                     value = value.replace("<web_agent_id>", "").strip()
+                    # CRITICAL: Strip quotes from beginning and end (Dynamic Zero requirement)
+                    value = value.strip("'\"")
                     value = value.rstrip(".,;:!?")  # Remove trailing punctuation
                     if value and len(value) > 0:
                         credentials[cred_type] = value
+                        break
+        
+        # CRITICAL FIX: Also try extracting email from the original prompt (case-sensitive)
+        # The email pattern might fail if quotes are in the way
+        if not credentials.get("email"):
+            email_patterns = [
+                r"email:\s*['\"]([^'\"]+@[^'\"]+)['\"]",
+                r"email:\s*([^\s,]+@[^\s,]+)",
+                r"email\s+['\"]([^'\"]+@[^'\"]+)['\"]",
+            ]
+            for pattern in email_patterns:
+                match = re.search(pattern, prompt, re.IGNORECASE)
+                if match:
+                    email = match.group(1).replace("<web_agent_id>", "").strip("'\"")
+                    if email and "@" in email:
+                        credentials["email"] = email
                         break
         
         return credentials
     
     def extract_url(self, prompt: str, default_url: str = "") -> str:
         """Extract URL from prompt"""
+        # CRITICAL: Ensure default_url is a string (not a dict)
+        if default_url is None:
+            default_url = ""
+        elif isinstance(default_url, dict):
+            default_url = default_url.get("url", default_url.get("href", "")) if isinstance(default_url, dict) else str(default_url)
+        elif not isinstance(default_url, str):
+            default_url = str(default_url) if default_url else ""
+        
         for pattern in self.url_patterns:
             match = re.search(pattern, prompt, re.IGNORECASE)
             if match:
                 url = match.group(1) if match.groups() else match.group(0)
+                # Ensure url is a string before calling startswith
+                if not isinstance(url, str):
+                    url = str(url) if url else ""
                 # Ensure protocol
-                if not url.startswith(("http://", "https://")):
+                if url and isinstance(url, str) and not url.startswith(("http://", "https://")):
                     url = "https://" + url
                 return url
         
@@ -247,8 +276,51 @@ class TaskParser:
         
         return job_info
     
+    def extract_booking_info(self, prompt: str) -> Dict[str, Any]:
+        """Extract booking/consultation information from prompt"""
+        booking_info = {
+            "filters": {},
+            "use_case": "BOOK_A_CONSULTATION",
+        }
+        
+        # Extract name contains
+        name_match = re.search(r"name contains ['\"]([^'\"]+)['\"]", prompt, re.IGNORECASE)
+        if name_match:
+            booking_info["filters"]["name_contains"] = name_match.group(1)
+        
+        # Extract rate does not contain
+        rate_match = re.search(r"rate does not contain ['\"]([^'\"]+)['\"]", prompt, re.IGNORECASE)
+        if rate_match:
+            booking_info["filters"]["rate_not_contains"] = rate_match.group(1)
+        
+        # Extract role is not equal to
+        role_match = re.search(r"role is not equal to ['\"]([^'\"]+)['\"]", prompt, re.IGNORECASE)
+        if role_match:
+            booking_info["filters"]["role_not_equal"] = role_match.group(1)
+        
+        # Extract country is not equal to
+        country_match = re.search(r"country is not equal to ['\"]([^'\"]+)['\"]", prompt, re.IGNORECASE)
+        if country_match:
+            booking_info["filters"]["country_not_equal"] = country_match.group(1)
+        
+        # Extract rating equals
+        rating_match = re.search(r"rating equals ([\d.]+)", prompt, re.IGNORECASE)
+        if rating_match:
+            booking_info["filters"]["rating_equals"] = rating_match.group(1)
+        
+        return booking_info
+    
     def parse_task(self, prompt: str, url: str = "") -> Dict[str, Any]:
         """Parse task and extract all relevant information - Enhanced"""
+        # CRITICAL: Ensure url is always a string (not a dict)
+        # This prevents 'dict' object has no attribute 'startswith' errors
+        if url is None:
+            url = ""
+        elif isinstance(url, dict):
+            url = url.get("url", url.get("href", "")) if isinstance(url, dict) else str(url)
+        elif not isinstance(url, str):
+            url = str(url) if url else ""
+        
         prompt_lower = prompt.lower()
         
         # Enhanced task type detection
@@ -263,14 +335,20 @@ class TaskParser:
         has_extract = any(word in prompt_lower for word in ["extract", "get", "read", "retrieve", "fetch"])
         has_multistep = any(word in prompt_lower for word in ["and", "then", "after", "before", "first", "next"])
         
+        # Booking/Consultation task detection (HIGH PRIORITY)
+        has_booking = any(phrase in prompt_lower for phrase in ["book a consultation", "book consultation", "book a", "booking"])
+        has_consultation = "consultation" in prompt_lower
+        
         # Job-related task detection (HIGH PRIORITY)
         has_job_apply = any(phrase in prompt_lower for phrase in ["apply for", "apply_for_job", "apply to job"])
         has_job_view = any(phrase in prompt_lower for phrase in ["view job", "view_job", "retrieve details", "job posting", "job details"])
         has_job_search = any(phrase in prompt_lower for phrase in ["search jobs", "search_jobs", "search for jobs", "find jobs"])
         has_job = has_job_apply or has_job_view or has_job_search or "job" in prompt_lower
         
-        # Determine task type with priority (job tasks have high priority)
-        if has_job_apply:
+        # Determine task type with priority (booking and job tasks have high priority)
+        if has_booking or has_consultation:
+            task_type = "booking"
+        elif has_job_apply:
             task_type = "job_apply"
         elif has_job_view:
             task_type = "job_view"
@@ -299,6 +377,11 @@ class TaskParser:
         else:
             task_type = "generic"
         
+        # Extract booking information if booking-related
+        booking_info = {}
+        if has_booking or has_consultation:
+            booking_info = self.extract_booking_info(prompt)
+        
         # Extract job information if job-related
         job_info = {}
         if has_job:
@@ -323,11 +406,13 @@ class TaskParser:
             "has_scroll": has_scroll,
             "has_extract": has_extract,
             "has_multistep": has_multistep,
+            "has_booking": has_booking or has_consultation,
             "has_job": has_job,
             "has_job_apply": has_job_apply,
             "has_job_view": has_job_view,
             "has_job_search": has_job_search,
             "task_type": task_type,
+            "booking_info": booking_info,
             "job_info": job_info,
             "negative_constraints": negative_constraints,
         }

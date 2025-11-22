@@ -73,7 +73,9 @@ class AdvancedMetrics:
         validator_ip: Optional[str] = None,
         cache_hit: bool = False,
         vector_recall: bool = False,
-        mutation_detected: bool = False
+        mutation_detected: bool = False,
+        task_url: Optional[str] = None,
+        task_prompt: Optional[str] = None
     ):
         """Record a request with full metrics - ONLY records validator requests (filters localhost)"""
         # Only record if this is a validator request (not localhost)
@@ -129,12 +131,18 @@ class AdvancedMetrics:
             # Also filter out internal IPs
             if not validator_ip.startswith("192.168.") and not validator_ip.startswith("10.") and not validator_ip.startswith("172.16."):
                 self.validator_ips[validator_ip] += 1
-                self.validator_activity.append({
+                # Store more detailed information for historical log
+                activity_entry = {
                     "time": datetime.now().isoformat(),
                     "ip": validator_ip,
                     "success": success,
-                    "response_time": response_time
-                })
+                    "response_time": response_time,
+                    "task_type": task_type,
+                    "task_url": task_url or "",
+                    "task_prompt": (task_prompt[:200] if task_prompt else ""),  # Store first 200 chars
+                    "source": "in_memory"
+                }
+                self.validator_activity.append(activity_entry)
         
         # Cache stats
         if cache_hit:

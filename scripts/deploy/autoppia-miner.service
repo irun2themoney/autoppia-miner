@@ -13,6 +13,8 @@ EnvironmentFile=/opt/autoppia-miner/.env
 ExecStart=/opt/autoppia-miner/scripts/start_miner_wrapper.sh
 Restart=always
 RestartSec=10
+StartLimitInterval=300
+StartLimitBurst=5
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=autoppia-miner
@@ -20,6 +22,11 @@ SyslogIdentifier=autoppia-miner
 # Resource limits
 LimitNOFILE=65536
 MemoryMax=4G
+
+# Keep service running - prevent disconnections
+KillMode=mixed
+KillSignal=SIGTERM
+TimeoutStopSec=30
 
 [Install]
 WantedBy=multi-user.target

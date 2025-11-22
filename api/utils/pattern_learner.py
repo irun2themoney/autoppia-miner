@@ -56,7 +56,7 @@ class PatternLearner:
                 from urllib.parse import urlparse
                 parsed = urlparse(url)
                 domain = parsed.netloc
-            except:
+            except Exception:
                 pass
         
         return f"{normalized}|{domain}"

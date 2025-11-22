@@ -12,6 +12,13 @@ import hashlib
 
 logger = logging.getLogger(__name__)
 
+# Check if aiohttp is available
+try:
+    import aiohttp
+    HAS_AIOHTTP = True
+except ImportError:
+    HAS_AIOHTTP = False
+
 
 class DocumentationLearner:
     """Continuously learns from official Autoppia documentation"""
@@ -223,7 +230,7 @@ class DocumentationLearner:
                     "type": "action_example",
                     "action": action
                 })
-            except:
+            except Exception:
                 pass
         
         return patterns
@@ -293,15 +300,11 @@ class DocumentationLearner:
         """Start background learning task"""
         if self.enabled and self._background_task is None:
             try:
-                # Try to get existing event loop
+                # Try to get running event loop
                 try:
-                    loop = asyncio.get_event_loop()
-                    if loop.is_running():
-                        # Loop is already running, create task
-                        self._background_task = loop.create_task(self.background_learning_loop())
-                    else:
-                        # Loop exists but not running, schedule task
-                        self._background_task = loop.create_task(self.background_learning_loop())
+                    loop = asyncio.get_running_loop()
+                    # Loop is already running, create task
+                    self._background_task = loop.create_task(self.background_learning_loop())
                 except RuntimeError:
                     # No event loop exists, create one in background thread
                     import threading
@@ -323,14 +326,20 @@ class DocumentationLearner:
             self._background_task.cancel()
             try:
                 # Give it a moment to cancel gracefully
-                loop = asyncio.get_event_loop()
-                if loop.is_running():
+                try:
+                    loop = asyncio.get_running_loop()
                     # Can't wait in running loop, just cancel
                     pass
-                else:
-                    loop.run_until_complete(
-                        asyncio.wait_for(self._background_task, timeout=2.0)
-                    )
+                except RuntimeError:
+                    # No running loop, try to get/create one
+                    try:
+                        loop = asyncio.get_event_loop()
+                        if not loop.is_running():
+                            loop.run_until_complete(
+                                asyncio.wait_for(self._background_task, timeout=2.0)
+                            )
+                    except (asyncio.TimeoutError, asyncio.CancelledError, RuntimeError):
+                        pass
             except (asyncio.TimeoutError, asyncio.CancelledError, RuntimeError):
                 pass
             self._background_task = None
@@ -342,11 +351,16 @@ class DocumentationLearner:
                 # Schedule session close (can't await in sync method)
                 import asyncio
                 try:
-                    loop = asyncio.get_event_loop()
-                    if loop.is_running():
-                        asyncio.create_task(self._session.close())
-                    else:
-                        loop.run_until_complete(self._session.close())
+                    loop = asyncio.get_running_loop()
+                    asyncio.create_task(self._session.close())
+                except RuntimeError:
+                    # No running loop, try to get/create one
+                    try:
+                        loop = asyncio.get_event_loop()
+                        if not loop.is_running():
+                            loop.run_until_complete(self._session.close())
+                    except RuntimeError:
+                        pass
                 except RuntimeError:
                     # No event loop, create one
                     asyncio.run(self._session.close())

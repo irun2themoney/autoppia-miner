@@ -97,6 +97,14 @@ class ContextAwareAgent:
             - requires_navigation: bool
             - action_context: click, type, submit, etc.
         """
+        # CRITICAL: Ensure url is always a string (not a dict)
+        if url is None:
+            url = ""
+        elif isinstance(url, dict):
+            url = url.get("url", url.get("href", "")) if isinstance(url, dict) else str(url)
+        elif not isinstance(url, str):
+            url = str(url) if url else ""
+        
         context = {
             "page_type": "generic",
             "is_login_page": False,

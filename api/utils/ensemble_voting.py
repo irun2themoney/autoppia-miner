@@ -122,11 +122,12 @@ class EnsembleVoting:
             "used_consensus": consensus_actions is not None
         }
         
+        import time
         self.voting_history.append({
             "prompt": prompt[:100],  # Store first 100 chars
             "url": url,
             "voting_metadata": voting_metadata,
-            "timestamp": asyncio.get_event_loop().time()
+            "timestamp": time.time()
         })
         
         # Keep only last 100 voting decisions

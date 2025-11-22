@@ -119,7 +119,7 @@ class FeedbackLoop:
                 try:
                     selector = json.loads(selector_key)
                     best_selectors.append(selector)
-                except:
+                except Exception:
                     pass
         
         return best_selectors
@@ -141,7 +141,7 @@ class FeedbackLoop:
         try:
             from urllib.parse import urlparse
             domain = urlparse(url).netloc
-        except:
+        except Exception:
             domain = ""
         
         return f"{normalized}|{domain}"

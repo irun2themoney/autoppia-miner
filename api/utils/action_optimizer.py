@@ -27,44 +27,55 @@ class ActionOptimizer:
         prev_action = None
         
         for i, action in enumerate(actions):
-            action_type = action.get("action_type", "")
+            # CRITICAL: Support both action_type (internal) and type (IWA format after conversion)
+            action_type = action.get("action_type", "") or action.get("type", "").replace("Action", "").lower()
             
             # Skip redundant actions
             if self._is_redundant(action, prev_action, optimized):
                 continue
             
             # Merge consecutive waits
-            if action_type == "wait" and prev_action and prev_action.get("action_type") == "wait":
+            is_wait = action_type == "wait" or action.get("type") == "WaitAction"
+            prev_is_wait = prev_action and (prev_action.get("action_type") == "wait" or prev_action.get("type") == "WaitAction")
+            if is_wait and prev_is_wait:
                 # Merge waits (add durations)
-                prev_duration = prev_action.get("duration", 0)
-                curr_duration = action.get("duration", 0)
-                optimized[-1]["duration"] = prev_duration + curr_duration
+                prev_duration = prev_action.get("duration") or prev_action.get("time_seconds", 0)
+                curr_duration = action.get("duration") or action.get("time_seconds", 0)
+                if prev_action.get("type") == "WaitAction":
+                    prev_action["time_seconds"] = prev_duration + curr_duration
+                else:
+                    prev_action["duration"] = prev_duration + curr_duration
                 prev_action = optimized[-1]
                 continue
             
             # Remove duplicate screenshots (keep only last one before important action)
-            if action_type == "screenshot":
+            is_screenshot = action_type == "screenshot" or action.get("type") == "ScreenshotAction"
+            if is_screenshot:
                 # Check if next action is important
                 next_action = actions[i + 1] if i + 1 < len(actions) else None
-                if next_action and next_action.get("action_type") in ["navigate", "click", "submit"]:
+                next_type = next_action.get("action_type", "") if next_action else ""
+                next_iwa_type = next_action.get("type", "") if next_action else ""
+                is_important = next_type in ["navigate", "goto", "click", "submit"] or next_iwa_type in ["NavigateAction", "GotoAction", "ClickAction"]
+                if next_action and is_important:
                     # Keep this screenshot (it's before important action)
                     optimized.append(action)
                     prev_action = action
                     continue
-                elif prev_action and prev_action.get("action_type") == "screenshot":
+                prev_is_screenshot = prev_action and (prev_action.get("action_type") == "screenshot" or prev_action.get("type") == "ScreenshotAction")
+                if prev_is_screenshot:
                     # Skip duplicate screenshot
                     continue
             
-            # Remove redundant navigation (if already on same URL)
-            if action_type == "navigate":
-                url = action.get("url", "")
-                # Check if we already navigated to this URL
-                if any(
-                    a.get("action_type") == "navigate" and a.get("url") == url
-                    for a in optimized
-                ):
-                    # Skip redundant navigation
-                    continue
+            # CRITICAL: NEVER remove navigation actions - Dynamic Zero requires them
+            # Check for navigation in both formats (action_type and type)
+            is_navigation = (action_type in ["navigate", "goto"] or 
+                           action.get("type") in ["NavigateAction", "GotoAction"])
+            if is_navigation:
+                # CRITICAL: Always keep navigation actions - don't remove as "redundant"
+                # Dynamic Zero requires navigation for task completion
+                optimized.append(action)
+                prev_action = action
+                continue
             
             # Remove redundant clicks (same selector, consecutive)
             if action_type == "click":
@@ -129,17 +140,37 @@ class ActionOptimizer:
         
         optimized = actions.copy()
         
-        # Remove waits at the start (unless they're significant)
-        while optimized and optimized[0].get("action_type") == "wait":
-            if optimized[0].get("duration", 0) < 0.5:
+        # CRITICAL: Don't remove waits that come after navigation (they're needed for page load)
+        # Check if first action is navigation - if so, keep the wait after it
+        first_is_nav = (optimized and 
+                       (optimized[0].get("action_type") in ["navigate", "goto"] or
+                        optimized[0].get("type") in ["NavigateAction", "GotoAction"]))
+        
+        # Remove waits at the start (unless they're significant or after navigation)
+        while optimized and len(optimized) > 1:
+            first_action = optimized[0]
+            is_wait = (first_action.get("action_type") == "wait" or 
+                      first_action.get("type") == "WaitAction")
+            if is_wait:
+                duration = first_action.get("duration") or first_action.get("time_seconds", 0)
+                # Keep wait if it's significant (>0.5s) or if it's after navigation
+                if duration >= 0.5 or first_is_nav:
+                    break
                 optimized.pop(0)
             else:
                 break
         
         # Remove waits at the end (unless they're significant)
-        while optimized and optimized[-1].get("action_type") == "wait":
-            if optimized[-1].get("duration", 0) < 0.5:
-                optimized.pop()
+        while optimized and len(optimized) > 1:
+            last_action = optimized[-1]
+            is_wait = (last_action.get("action_type") == "wait" or 
+                      last_action.get("type") == "WaitAction")
+            if is_wait:
+                duration = last_action.get("duration") or last_action.get("time_seconds", 0)
+                if duration < 0.5:
+                    optimized.pop()
+                else:
+                    break
             else:
                 break
         
