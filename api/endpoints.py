@@ -157,6 +157,7 @@ async def solve_task(request: TaskRequest, http_request: Request):
     # CRITICAL: Log entry point to verify function is being called
     logger.info(f"🚀 solve_task called: id={request.id}, prompt_length={len(request.prompt) if request.prompt else 0}")
     logger.info(f"🔍 FULL REQUEST: id={request.id}, prompt={request.prompt[:100] if request.prompt else 'EMPTY'}, url={request.url}")
+    logger.info(f"🔧 Agent type: {type(agent)}, Agent class: {agent.__class__.__name__}")
     # CRITICAL: Log if this is a playground request (has placeholder)
     if request.prompt and '<web_agent_id>' in request.prompt:
         logger.info(f"🎯 PLAYGROUND REQUEST DETECTED: Contains <web_agent_id> placeholder")

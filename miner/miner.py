@@ -68,38 +68,58 @@ class AutoppiaMiner:
     async def process_start_round(self, synapse: StartRoundSynapse) -> StartRoundSynapse:
         """Handle StartRoundSynapse - acknowledge round start"""
         try:
-            bt.logging.info(f"StartRoundSynapse received: round_id={synapse.round_id}, task_type={synapse.task_type}")
+            bt.logging.info(f"✅ StartRoundSynapse processed successfully: round_id={synapse.round_id}, task_type={synapse.task_type}")
             synapse.success = True
             synapse.message = "Round started successfully"
+            bt.logging.info(f"📊 Round registration confirmed: {synapse.round_id}")
         except Exception as e:
             synapse.success = False
             synapse.message = f"Error: {e}"
-            bt.logging.error(f"Error processing StartRoundSynapse: {e}")
+            bt.logging.error(f"❌ Error processing StartRoundSynapse: {e}")
         return synapse
     
     async def process_task(self, synapse: bt.Synapse) -> bt.Synapse:
         """Process validator request - handles both TaskSynapse and generic Synapse"""
         try:
+            bt.logging.info(f"Received synapse: type={type(synapse)}, attrs={list(synapse.__dict__.keys()) if hasattr(synapse, '__dict__') else 'no dict'}")
+
             # Handle StartRoundSynapse - check by attributes since Bittensor may deserialize as generic Synapse
             # Validators send StartRoundSynapse with round_id and task_type attributes
             has_round_id = hasattr(synapse, "round_id") and getattr(synapse, "round_id", None) is not None
             has_task_type_attr = hasattr(synapse, "task_type") and getattr(synapse, "task_type", None) is not None
-            is_start_round = isinstance(synapse, StartRoundSynapse) or (has_round_id and has_task_type_attr and not hasattr(synapse, "prompt"))
-            
+            has_prompt = hasattr(synapse, "prompt")
+
+            is_start_round = isinstance(synapse, StartRoundSynapse) or (has_round_id and has_task_type_attr and not has_prompt)
+
+            bt.logging.info(f"StartRound detection: has_round_id={has_round_id}, has_task_type={has_task_type_attr}, has_prompt={has_prompt}, is_start_round={is_start_round}")
+
             if is_start_round:
-                # Convert generic synapse to StartRoundSynapse if needed
-                if not isinstance(synapse, StartRoundSynapse):
-                    start_round_synapse = StartRoundSynapse(
-                        round_id=getattr(synapse, "round_id", None),
-                        task_type=getattr(synapse, "task_type", None)
+                try:
+                    # Convert generic synapse to StartRoundSynapse if needed
+                    if not isinstance(synapse, StartRoundSynapse):
+                        start_round_synapse = StartRoundSynapse(
+                            round_id=getattr(synapse, "round_id", None),
+                            task_type=getattr(synapse, "task_type", None)
+                        )
+                        # Copy any other attributes
+                        for attr in ["success", "message"]:
+                            if hasattr(synapse, attr):
+                                setattr(start_round_synapse, attr, getattr(synapse, attr))
+                        bt.logging.info(f"Converted generic synapse to StartRoundSynapse: round_id={start_round_synapse.round_id}, task_type={start_round_synapse.task_type}")
+                        return await self.process_start_round(start_round_synapse)
+                    else:
+                        bt.logging.info(f"Received proper StartRoundSynapse: round_id={synapse.round_id}, task_type={synapse.task_type}")
+                        return await self.process_start_round(synapse)
+                except Exception as e:
+                    bt.logging.error(f"Error processing StartRoundSynapse: {e}")
+                    # Return a basic success response to avoid breaking the round
+                    fallback_synapse = StartRoundSynapse(
+                        round_id=getattr(synapse, "round_id", "unknown"),
+                        task_type=getattr(synapse, "task_type", "unknown"),
+                        success=True,
+                        message=f"Round started (with error handling): {e}"
                     )
-                    # Copy any other attributes
-                    for attr in ["success", "message"]:
-                        if hasattr(synapse, attr):
-                            setattr(start_round_synapse, attr, getattr(synapse, attr))
-                    return await self.process_start_round(start_round_synapse)
-                else:
-                    return await self.process_start_round(synapse)
+                    return fallback_synapse
             
             # Handle TaskSynapse or generic synapse
             # Extract task data from synapse

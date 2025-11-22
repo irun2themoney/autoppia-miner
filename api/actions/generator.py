@@ -214,7 +214,10 @@ class ActionGenerator:
         
         if not is_test_request and url and isinstance(url, str) and url.startswith("http"):
             from config.settings import settings
-            
+
+            # DEBUG: Log browser automation attempt
+            logger.info(f"🔍 Attempting browser automation: enabled={settings.enable_browser_automation}, playwright_available={PLAYWRIGHT_AVAILABLE}, analyzer_available={get_browser_analyzer is not None}, is_test_request={is_test_request}")
+
             # Try Browser Automation first (if enabled and available)
             # OPTIMIZATION: Add timeout to prevent hanging (max 5 seconds for browser automation)
             if settings.enable_browser_automation and PLAYWRIGHT_AVAILABLE and get_browser_analyzer:

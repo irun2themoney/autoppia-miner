@@ -11,6 +11,8 @@ from config.settings import settings
 import logging
 import os
 
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 # CORS headers helper (used in multiple places)

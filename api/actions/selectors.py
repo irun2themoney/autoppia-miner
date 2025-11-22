@@ -234,6 +234,17 @@ class SelectorStrategy:
             return strategies
         
         # Generic click targets - improved strategy
+        # Handle common button clicks first
+        if "button" in prompt_lower or element_lower in ["click", "press"]:
+            # For generic button clicks, try multiple common selectors
+            strategies.append(create_selector("cssSelector", "button, input[type='submit'], input[type='button'], [role='button']"))
+            strategies.append(create_selector("tagContainsSelector", "Button", case_sensitive=False))
+            strategies.append(create_selector("tagContainsSelector", "Submit", case_sensitive=False))
+            strategies.append(create_selector("tagContainsSelector", "OK", case_sensitive=False))
+            strategies.append(create_selector("attributeValueSelector", "button", attribute="type", case_sensitive=False))
+            strategies.append(create_selector("attributeValueSelector", "submit", attribute="type", case_sensitive=False))
+            return strategies
+
         # Use element_type as prompt for keyword extraction
         prompt_for_keywords = element_type if not value else f"{element_type} {value}"
         keywords = extract_keywords(prompt_for_keywords)

@@ -220,7 +220,7 @@ class UltimateTester:
                     selector = action.get("selector", {})
                     if not isinstance(selector, dict):
                         invalid_selectors.append(action)
-                    elif selector.get("type") not in valid_selector_types:
+                    elif not any(key in valid_selector_types for key in selector.keys()):
                         invalid_selectors.append(action)
                 
                 if not invalid_selectors:

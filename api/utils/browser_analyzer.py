@@ -76,11 +76,11 @@ class BrowserAnalyzer:
     async def _extract_elements(self, page: Page) -> List[Dict[str, Any]]:
         """Extract key interactive elements from page"""
         elements = []
-        
+
         try:
-            # Extract buttons
-            buttons = await page.query_selector_all("button, input[type='submit'], input[type='button'], a[role='button']")
-            for btn in buttons[:20]:  # Limit to first 20
+            # Extract buttons (including more variations)
+            buttons = await page.query_selector_all("button, input[type='submit'], input[type='button'], a[role='button'], [onclick], .btn, [class*='button']")
+            for btn in buttons[:30]:  # Limit to first 30
                 try:
                     text = await btn.inner_text()
                     btn_type = await btn.get_attribute("type") or "button"
@@ -89,15 +89,19 @@ class BrowserAnalyzer:
                     btn_class = await btn.get_attribute("class")
                     data_testid = await btn.get_attribute("data-testid")
                     aria_label = await btn.get_attribute("aria-label")
-                    
+                    data_action = await btn.get_attribute("data-action")
+                    value = await btn.get_attribute("value")
+
                     elements.append({
                         "type": "button",
                         "tag": "button",
-                        "text": text.strip() if text else "",
+                        "text": text.strip() if text else (value or ""),
                         "id": btn_id,
                         "name": btn_name,
                         "class": btn_class,
                         "data-testid": data_testid,
+                        "data-action": data_action,
+                        "aria-label": aria_label,
                         "aria-label": aria_label,
                         "selector": await self._generate_selector(btn, text)
                     })
@@ -226,10 +230,13 @@ class BrowserAnalyzer:
             # Click tasks
             elif "click" in intent_lower:
                 text = elem.get("text", "").lower()
-                if any(word in text for word in intent_lower.split()):
+                # Check for specific button text matches
+                if any(word in text for word in ["button", "submit", "ok", "save", "send", "next", "continue", "apply"]):
+                    confidence = 0.9
+                elif any(word in text for word in intent_lower.split() if len(word) > 3):
                     confidence = 0.8
-                elif elem.get("type") == "button":
-                    confidence = 0.5
+                elif elem.get("type") == "button" or elem.get("tag") == "button":
+                    confidence = 0.6  # Any button is a reasonable match for "click"
             
             # Type tasks
             elif "type" in intent_lower or "enter" in intent_lower or "fill" in intent_lower:
