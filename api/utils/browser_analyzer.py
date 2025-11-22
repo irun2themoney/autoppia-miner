@@ -1,0 +1,301 @@
+"""Browser automation using Playwright for accurate selector generation"""
+import asyncio
+import logging
+from typing import Dict, Any, List, Optional
+from playwright.async_api import async_playwright, Browser, Page, TimeoutError as PlaywrightTimeoutError
+
+logger = logging.getLogger(__name__)
+
+# Global browser instance (singleton)
+_browser: Optional[Browser] = None
+_playwright = None
+PLAYWRIGHT_AVAILABLE = True  # Assume available if module imports
+
+
+class BrowserAnalyzer:
+    """Analyze web pages using Playwright to generate accurate selectors"""
+    
+    def __init__(self, browser: Browser):
+        self.browser = browser
+    
+    async def fetch_page(self, url: str, timeout: float = 15.0) -> Optional[Dict[str, Any]]:
+        """
+        Fetch page with full browser automation
+        
+        Returns:
+            Dict with 'html', 'url', 'title', 'elements' or None if failed
+        """
+        try:
+            page = await self.browser.new_page()
+            
+            # Set reasonable timeouts
+            page.set_default_timeout(timeout * 1000)  # Convert to ms
+            
+            try:
+                # Navigate to page
+                response = await page.goto(url, wait_until="domcontentloaded", timeout=timeout * 1000)
+                
+                if not response or response.status >= 400:
+                    logger.warning(f"Page returned status {response.status if response else 'None'} for {url}")
+                    await page.close()
+                    return None
+                
+                # Wait for page to be interactive
+                await page.wait_for_load_state("networkidle", timeout=5000)
+                
+                # Get page data
+                html = await page.content()
+                title = await page.title()
+                final_url = page.url
+                
+                # Extract key elements (forms, buttons, inputs)
+                elements = await self._extract_elements(page)
+                
+                await page.close()
+                
+                return {
+                    "html": html,
+                    "url": final_url,
+                    "title": title,
+                    "elements": elements
+                }
+                
+            except PlaywrightTimeoutError:
+                logger.warning(f"Timeout loading page {url}")
+                await page.close()
+                return None
+            except Exception as e:
+                logger.error(f"Error loading page {url}: {e}")
+                await page.close()
+                return None
+                
+        except Exception as e:
+            logger.error(f"Error creating page for {url}: {e}")
+            return None
+    
+    async def _extract_elements(self, page: Page) -> List[Dict[str, Any]]:
+        """Extract key interactive elements from page"""
+        elements = []
+        
+        try:
+            # Extract buttons
+            buttons = await page.query_selector_all("button, input[type='submit'], input[type='button'], a[role='button']")
+            for btn in buttons[:20]:  # Limit to first 20
+                try:
+                    text = await btn.inner_text()
+                    btn_type = await btn.get_attribute("type") or "button"
+                    btn_id = await btn.get_attribute("id")
+                    btn_name = await btn.get_attribute("name")
+                    btn_class = await btn.get_attribute("class")
+                    data_testid = await btn.get_attribute("data-testid")
+                    aria_label = await btn.get_attribute("aria-label")
+                    
+                    elements.append({
+                        "type": "button",
+                        "tag": "button",
+                        "text": text.strip() if text else "",
+                        "id": btn_id,
+                        "name": btn_name,
+                        "class": btn_class,
+                        "data-testid": data_testid,
+                        "aria-label": aria_label,
+                        "selector": await self._generate_selector(btn, text)
+                    })
+                except Exception as e:
+                    logger.debug(f"Error extracting button: {e}")
+                    continue
+            
+            # Extract form inputs
+            inputs = await page.query_selector_all("input, textarea, select")
+            for inp in inputs[:30]:  # Limit to first 30
+                try:
+                    inp_type = await inp.get_attribute("type") or "text"
+                    inp_id = await inp.get_attribute("id")
+                    inp_name = await inp.get_attribute("name")
+                    inp_placeholder = await inp.get_attribute("placeholder")
+                    inp_class = await inp.get_attribute("class")
+                    data_testid = await inp.get_attribute("data-testid")
+                    
+                    # Determine field type
+                    field_type = "text"
+                    if inp_type in ["email", "password", "username", "text"]:
+                        field_type = inp_type
+                    elif inp_name:
+                        if "user" in inp_name.lower() or "login" in inp_name.lower():
+                            field_type = "username"
+                        elif "pass" in inp_name.lower():
+                            field_type = "password"
+                        elif "email" in inp_name.lower() or "mail" in inp_name.lower():
+                            field_type = "email"
+                    
+                    elements.append({
+                        "type": field_type,
+                        "tag": "input",
+                        "input_type": inp_type,
+                        "id": inp_id,
+                        "name": inp_name,
+                        "placeholder": inp_placeholder,
+                        "class": inp_class,
+                        "data-testid": data_testid,
+                        "selector": await self._generate_selector(inp, None)
+                    })
+                except Exception as e:
+                    logger.debug(f"Error extracting input: {e}")
+                    continue
+            
+        except Exception as e:
+            logger.error(f"Error extracting elements: {e}")
+        
+        return elements
+    
+    async def _generate_selector(self, element, text: Optional[str] = None) -> str:
+        """Generate CSS selector for element"""
+        try:
+            # Try ID first (most specific)
+            element_id = await element.get_attribute("id")
+            if element_id:
+                return f"#{element_id}"
+            
+            # Try data-testid
+            data_testid = await element.get_attribute("data-testid")
+            if data_testid:
+                return f"[data-testid='{data_testid}']"
+            
+            # Try name
+            name = await element.get_attribute("name")
+            if name:
+                return f"[name='{name}']"
+            
+            # Try class
+            class_name = await element.get_attribute("class")
+            if class_name:
+                # Use first class
+                first_class = class_name.split()[0] if class_name else None
+                if first_class:
+                    return f".{first_class}"
+            
+            # Fallback to tag
+            tag = await element.evaluate("el => el.tagName.toLowerCase()")
+            return tag
+            
+        except Exception as e:
+            logger.debug(f"Error generating selector: {e}")
+            return "button"  # Fallback
+    
+    def analyze_dom(self, page_data: Dict[str, Any], intent: str, task_type: str) -> List[Dict[str, Any]]:
+        """
+        Analyze DOM and generate selectors based on intent
+        
+        Args:
+            page_data: Page data from fetch_page
+            intent: User intent (prompt)
+            task_type: Type of task (login, register, etc.)
+        
+        Returns:
+            List of selector candidates with confidence scores
+        """
+        if not page_data or "elements" not in page_data:
+            return []
+        
+        intent_lower = intent.lower()
+        elements = page_data.get("elements", [])
+        candidates = []
+        
+        # Match elements to intent
+        for elem in elements:
+            confidence = 0.0
+            selector = elem.get("selector", "")
+            
+            # Login/Register tasks
+            if task_type in ["login", "register"] or "login" in intent_lower or "register" in intent_lower:
+                if elem.get("type") == "username":
+                    confidence = 0.9
+                elif elem.get("type") == "password":
+                    confidence = 0.9
+                elif elem.get("type") == "email":
+                    confidence = 0.8
+                elif "submit" in elem.get("text", "").lower() or "login" in elem.get("text", "").lower() or "register" in elem.get("text", "").lower():
+                    confidence = 0.8
+            
+            # Click tasks
+            elif "click" in intent_lower:
+                text = elem.get("text", "").lower()
+                if any(word in text for word in intent_lower.split()):
+                    confidence = 0.8
+                elif elem.get("type") == "button":
+                    confidence = 0.5
+            
+            # Type tasks
+            elif "type" in intent_lower or "enter" in intent_lower or "fill" in intent_lower:
+                if elem.get("type") in ["text", "email", "username", "password"]:
+                    confidence = 0.7
+            
+            # Submit tasks
+            elif "submit" in intent_lower:
+                if elem.get("type") == "button" and ("submit" in elem.get("text", "").lower() or elem.get("input_type") == "submit"):
+                    confidence = 0.9
+            
+            if confidence > 0.4:  # Only return candidates with reasonable confidence
+                candidates.append({
+                    "selector": selector,
+                    "type": elem.get("type", "unknown"),
+                    "confidence": confidence,
+                    "element": elem
+                })
+        
+        # Sort by confidence
+        candidates.sort(key=lambda x: x["confidence"], reverse=True)
+        
+        return candidates[:10]  # Return top 10 candidates
+
+
+# Singleton browser instance
+async def _get_browser() -> Optional[Browser]:
+    """Get or create browser instance"""
+    global _browser, _playwright
+    
+    if _browser is None:
+        try:
+            _playwright = await async_playwright().start()
+            _browser = await _playwright.chromium.launch(
+                headless=True,
+                args=['--no-sandbox', '--disable-setuid-sandbox']  # For server environments
+            )
+            logger.info("✅ Playwright browser launched")
+        except Exception as e:
+            logger.error(f"❌ Failed to launch Playwright browser: {e}")
+            return None
+    
+    return _browser
+
+
+async def get_browser_analyzer() -> Optional[BrowserAnalyzer]:
+    """Get browser analyzer instance"""
+    try:
+        browser = await _get_browser()
+        if browser:
+            return BrowserAnalyzer(browser)
+        return None
+    except Exception as e:
+        logger.error(f"Failed to get browser analyzer: {e}")
+        return None
+
+
+async def close_browser():
+    """Close browser instance (cleanup)"""
+    global _browser, _playwright
+    
+    if _browser:
+        try:
+            await _browser.close()
+            _browser = None
+        except Exception as e:
+            logger.error(f"Error closing browser: {e}")
+    
+    if _playwright:
+        try:
+            await _playwright.stop()
+            _playwright = None
+        except Exception as e:
+            logger.error(f"Error stopping playwright: {e}")
+
