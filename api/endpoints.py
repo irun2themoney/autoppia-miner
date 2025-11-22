@@ -142,6 +142,21 @@ async def solve_task(request: TaskRequest, http_request: Request):
     if request.url is None:
         request.url = ""
     
+    # CRITICAL FIX: Replace <web_agent_id> placeholder with actual task ID
+    # Playground sends prompts with <web_agent_id> placeholder that needs to be replaced
+    # Use the task ID (or a portion of it) as the agent ID
+    agent_id = request.id if request.id else "unknown"
+    # Extract a short ID from the full UUID if it's a UUID format
+    if len(agent_id) > 8 and '-' in agent_id:
+        # Use first 8 chars of UUID as agent ID (e.g., "1be0c85d" from "1be0c85d-5e8a-4ccf-b4a2-93eebdc39507")
+        agent_id = agent_id.split('-')[0]
+    
+    # Replace <web_agent_id> placeholder in prompt
+    original_prompt = request.prompt
+    if request.prompt and '<web_agent_id>' in request.prompt:
+        request.prompt = request.prompt.replace('<web_agent_id>', agent_id)
+        logger.info(f"🔄 Replaced <web_agent_id> with '{agent_id}' in prompt")
+    
     # CRITICAL: Log entry point to verify function is being called
     logger.info(f"🚀 solve_task called: id={request.id}, prompt_length={len(request.prompt) if request.prompt else 0}")
     logger.info(f"🔍 FULL REQUEST: id={request.id}, prompt={request.prompt[:100] if request.prompt else 'EMPTY'}, url={request.url}")
