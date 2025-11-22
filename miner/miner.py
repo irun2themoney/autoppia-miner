@@ -278,11 +278,51 @@ class AutoppiaMiner:
                 except Exception:
                     pass  # If we can't get IP, use "unknown"
                 
+                # CRITICAL FIX: Check for StartRoundSynapse BEFORE processing
+                # Bittensor may deserialize StartRoundSynapse as generic Synapse, so we check attributes
+                has_round_id = hasattr(synapse, "round_id") and getattr(synapse, "round_id", None) is not None
+                has_task_type = hasattr(synapse, "task_type") and getattr(synapse, "task_type", None) is not None
+                has_prompt = hasattr(synapse, "prompt") and getattr(synapse, "prompt", None) is not None
+                
+                # If it looks like StartRoundSynapse (has round_id and task_type but no prompt)
+                if (has_round_id and has_task_type and not has_prompt) or isinstance(synapse, StartRoundSynapse):
+                    bt.logging.info(f"ROUND_START: {validator_ip} - Processing StartRoundSynapse: round_id={getattr(synapse, 'round_id', None)}")
+                    print(f"ROUND_START: {validator_ip} - Processing StartRoundSynapse", flush=True)
+                    try:
+                        # Convert to StartRoundSynapse if needed
+                        if not isinstance(synapse, StartRoundSynapse):
+                            start_round = StartRoundSynapse(
+                                round_id=getattr(synapse, "round_id", None),
+                                task_type=getattr(synapse, "task_type", None)
+                            )
+                            # Copy response fields
+                            for attr in ["success", "message"]:
+                                if hasattr(synapse, attr):
+                                    setattr(start_round, attr, getattr(synapse, attr))
+                            result = await self.process_start_round(start_round)
+                        else:
+                            result = await self.process_start_round(synapse)
+                        bt.logging.info(f"ROUND_START_SUCCESS: {validator_ip} - Round {getattr(result, 'round_id', 'unknown')} started")
+                        print(f"ROUND_START_SUCCESS: {validator_ip} - Round started", flush=True)
+                        return result
+                    except Exception as e:
+                        bt.logging.error(f"ROUND_START_ERROR: {validator_ip} - Error processing StartRoundSynapse: {e}")
+                        print(f"ROUND_START_ERROR: {validator_ip} - {e}", flush=True)
+                        # Return valid response even on error
+                        if not isinstance(synapse, StartRoundSynapse):
+                            synapse = StartRoundSynapse(
+                                round_id=getattr(synapse, "round_id", None),
+                                task_type=getattr(synapse, "task_type", None)
+                            )
+                        synapse.success = False
+                        synapse.message = f"Error: {e}"
+                        return synapse
+                
                 # Log validator connection with IP
                 bt.logging.info(f"VALIDATOR_CONNECTION: {validator_ip} - Received synapse: {synapse_name}")
                 print(f"VALIDATOR_CONNECTION: {validator_ip} - Received synapse: {synapse_name}", flush=True)
                 
-                # Try to process with our handler
+                # Process regular task synapse
                 result = await self.process_task(synapse)
                 bt.logging.info(f"VALIDATOR_RESPONSE: {validator_ip} - Successfully processed synapse: {synapse_name}")
                 return result
@@ -295,6 +335,8 @@ class AutoppiaMiner:
                 except Exception:
                     pass
                 bt.logging.warning(f"VALIDATOR_ERROR: {validator_ip} - Error processing synapse in forward_wrapper: {e}")
+                import traceback
+                bt.logging.debug(f"Traceback: {traceback.format_exc()}")
                 # Set default response to prevent further errors
                 if not hasattr(synapse, 'success'):
                     synapse.success = False
