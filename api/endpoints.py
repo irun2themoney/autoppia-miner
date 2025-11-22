@@ -74,6 +74,11 @@ class TaskRequest(BaseModel):
     prompt: str = ""  # Allow empty, we'll handle it  
     url: Optional[str] = ""  # Allow None or empty string - playground may send null
     
+    class Config:
+        # CRITICAL: Don't validate on assignment - allow empty strings
+        # Playground may send empty strings which are valid
+        validate_assignment = False
+    
     @field_validator('url', mode='before')
     @classmethod
     def convert_none_to_empty(cls, v):
