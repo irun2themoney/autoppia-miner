@@ -52,11 +52,7 @@ try:
 except ImportError:
     error_recovery = None
 
-# Import action optimizer
-try:
-    from ..utils.action_optimizer import action_optimizer
-except ImportError:
-    action_optimizer = None
+# SIMPLIFIED: Removed action_optimizer (Dynamic Zero: efficiency doesn't matter, focus on completion)
 
 # Import Live Analyzer (basic HTTP fetching)
 try:
@@ -152,11 +148,11 @@ class ActionGenerator:
         actions = []
         prompt_lower = prompt.lower()
         
-        # OPTIMIZATION: Detect test requests early to skip all slow operations
+        # DYNAMIC ZERO: Time doesn't matter, but we skip slow operations for test requests
         is_test_request = task_id and (task_id.startswith("test-") or task_id.startswith("cache-test-"))
         
         # Detect website (if website detector available)
-        # OPTIMIZATION: Skip for test requests (faster)
+        # Skip for test requests (faster local testing)
         detected_website = None
         website_strategy = None
         if not is_test_request and website_detector:
@@ -167,7 +163,7 @@ class ActionGenerator:
         
         # Check if this is a multi-step task (if task planner available)
         # BUT: Skip for registration/login/retrieve tasks - they need specific handlers
-        # OPTIMIZATION: Skip for test requests (faster)
+        # Skip for test requests (faster local testing)
         execution_plan = None
         skip_task_planner = (
             is_test_request or  # Skip for test requests
@@ -444,12 +440,11 @@ class ActionGenerator:
 
             optimized = self._apply_context_optimizations(action_list, context, strategy)
             
-            # Step 0: Optimize action sequence (remove redundant actions) - Tok-style efficiency
-            if action_optimizer:
-                task_type = parsed.get("task_type", "generic") if 'parsed' in locals() else "generic"
-                optimized = action_optimizer.optimize_for_task_type(optimized, task_type)
+            # DYNAMIC ZERO: Focus on task completion, not efficiency
+            # We don't remove actions - Dynamic Zero doesn't reward fewer actions
+            # Generate complete action sequences that reliably solve tasks
             
-            # Validate and enhance with verification for quality (Tok-style quality focus)
+            # Validate and enhance with verification for quality (Dynamic Zero: precision matters)
             if action_validator:
                 # Step 1: Pre-action validation (Tok-style: validate selectors before using)
                 optimized = action_validator.add_pre_action_validation(optimized)

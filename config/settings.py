@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     api_port: int = 8080
     
     # Agent Configuration
-    agent_type: str = "hybrid"  # template or hybrid (enhanced template agent)
+    agent_type: str = "template"  # SIMPLIFIED: Use simple template agent
     
     # Miner Configuration
     subnet_uid: int = 36

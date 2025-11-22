@@ -19,9 +19,7 @@ CORS_HEADERS = {
     "Access-Control-Allow-Headers": "*",
 }
 
-# Shared advanced_metrics instance - must be created here so dashboard can access it
-from api.utils.advanced_metrics import AdvancedMetrics
-advanced_metrics = AdvancedMetrics()
+# SIMPLIFIED: Removed advanced_metrics (not needed for simple miner)
 
 
 # Helper function to infer URL from prompt (used in multiple places)
@@ -63,16 +61,10 @@ async def _generate_fallback_actions(prompt: str, url: str, max_actions: int = 2
 
 # Initialize agent based on configuration
 def get_agent():
-    """Get agent instance based on settings"""
-    agent_type = os.getenv("AGENT_TYPE", settings.agent_type).lower()
-    
-    # Always use hybrid (enhanced template agent)
-    if agent_type in ["hybrid", "template"]:
-        from .agent.hybrid import HybridAgent
-        return HybridAgent()
-    else:
-        from .agent.template import TemplateAgent
-        return TemplateAgent()
+    """Get agent instance - SIMPLIFIED: Always use TemplateAgent"""
+    # SIMPLIFIED: Just use TemplateAgent (simple, fast, works)
+    from .agent.template import TemplateAgent
+    return TemplateAgent()
 
 agent = get_agent()
 
@@ -164,7 +156,6 @@ async def solve_task(request: TaskRequest, http_request: Request):
     if request.prompt and '<web_agent_id>' in request.prompt:
         logger.info(f"🎯 PLAYGROUND REQUEST DETECTED: Contains <web_agent_id> placeholder")
     
-    from api.endpoints import advanced_metrics  # Use shared instance
     from api.utils.task_parser import TaskParser
     
     start_time = time.time()
@@ -227,30 +218,20 @@ async def solve_task(request: TaskRequest, http_request: Request):
             headers=CORS_HEADERS
         )
     
-    # LIVE MONITORING: Track task start
-    try:
-        from api.utils.live_monitor import live_monitor
-        live_monitor.log_task_start(request.id, request.prompt, request.url, validator_ip)
-        live_monitor.log_task_step(request.id, "received", {"validator_ip": validator_ip})
-    except Exception:
-        pass  # Don't break if monitoring fails
+    # SIMPLIFIED: Removed live monitoring (not needed)
     
     try:
-        # UPDATED: Increased timeout to 90s to match validators (Nov 2025 update)
-        # Validators increased timeout from 30s to 90s to handle slow backend responses
-        # Solve task using agent with timeout protection (90 seconds max)
-        # Pass validator_ip for god-tier features (validator learning)
+        # DYNAMIC ZERO: Time doesn't matter for scoring, but we need safety timeout
+        # Validators use 90s timeout - this is a safety limit, not an optimization target
+        # Focus on task completion and precision, not speed
         
-        # LIVE MONITORING: Track processing start
-        try:
-            live_monitor.log_task_step(request.id, "processing", {"agent": "hybrid"})
-        except Exception:
-            pass
+        # SIMPLIFIED: Removed live monitoring (not needed)
         
         logger.info(f"🔧 Calling agent.solve_task for task {request.id}")
         try:
-            # OPTIMIZATION: Use shorter timeout for faster test responses
-            # For production, validators use 90s, but for tests we want faster responses
+            # DYNAMIC ZERO: Time doesn't matter for scoring
+            # Use shorter timeout for test requests (faster local testing)
+            # For production, validators use 90s (safety limit, not optimization)
             # Detect if this is a test request (localhost or test ID pattern)
             # CRITICAL FIX: Don't treat validator_ip=None as test request - playground/validators might not send IP
             # Only treat as test if explicitly localhost or test ID pattern
@@ -260,12 +241,12 @@ async def solve_task(request: TaskRequest, http_request: Request):
             )
             timeout_seconds = 10.0 if is_test_request else 90.0  # Fast for tests, longer for validators
             
+            # SIMPLIFIED: TemplateAgent doesn't need validator_ip parameter
             actions = await asyncio.wait_for(
                 agent.solve_task(
                     task_id=request.id,
                     prompt=request.prompt,
-                    url=request.url,
-                    validator_ip=validator_ip if validator_ip else None
+                    url=request.url
                 ),
                 timeout=timeout_seconds
             )
@@ -304,81 +285,7 @@ async def solve_task(request: TaskRequest, http_request: Request):
             actions = await _generate_fallback_actions(request.prompt, request.url or "", max_actions=20)
             logger.info(f"✅ Generated {len(actions)} fallback actions")
         
-        # LIVE MONITORING: Track actions generated
-        try:
-            live_monitor.log_action_generated(request.id, len(actions) if actions else 0)
-        except Exception:
-            pass
-        
-        # Only record in metrics if it's from a validator (not local test)
-        if validator_ip:  # Only record validator requests, skip local tests
-            # PROACTIVE MONITORING: Record validator activity
-            try:
-                from api.utils.proactive_monitor import proactive_monitor
-                proactive_monitor.record_validator_activity(validator_ip, True)
-            except Exception:
-                pass  # Don't break if monitoring fails
-            
-            # Record success in advanced metrics
-            advanced_metrics.record_request(
-                success=True,
-                response_time=response_time,
-                task_type=task_type,
-                agent_type=os.getenv("AGENT_TYPE", settings.agent_type),
-                validator_ip=validator_ip,
-                cache_hit=False,  # Will be enhanced later
-                vector_recall=False,  # Will be enhanced later
-                mutation_detected=False,  # Will be enhanced later
-                task_url=request.url,
-                task_prompt=request.prompt
-            )
-            
-            # Also record in basic metrics (only for validators)
-            from api.utils.metrics import metrics
-            metrics.record_request(success=True, response_time=response_time, task_type=task_type)
-            
-            # GOD-TIER: Record for validator learning (if agent supports it)
-            if hasattr(agent, 'record_validator_result'):
-                try:
-                    agent.record_validator_result(
-                        validator_ip=validator_ip,
-                        task_prompt=request.prompt,
-                        task_url=request.url,
-                        actions=actions,
-                        success=True,  # We assume success if no error
-                        response_time=response_time,
-                        task_type=task_type,
-                        score=None  # Score not available from validator yet
-                    )
-                except TypeError as e:
-                    # Some agents might not accept all parameters - try without optional ones
-                    try:
-                        agent.record_validator_result(
-                            validator_ip=validator_ip,
-                            task_prompt=request.prompt,
-                            actions=actions,
-                            success=True,
-                            response_time=response_time,
-                            task_type=task_type
-                        )
-                    except Exception:
-                        logger.debug(f"Error recording validator result: {e}")
-                except Exception as e:
-                    logger.debug(f"Error recording validator result: {e}")
-            
-            # DYNAMIC ZERO: Track task diversity and anti-overfitting
-            try:
-                from api.utils.task_diversity import task_diversity
-                from api.utils.anti_overfitting import anti_overfitting
-                task_diversity.analyze_task_diversity(request.prompt, request.url)
-            except Exception as e:
-                logger.debug(f"Task diversity tracking failed: {e}")
-        
-        # LIVE MONITORING: Track task completion
-        try:
-            live_monitor.log_task_complete(request.id, True, len(actions) if actions else 0, response_time)
-        except Exception:
-            pass
+        # SIMPLIFIED: Removed all monitoring/metrics (not needed for simple miner)
         
         # CRITICAL: Ensure actions is never empty before returning (double-check)
         if not actions or len(actions) == 0:
@@ -386,34 +293,7 @@ async def solve_task(request: TaskRequest, http_request: Request):
             # Last resort fallback
             actions = [{"type": "ScreenshotAction"}]
         
-        # CRITICAL: Optimize response size to prevent 1MB disconnection
-        # Bittensor has a ~1MB response size limit. If exceeded, validators disconnect.
-        try:
-            from api.utils.response_size_optimizer import response_size_optimizer
-            # Match official format - only these 3 fields
-            extra_fields = {
-                "web_agent_id": request.id,
-                "recording": "",
-            }
-            original_count = len(actions)
-            try:
-                optimized = response_size_optimizer.optimize_actions(actions, extra_fields)
-                # CRITICAL: Only use optimized if it's not empty
-                if optimized and len(optimized) > 0:
-                    actions = optimized
-                    if len(actions) < original_count:
-                        logger.warning(f"Response size optimization: Reduced actions from {original_count} to {len(actions)} to stay under 1MB limit")
-                else:
-                    logger.warning(f"Response size optimizer returned empty, keeping original {original_count} actions")
-            except Exception as opt_error:
-                logger.warning(f"Response size optimization failed: {opt_error}, keeping original actions")
-                # Keep original actions if optimization fails
-        except ImportError:
-            # Module doesn't exist - skip optimization (not critical)
-            pass
-        except Exception as e:
-            logger.debug(f"Response size optimization failed: {e}")
-            # Continue with original actions (better than failing completely)
+        # SIMPLIFIED: Removed response size optimizer (not needed - actions are usually small)
         
         # FINAL CHECK: Ensure actions is never empty (triple-check before returning)
         if not actions or len(actions) == 0:
@@ -449,39 +329,9 @@ async def solve_task(request: TaskRequest, http_request: Request):
     
     except asyncio.TimeoutError:
         # Handle timeout - try to return fallback actions instead of empty
-        # PROACTIVE MONITORING: Record timeout as failure
-        if validator_ip:
-            try:
-                from api.utils.proactive_monitor import proactive_monitor
-                proactive_monitor.record_validator_activity(validator_ip, False)
-            except Exception:
-                pass
-        
-        # LIVE MONITORING: Track timeout
-        try:
-            from api.utils.live_monitor import live_monitor
-            response_time = time.time() - start_time
-            live_monitor.log_task_complete(request.id, False, 0, response_time, "Timeout after 90 seconds")
-        except Exception:
-            pass
-        
         logger.warning(f"Task {request.id} timed out after 90 seconds - generating fallback actions")
         
-        response_time = time.time() - start_time
-        from api.utils.metrics import metrics
-        from api.endpoints import advanced_metrics
-        
-        # Only record in metrics if it's from a validator (not local test)
-        if validator_ip:  # Only record validator requests, skip local tests
-            metrics.record_request(success=False, response_time=response_time, task_type="timeout")
-            advanced_metrics.record_request(
-                success=False,
-                response_time=response_time,
-                task_type=task_type,
-                agent_type=os.getenv("AGENT_TYPE", settings.agent_type),
-                error_type="TimeoutError",
-                validator_ip=validator_ip
-            )
+        # SIMPLIFIED: Removed all monitoring/metrics (not needed for simple miner)
         
         # CRITICAL FIX: Generate fallback actions on timeout instead of returning empty
         # This helps benchmark tests pass even on timeout
@@ -499,17 +349,7 @@ async def solve_task(request: TaskRequest, http_request: Request):
         )
     
     except Exception as e:
-        # PROACTIVE MONITORING: Record error as failure
-        if validator_ip:
-            try:
-                from api.utils.proactive_monitor import proactive_monitor
-                proactive_monitor.record_validator_activity(validator_ip, False)
-            except Exception:
-                pass  # Don't break if monitoring fails
-        
-        # Record error in metrics
-        from api.utils.metrics import metrics
-        from api.endpoints import advanced_metrics  # Use shared instance
+        # SIMPLIFIED: Removed all monitoring/metrics (not needed for simple miner)
         import traceback
         
         response_time = time.time() - start_time
@@ -522,20 +362,6 @@ async def solve_task(request: TaskRequest, http_request: Request):
             f"Traceback: {''.join(traceback.format_exc())}\n"
             f"Validator IP: {validator_ip}, Task: {request.prompt[:100]}..."
         )
-        
-        # Only record in metrics if it's from a validator (not local test)
-        if validator_ip:  # Only record validator requests, skip local tests
-            metrics.record_request(success=False, response_time=response_time, task_type="error")
-            
-            # Record in advanced metrics
-            advanced_metrics.record_request(
-                success=False,
-                response_time=response_time,
-                task_type=task_type,
-                agent_type=os.getenv("AGENT_TYPE", settings.agent_type),
-                error_type=error_type,
-                validator_ip=validator_ip
-            )
         
         # CRITICAL FIX: Try to generate fallback actions instead of returning empty
         # This ensures benchmark tests don't fail due to exceptions
