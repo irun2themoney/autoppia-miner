@@ -76,7 +76,7 @@ class BrowserAnalyzer:
     async def _extract_elements(self, page: Page) -> List[Dict[str, Any]]:
         """Extract key interactive elements from page"""
         elements = []
-
+        
         try:
             # Extract buttons (including more variations)
             buttons = await page.query_selector_all("button, input[type='submit'], input[type='button'], a[role='button'], [onclick], .btn, [class*='button']")
@@ -91,7 +91,7 @@ class BrowserAnalyzer:
                     aria_label = await btn.get_attribute("aria-label")
                     data_action = await btn.get_attribute("data-action")
                     value = await btn.get_attribute("value")
-
+                    
                     elements.append({
                         "type": "button",
                         "tag": "button",
