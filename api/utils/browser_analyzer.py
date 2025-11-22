@@ -192,10 +192,13 @@ class BrowserAnalyzer:
             task_type: Type of task (login, register, etc.)
         
         Returns:
-            List of selector candidates with confidence scores
+            List of selector candidates with confidence scores (IWA format)
         """
         if not page_data or "elements" not in page_data:
             return []
+        
+        # Import here to avoid circular dependency
+        from ..actions.selectors import create_selector
         
         intent_lower = intent.lower()
         elements = page_data.get("elements", [])
@@ -204,7 +207,10 @@ class BrowserAnalyzer:
         # Match elements to intent
         for elem in elements:
             confidence = 0.0
-            selector = elem.get("selector", "")
+            css_selector = elem.get("selector", "")  # CSS selector string from _generate_selector
+            
+            # Convert CSS selector to IWA format
+            iwa_selector = self._css_to_iwa_selector(css_selector, elem)
             
             # Login/Register tasks
             if task_type in ["login", "register"] or "login" in intent_lower or "register" in intent_lower:
@@ -237,7 +243,7 @@ class BrowserAnalyzer:
             
             if confidence > 0.4:  # Only return candidates with reasonable confidence
                 candidates.append({
-                    "selector": selector,
+                    "selector": iwa_selector,  # IWA format selector
                     "type": elem.get("type", "unknown"),
                     "confidence": confidence,
                     "element": elem
@@ -247,6 +253,41 @@ class BrowserAnalyzer:
         candidates.sort(key=lambda x: x["confidence"], reverse=True)
         
         return candidates[:10]  # Return top 10 candidates
+    
+    def _css_to_iwa_selector(self, css_selector: str, elem: Dict[str, Any]) -> Dict[str, Any]:
+        """Convert CSS selector string to IWA format"""
+        from ..actions.selectors import create_selector
+        
+        if not css_selector:
+            # Fallback: try to build from element attributes
+            if elem.get("id"):
+                return create_selector("attributeValueSelector", elem["id"], attribute="id")
+            elif elem.get("data-testid"):
+                return create_selector("attributeValueSelector", elem["data-testid"], attribute="data-testid")
+            elif elem.get("name"):
+                return create_selector("attributeValueSelector", elem["name"], attribute="name")
+            else:
+                return create_selector("tagContainsSelector", "button", case_sensitive=False)
+        
+        # Convert CSS selector to IWA format
+        if css_selector.startswith("#"):
+            # ID selector: #myId -> attributeValueSelector with id
+            return create_selector("attributeValueSelector", css_selector[1:], attribute="id")
+        elif css_selector.startswith("."):
+            # Class selector: .myClass -> tagContainsSelector
+            return create_selector("tagContainsSelector", css_selector[1:], case_sensitive=False)
+        elif css_selector.startswith("[") and "=" in css_selector:
+            # Attribute selector: [name='value'] -> attributeValueSelector
+            import re
+            match = re.search(r'\[([^\]]+)=["\']([^"\']+)["\']\]', css_selector)
+            if match:
+                attr_name, attr_value = match.groups()
+                return create_selector("attributeValueSelector", attr_value, attribute=attr_name)
+            else:
+                return create_selector("tagContainsSelector", css_selector, case_sensitive=False)
+        else:
+            # Generic tag or text -> tagContainsSelector
+            return create_selector("tagContainsSelector", css_selector, case_sensitive=False)
 
 
 # Singleton browser instance

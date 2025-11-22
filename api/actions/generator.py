@@ -408,35 +408,26 @@ class ActionGenerator:
                             best_live = live_selectors[0]
                             
                         if best_live:
-                            logger.info(f"Overriding selector {action_target} with live selector {best_live['selector']}")
-                            # Convert live selector string to IWA format
-                            from .selectors import create_selector
-                            live_selector_value = best_live.get("selector", "")
-                            # If selector is already a dict, use it; otherwise convert string to cssSelector
-                            if isinstance(live_selector_value, dict):
-                                action["selector"] = live_selector_value
+                            logger.info(f"✅ Overriding selector {action_target} with live selector from browser automation")
+                            # Browser analyzer now returns IWA format selectors directly
+                            live_selector = best_live.get("selector", {})
+                            # Selector should already be in IWA format from browser_analyzer
+                            if isinstance(live_selector, dict) and live_selector:
+                                action["selector"] = live_selector
                             else:
-                                # Convert CSS selector string to IWA format
-                                # Try to detect selector type and use appropriate IWA selector type
-                                if live_selector_value.startswith("#"):
-                                    # ID selector - use attributeValueSelector
-                                    action["selector"] = create_selector("attributeValueSelector", live_selector_value[1:], attribute="id")
-                                elif live_selector_value.startswith("."):
-                                    # Class selector - use tagContainsSelector
-                                    action["selector"] = create_selector("tagContainsSelector", live_selector_value[1:])
-                                elif "[" in live_selector_value and "=" in live_selector_value:
-                                    # Attribute selector - parse and use attributeValueSelector
-                                    import re
-                                    match = re.search(r'\[([^\]]+)=["\']([^"\']+)["\']\]', live_selector_value)
-                                    if match:
-                                        attr_name, attr_value = match.groups()
-                                        action["selector"] = create_selector("attributeValueSelector", attr_value, attribute=attr_name)
+                                # Fallback: if somehow not in IWA format, convert it
+                                from .selectors import create_selector
+                                if isinstance(live_selector, str):
+                                    # Legacy: convert CSS string to IWA (shouldn't happen with new browser_analyzer)
+                                    if live_selector.startswith("#"):
+                                        action["selector"] = create_selector("attributeValueSelector", live_selector[1:], attribute="id")
+                                    elif live_selector.startswith("."):
+                                        action["selector"] = create_selector("tagContainsSelector", live_selector[1:])
                                     else:
-                                        # Fallback to tagContainsSelector
-                                        action["selector"] = create_selector("tagContainsSelector", live_selector_value)
+                                        action["selector"] = create_selector("tagContainsSelector", live_selector)
                                 else:
-                                    # Generic selector - use tagContainsSelector
-                                    action["selector"] = create_selector("tagContainsSelector", live_selector_value)
+                                    # Use existing selector if live selector is invalid
+                                    logger.warning(f"Invalid live selector format, keeping original")
 
             optimized = self._apply_context_optimizations(action_list, context, strategy)
             
