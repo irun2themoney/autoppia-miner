@@ -38,6 +38,7 @@ function deploy_all {
     ssh $USER@$SERVER_IP "cd $MINER_DIR && \
         git pull && \
         pip install -r requirements.txt && \
+        python3 -m playwright install chromium || echo '⚠️  Playwright browsers already installed or installation failed' && \
         sudo systemctl restart autoppia-api autoppia-miner"
         
     echo "✅ Deployment Complete!"
