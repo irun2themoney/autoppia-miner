@@ -90,8 +90,24 @@ class AutoppiaMiner:
         has_no_prompt = not hasattr(synapse, "prompt") or getattr(synapse, "prompt", None) is None or getattr(synapse, "prompt", "") == ""
         has_no_actions = not hasattr(synapse, "actions") or getattr(synapse, "actions", None) is None or getattr(synapse, "actions", []) == []
 
+        # More flexible detection - also check for alternative attribute names
+        # Some deserializations might use different field names
+        round_id_alt = getattr(synapse, "round_id", None) or getattr(synapse, "round", None) or getattr(synapse, "id", None)
+        task_type_alt = getattr(synapse, "task_type", None) or getattr(synapse, "task", None) or getattr(synapse, "type", None)
+
+        has_round_id_alt = round_id_alt is not None
+        has_task_type_alt = task_type_alt is not None
+
+        # DEBUG: Log detection logic
+        detection_result = has_round_id and has_task_type and has_no_prompt and has_no_actions
+        alt_detection_result = has_round_id_alt and has_task_type_alt and has_no_prompt and has_no_actions
+
+        if detection_result or alt_detection_result:
+            bt.logging.info(f"🎯 STARTROUND_DETECTED: round_id={getattr(synapse, 'round_id', None)}, task_type={getattr(synapse, 'task_type', None)}, has_prompt={not has_no_prompt}, has_actions={not has_no_actions}")
+            print(f"🎯 STARTROUND_DETECTED: round_id={round_id_alt}, task_type={task_type_alt}", flush=True)
+
         # Must have round_id AND task_type AND no task-related fields
-        return has_round_id and has_task_type and has_no_prompt and has_no_actions
+        return detection_result or alt_detection_result
 
     def _convert_to_start_round_synapse(self, synapse: bt.Synapse) -> StartRoundSynapse:
         """Convert generic synapse to StartRoundSynapse"""
@@ -343,6 +359,23 @@ class AutoppiaMiner:
                 # Comprehensive error handling - never let UnknownSynapseError propagate
                 bt.logging.error(f"💥 CRITICAL_ERROR: {validator_ip} - Forward wrapper failed: {e}")
                 bt.logging.debug(f"Traceback: {traceback.format_exc()}")
+
+                # DEBUG: Log synapse attributes to understand deserialization issues
+                try:
+                    synapse_attrs = {}
+                    for attr in dir(synapse):
+                        if not attr.startswith('_'):
+                            try:
+                                value = getattr(synapse, attr)
+                                if not callable(value):
+                                    synapse_attrs[attr] = str(value)[:100]  # Limit string length
+                            except:
+                                synapse_attrs[attr] = "<error getting value>"
+
+                    bt.logging.info(f"🔍 SYNAPSE_DEBUG: {validator_ip} - Synapse type: {type(synapse)}, attrs: {synapse_attrs}")
+                    print(f"🔍 SYNAPSE_DEBUG: {validator_ip} - Type: {type(synapse)}, Key attrs: round_id={getattr(synapse, 'round_id', 'MISSING')}, task_type={getattr(synapse, 'task_type', 'MISSING')}, prompt={getattr(synapse, 'prompt', 'MISSING')[:50] if getattr(synapse, 'prompt', None) else 'MISSING'}", flush=True)
+                except Exception as debug_e:
+                    bt.logging.error(f"Debug logging failed: {debug_e}")
 
                 # Ensure we return a valid synapse response
                 try:
