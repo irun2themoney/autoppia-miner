@@ -12,13 +12,13 @@ def convert_to_iwa_action(action: Dict[str, Any]) -> Dict[str, Any]:
     if action_type:
         action_type = action_type.replace("Action", "").lower()
     
-    # Map to official action types
+    # Map to official action types (from Autoppia framework)
     type_map = {
         "click": "ClickAction",
         "type": "TypeAction",
         "wait": "WaitAction",
         "navigate": "NavigateAction",
-        "goto": "GotoAction",  # Support GotoAction for test
+        "goto": "NavigateAction",  # goto maps to NavigateAction
         "screenshot": "ScreenshotAction",
         "scroll": "ScrollAction",
     }
@@ -31,18 +31,63 @@ def convert_to_iwa_action(action: Dict[str, Any]) -> Dict[str, Any]:
     else:
         result: Dict[str, Any] = {"type": type_map.get(action_type, "ScreenshotAction")}
     
-    # Handle selector
+    # Handle selector - ensure proper IWA Selector format
     if "selector" in action and action["selector"]:
         if isinstance(action["selector"], dict):
-            result["selector"] = action["selector"]
+            selector = action["selector"]
+            # Ensure selector has required fields for IWA format
+            if "type" not in selector:
+                # Convert old format to new IWA format
+                if "attributeValueSelector" in selector:
+                    result["selector"] = {
+                        "type": "attributeValueSelector",
+                        "attribute": selector.get("attribute", "id"),
+                        "value": selector.get("value", selector.get("attributeValueSelector", "")),
+                        "case_sensitive": selector.get("case_sensitive", False)
+                    }
+                elif "tagContainsSelector" in selector:
+                    result["selector"] = {
+                        "type": "tagContainsSelector",
+                        "value": selector.get("value", selector.get("tagContainsSelector", "")),
+                        "case_sensitive": selector.get("case_sensitive", False)
+                    }
+                else:
+                    # Fallback: assume attribute selector
+                    result["selector"] = {
+                        "type": "attributeValueSelector",
+                        "attribute": "id",
+                        "value": str(selector),
+                        "case_sensitive": False
+                    }
+            else:
+                # Already in correct format
+                result["selector"] = selector
         else:
             # String selector -> convert to IWA format
-            result["selector"] = create_selector(
-                "attributeValueSelector",
-                action["selector"],
-                attribute="custom",
-                case_sensitive=False
-            )
+            selector_str = str(action["selector"])
+            if selector_str.startswith("#"):
+                # ID selector
+                result["selector"] = {
+                    "type": "attributeValueSelector",
+                    "attribute": "id",
+                    "value": selector_str[1:],  # Remove #
+                    "case_sensitive": False
+                }
+            elif selector_str.startswith("."):
+                # Class selector
+                result["selector"] = {
+                    "type": "attributeValueSelector",
+                    "attribute": "class",
+                    "value": selector_str[1:],  # Remove .
+                    "case_sensitive": False
+                }
+            else:
+                # Text selector
+                result["selector"] = {
+                    "type": "tagContainsSelector",
+                    "value": selector_str,
+                    "case_sensitive": False
+                }
     
     # Action-specific fields
     if iwa_type == "WaitAction":
@@ -57,12 +102,9 @@ def convert_to_iwa_action(action: Dict[str, Any]) -> Dict[str, Any]:
             result["text"] = action["text"]
         # Selector handled below
     
-    elif iwa_type in ["NavigateAction", "GotoAction"]:
+    elif iwa_type == "NavigateAction":
         if "url" in action:
             result["url"] = action["url"]
-        # GotoAction is same as NavigateAction, but test expects GotoAction
-        if action_type == "goto":
-            result["type"] = "GotoAction"
     
     elif iwa_type == "ScrollAction":
         direction = action.get("direction", "down").lower()

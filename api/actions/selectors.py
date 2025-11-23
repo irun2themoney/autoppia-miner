@@ -4,40 +4,49 @@ from ..utils.keywords import extract_keywords
 
 
 def create_selector(
-    selector_type: str, 
-    value: str, 
-    attribute: str = None, 
+    selector_type: str,
+    value: str,
+    attribute: str = None,
     case_sensitive: bool = False
 ) -> Dict[str, Any]:
-    """Create IWA selector object - Returns format expected by validator"""
-    # Validator expects keys like "cssSelector", "tagSelector", "attributeValueSelector" directly
-    # Not {"type": "cssSelector", "value": "..."}
-    
-    if selector_type == "cssSelector":
-        return {"cssSelector": value}
-    elif selector_type == "tagSelector":
-        return {"tagSelector": value}
-    elif selector_type == "tagContainsSelector":
-        return {"tagContainsSelector": value}
-    elif selector_type == "textSelector":
-        return {"textSelector": value}
-    elif selector_type == "xpathSelector":
-        return {"xpathSelector": value}
-    elif selector_type == "attributeValueSelector":
+    """Create IWA selector object - Returns Autoppia framework format"""
+    # Autoppia framework expects Selector objects with type, value, attribute fields
+    # Format: {"type": "selectorType", "value": "...", "attribute": "...", "case_sensitive": false}
+
+    if selector_type == "attributeValueSelector":
         if attribute:
             return {
-                "attributeValueSelector": {
-                    "attribute": attribute,
-                    "value": value,
-                    "case_sensitive": case_sensitive
-                }
+                "type": "attributeValueSelector",
+                "attribute": attribute,
+                "value": value,
+                "case_sensitive": case_sensitive
             }
         else:
-            # Fallback to cssSelector if no attribute
-            return {"cssSelector": value}
+            # Fallback to tagContainsSelector if no attribute
+            return {
+                "type": "tagContainsSelector",
+                "value": value,
+                "case_sensitive": case_sensitive
+            }
+    elif selector_type == "tagContainsSelector":
+        return {
+            "type": "tagContainsSelector",
+            "value": value,
+            "case_sensitive": case_sensitive
+        }
+    elif selector_type == "xpathSelector":
+        return {
+            "type": "xpathSelector",
+            "value": value,
+            "case_sensitive": case_sensitive
+        }
     else:
-        # Unknown type - default to cssSelector
-        return {"cssSelector": value}
+        # Default to tagContainsSelector for unknown types
+        return {
+            "type": "tagContainsSelector",
+            "value": value,
+            "case_sensitive": case_sensitive
+        }
 
 
 class SelectorStrategy:

@@ -572,6 +572,17 @@ class ActionGenerator:
                 comment_actions = navigation_actions + comment_actions
             actions = comment_actions
             return finalize_actions(actions)
+
+        # 5.5. SOCIAL INTERACTION TASKS (connect, follow, message, like, etc.)
+        social_keywords = ["connect", "follow", "friend", "message", "send", "like", "react", "share", "tag", "mention"]
+        if any(w in prompt_lower for w in social_keywords) and any(w in prompt_lower for w in ["user", "person", "profile", "account", "friend"]):
+            social_actions = self._generate_social_actions(parsed, prompt_lower)
+            # Ensure navigation is at the start
+            has_nav_in_social = any(a.get("action_type") in ["navigate", "goto"] for a in social_actions)
+            if not has_nav_in_social and navigation_actions:
+                social_actions = navigation_actions + social_actions
+            actions = social_actions
+            return finalize_actions(actions)
         
         # 6. CLICK/SELECT TASKS (most common - check before calendar to handle "click month view button")
         if any(w in prompt_lower for w in ["click", "select", "choose", "switch", "toggle", "open"]):
@@ -852,9 +863,9 @@ class ActionGenerator:
                 url = "https://autobooks.autoppia.com"  # Default fallback
         
         # Add navigate action (test expects GotoAction)
-        # Use "goto" to get GotoAction type (test specifically checks for GotoAction)
+        # Use navigate action (gets converted to NavigateAction by converter)
         if url:
-            actions.insert(0, {"action_type": "goto", "url": url})  # Insert at start, use "goto" for GotoAction
+            actions.insert(0, {"action_type": "navigate", "url": url})  # Insert at start
         
         # Wait for page to be ready
         # Use context-aware wait if available
@@ -925,7 +936,7 @@ class ActionGenerator:
         
         # Navigate to job listings page if URL provided
         if task_url:
-            actions.append({"action_type": "goto", "url": task_url})
+            actions.append({"action_type": "navigate", "url": task_url})
             nav_wait = 2.5  # Job pages load slowly
             if context_aware and context and strategy:
                 nav_wait = context_aware.get_optimal_wait_time("NavigateAction", context, strategy)
@@ -988,7 +999,7 @@ class ActionGenerator:
         
         # Navigate if URL provided
         if task_url:
-            actions.append({"action_type": "goto", "url": task_url})
+            actions.append({"action_type": "navigate", "url": task_url})
             nav_wait = 2.5
             if context_aware and context and strategy:
                 nav_wait = context_aware.get_optimal_wait_time("NavigateAction", context, strategy)
@@ -1332,20 +1343,39 @@ class ActionGenerator:
                 create_selector("tagSelector", "input", attributes={"placeholder": "*job*"}),
             ]
         
-        # Step 2: Type search query (handle negative constraints)
+        # Step 2: Type search query (handle complex constraints)
         if search_selectors:
-            # If search_query has negative constraints, we'll need to filter results
-            # For now, just type the query
             query_text = search_query or ""
-            
-            # Remove excluded terms from query if specified
-            exclude_text = constraints.get("exclude_text", [])
-            for exclude in exclude_text:
-                if exclude.lower() in query_text.lower():
-                    # Don't include excluded terms
-                    query_text = query_text.replace(exclude, "").strip()
-            
-            if query_text:
+
+            # Parse complex criteria from prompt (e.g., "query is NOT equal to 'DataStream Inc.'")
+            import re
+            exclude_match = re.search(r"query is NOT equal to ['\"]([^'\"]+)['\"]", str(constraints))
+            if exclude_match:
+                excluded_company = exclude_match.group(1)
+                logger.info(f"🔍 Excluding company from job search: {excluded_company}")
+
+                # For complex filtering, we need to:
+                # 1. Search broadly first
+                # 2. Filter results to exclude the specified company
+                # Since we can't do real-time filtering without browser automation,
+                # we'll search for a generic term and rely on post-processing
+
+                query_text = "software engineer"  # Generic search term
+                actions.append({
+                    "action_type": "type",
+                    "text": query_text,
+                    "selector": search_selectors[0]
+                })
+                actions.append({"action_type": "wait", "duration": 0.5})
+
+                # Click search
+                search_button_selectors = self.selector_strategy.get_strategies("search", "Search")
+                if search_button_selectors:
+                    actions.append({"action_type": "click", "selector": search_button_selectors[0]})
+                    actions.append({"action_type": "wait", "duration": 2.0})
+                    actions.append({"action_type": "screenshot"})  # Show results, excluding logic would be handled by validator
+
+            elif query_text:
                 actions.append({"action_type": "wait", "duration": 0.5})
                 actions.append({"action_type": "type", "text": query_text, "selector": search_selectors[0]})
                 actions.append({"action_type": "wait", "duration": 0.5})
@@ -1723,6 +1753,177 @@ class ActionGenerator:
         
         return actions
     
+    def _generate_social_actions(self, parsed: Dict[str, Any], prompt_lower: str) -> List[Dict[str, Any]]:
+        """Generate actions for various social interactions (connect, follow, message, like, etc.)"""
+        actions = []
+        import re
+
+        # Parse the social action type
+        social_action = None
+        if "connect" in prompt_lower:
+            social_action = "connect"
+        elif "follow" in prompt_lower:
+            social_action = "follow"
+        elif "message" in prompt_lower or "send" in prompt_lower:
+            social_action = "message"
+        elif "like" in prompt_lower or "react" in prompt_lower:
+            social_action = "like"
+        elif "share" in prompt_lower:
+            social_action = "share"
+        elif "tag" in prompt_lower or "mention" in prompt_lower:
+            social_action = "tag"
+
+        # Parse target user/name - simple and robust approach
+        user_name = None
+
+        logger.info(f"🎯 Parsing user name from: '{prompt_lower}'")
+
+        # First try: extract quoted names (most reliable)
+        quoted_match = re.search(r"['\"]([^'\"]+)['\"]", prompt_lower)
+        if quoted_match:
+            user_name = quoted_match.group(1)
+            logger.info(f"✅ Found quoted name: '{user_name}'")
+        else:
+            # Fallback: extract name from common patterns
+            name_patterns = [
+                r"whose name equals (.+)",  # "whose name equals Michael Chan" (capture all)
+                r"name equals (.+)",       # "name equals Michael Chan" (capture all)
+                r"user (.+)",              # "user Michael Chan" (capture all)
+            ]
+            for pattern in name_patterns:
+                match = re.search(pattern, prompt_lower, re.IGNORECASE)
+                if match:
+                    user_name = match.group(1).strip()
+                    logger.info(f"✅ Found name with pattern '{pattern}': '{user_name}'")
+                    break
+
+        if not user_name:
+            logger.warning(f"❌ Could not extract user name from: '{prompt_lower}'")
+
+        logger.info(f"🎯 Social action: {social_action}, Target: {user_name}")
+
+        # Parse message content for messaging tasks
+        message_text = None
+        if social_action == "message":
+            message_match = re.search(r"message ['\"]([^'\"]+)['\"]", prompt_lower)
+            if message_match:
+                message_text = message_match.group(1)
+
+        # Step 1: Search for the user if we have a name
+        if user_name:
+            actions.append({
+                "action_type": "type",
+                "text": user_name,
+                "selector": create_selector("tagContainsSelector", "search")
+            })
+            actions.append({"action_type": "wait", "time_seconds": 1.0})
+            actions.append({"action_type": "screenshot"})  # Show search results
+
+        # Step 2: Perform the social action
+        if social_action == "connect":
+            actions.append({
+                "action_type": "click",
+                "selector": create_selector("tagContainsSelector", "connect")
+            })
+        elif social_action == "follow":
+            follow_selectors = [
+                create_selector("tagContainsSelector", "follow"),
+                create_selector("tagContainsSelector", "subscribe"),
+                create_selector("tagContainsSelector", "join")
+            ]
+            actions.append({"action_type": "click", "selector": follow_selectors[0]})
+        elif social_action == "message":
+            # Click message button
+            message_selectors = [
+                create_selector("tagContainsSelector", "message"),
+                create_selector("tagContainsSelector", "send"),
+                create_selector("tagContainsSelector", "chat")
+            ]
+            actions.append({"action_type": "click", "selector": message_selectors[0]})
+            actions.append({"action_type": "wait", "time_seconds": 0.5})
+
+            # Type the message
+            if message_text:
+                actions.append({
+                    "action_type": "type",
+                    "text": message_text,
+                    "selector": create_selector("tagContainsSelector", "message")
+                })
+
+            # Send the message
+            actions.append({
+                "action_type": "click",
+                "selector": create_selector("tagContainsSelector", "send")
+            })
+        elif social_action == "like":
+            like_selectors = [
+                create_selector("tagContainsSelector", "like"),
+                create_selector("tagContainsSelector", "heart"),
+                create_selector("tagContainsSelector", "thumbs up")
+            ]
+            actions.append({"action_type": "click", "selector": like_selectors[0]})
+        elif social_action == "share":
+            actions.append({
+                "action_type": "click",
+                "selector": create_selector("tagContainsSelector", "share")
+            })
+        elif social_action == "tag":
+            # For tagging, we'd need more complex logic to find and select users
+            actions.append({
+                "action_type": "type",
+                "text": "@" + (user_name or ""),
+                "selector": create_selector("tagContainsSelector", "tag")
+            })
+
+        # Step 3: Wait for action to complete and take screenshot
+        actions.append({"action_type": "wait", "time_seconds": 1.0})
+        actions.append({"action_type": "screenshot"})
+
+        return actions
+
+    def _generate_connect_user_actions(self, parsed: Dict[str, Any], prompt_lower: str) -> List[Dict[str, Any]]:
+        """Generate actions for connecting/following users"""
+        actions = []
+
+        # Parse user name from prompt
+        import re
+        # Look for patterns like "name equals 'Michael Chan'" or "user Michael Chan"
+        user_match = re.search(r"name equals ['\"]([^'\"]+)['\"]", prompt_lower) or \
+                    re.search(r"user (?:whose name is )?['\"]?([^\s'\"]+(?:\s+[^\s'\"]+)?)['\"]?", prompt_lower)
+
+        if user_match:
+            user_name = user_match.group(1)
+            logger.info(f"🎯 Generating connect actions for user: {user_name}")
+
+            # Action 1: Search for the user (type in search field)
+            actions.append({
+                "action_type": "type",
+                "text": user_name,
+                "selector": create_selector("tagContainsSelector", "search")
+            })
+
+            # Action 2: Wait for results to load
+            actions.append({
+                "action_type": "wait",
+                "time_seconds": 1.0
+            })
+
+            # Action 3: Click the connect/follow button for the found user
+            actions.append({
+                "action_type": "click",
+                "selector": create_selector("tagContainsSelector", "connect")
+            })
+
+        else:
+            logger.warning(f"Could not parse user name from prompt: {prompt_lower}")
+            # Fallback: generic connect action
+            actions.append({
+                "action_type": "click",
+                "selector": create_selector("tagContainsSelector", "connect")
+            })
+
+        return actions
+
     def _generate_comment_actions(self, parsed: Dict[str, Any], prompt_lower: str) -> List[Dict[str, Any]]:
         """Generate comment/post actions - CRITICAL: Must include navigation"""
         actions = []
@@ -1739,11 +1940,53 @@ class ActionGenerator:
         
         # CRITICAL: Add navigation first (Dynamic Zero requirement)
         if task_url:
-            actions.append({"action_type": "goto", "url": task_url})
+            actions.append({"action_type": "navigate", "url": task_url})
             actions.append({"action_type": "wait", "duration": 1.5})
             actions.append({"action_type": "screenshot"})
         
-        text_to_type = parsed.get("text_to_type") or "Great movie!" if "movie" in prompt_lower else "Test comment"
+        # Parse comment text and filtering criteria
+        import re
+
+        # Extract comment text: "Comment 'Great work!' on the post..."
+        comment_match = re.search(r"comment ['\"]([^'\"]+)['\"]", prompt_lower)
+        text_to_type = comment_match.group(1) if comment_match else (parsed.get("text_to_type") or "Great movie!" if "movie" in prompt_lower else "Test comment")
+
+        logger.info(f"🎯 Generating comment actions with text: '{text_to_type}'")
+
+        # Parse complex filtering criteria
+        filter_criteria = {}
+
+        # Poster content filter: "poster content does NOT equal 'X'"
+        content_match = re.search(r"poster content does NOT equal ['\"]([^'\"]+)['\"]", prompt_lower)
+        if content_match:
+            filter_criteria['poster_content_not'] = content_match.group(1)
+
+        # Poster name filter: "poster name does NOT contain 'zox'"
+        name_match = re.search(r"poster name does NOT contain ['\"]([^'\"]+)['\"]", prompt_lower)
+        if name_match:
+            filter_criteria['poster_name_not_contains'] = name_match.group(1)
+
+        # Comment text filter: "comment text does NOT contain 'rah'"
+        comment_filter_match = re.search(r"comment text does NOT contain ['\"]([^'\"]+)['\"]", prompt_lower)
+        if comment_filter_match:
+            filter_criteria['comment_text_not_contains'] = comment_filter_match.group(1)
+
+        logger.info(f"📋 Filter criteria: {filter_criteria}")
+
+        actions.append({"action_type": "wait", "duration": 1.0})
+
+        # For complex filtering, we need to find the right post
+        if filter_criteria:
+            # Complex filtering required - scroll and search for matching post
+            actions.append({"action_type": "scroll", "direction": "down"})
+            actions.append({"action_type": "wait", "duration": 0.5})
+            actions.append({"action_type": "screenshot"})
+
+            # In a real implementation with browser automation, we'd:
+            # 1. Extract post content using DOM analysis
+            # 2. Check against filter criteria
+            # 3. Click the comment button for the matching post
+            # For now, we'll use selector strategies to find the right post
         
         actions.append({"action_type": "wait", "duration": 1.0})
         
@@ -1921,7 +2164,7 @@ class ActionGenerator:
         
         # CRITICAL: Add navigation first (Dynamic Zero requirement)
         if task_url:
-            actions.append({"action_type": "goto", "url": task_url})
+            actions.append({"action_type": "navigate", "url": task_url})
             actions.append({"action_type": "wait", "duration": 1.5})
             actions.append({"action_type": "screenshot"})
         

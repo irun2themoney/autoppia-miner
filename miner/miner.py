@@ -77,7 +77,7 @@ class AutoppiaMiner:
             synapse.message = f"Error: {e}"
             bt.logging.error(f"❌ Error processing StartRoundSynapse: {e}")
         return synapse
-
+    
     def _is_start_round_synapse(self, synapse: bt.Synapse) -> bool:
         """Robust detection of StartRoundSynapse (handles Bittensor deserialization issues)"""
         # Method 1: Direct type check
@@ -85,7 +85,7 @@ class AutoppiaMiner:
             return True
 
         # Method 2: Attribute-based detection (Bittensor may deserialize as generic Synapse)
-        has_round_id = hasattr(synapse, "round_id") and getattr(synapse, "round_id", None) is not None
+            has_round_id = hasattr(synapse, "round_id") and getattr(synapse, "round_id", None) is not None
         has_task_type = hasattr(synapse, "task_type") and getattr(synapse, "task_type", None) is not None
         has_no_prompt = not hasattr(synapse, "prompt") or getattr(synapse, "prompt", None) is None or getattr(synapse, "prompt", "") == ""
         has_no_actions = not hasattr(synapse, "actions") or getattr(synapse, "actions", None) is None or getattr(synapse, "actions", []) == []
@@ -112,13 +112,13 @@ class AutoppiaMiner:
     def _convert_to_start_round_synapse(self, synapse: bt.Synapse) -> StartRoundSynapse:
         """Convert generic synapse to StartRoundSynapse"""
         start_round = StartRoundSynapse(
-            round_id=getattr(synapse, "round_id", None),
-            task_type=getattr(synapse, "task_type", None)
-        )
+                        round_id=getattr(synapse, "round_id", None),
+                        task_type=getattr(synapse, "task_type", None)
+                    )
 
         # Copy response fields if they exist
-        for attr in ["success", "message"]:
-            if hasattr(synapse, attr):
+                    for attr in ["success", "message"]:
+                        if hasattr(synapse, attr):
                 setattr(start_round, attr, getattr(synapse, attr))
 
         return start_round
@@ -159,9 +159,9 @@ class AutoppiaMiner:
             task_id = getattr(synapse, "id", None) or getattr(synapse, "task_id", None) or "unknown"
             prompt = getattr(synapse, "prompt", "")
             url = getattr(synapse, "url", "")
-
+            
             bt.logging.info(f"Processing task: {task_id}, prompt: {prompt[:50]}...")
-
+            
             # Call API
             response = await asyncio.wait_for(
                 self.api_client.post(
@@ -174,32 +174,32 @@ class AutoppiaMiner:
                 ),
                 timeout=settings.api_timeout
             )
-
+            
             if response.status_code == 200:
                 result = response.json()
                 synapse.actions = result.get("actions", [])
                 synapse.success = True
                 synapse.task_type = "generic"
-
+                
                 # Set additional fields if TaskSynapse
                 if isinstance(synapse, TaskSynapse):
                     synapse.web_agent_id = result.get("web_agent_id", task_id)
                     synapse.recording = result.get("recording", "")
                     synapse.task_id = result.get("task_id", task_id)
-
+                
                 bt.logging.info(f"Task {task_id} processed successfully, {len(synapse.actions)} actions generated")
             else:
                 synapse.actions = []
                 synapse.success = False
                 bt.logging.warning(f"API returned status {response.status_code} for task {task_id}")
-
+            
         except Exception as e:
             synapse.actions = []
             synapse.success = False
             bt.logging.error(f"Error processing task: {e}")
             import traceback
             traceback.print_exc()
-
+        
         return synapse
     
     async def run(self):
@@ -316,7 +316,7 @@ class AutoppiaMiner:
                 # Get validator identifier for logging
                 validator_ip = self._get_validator_ip(synapse)
                 synapse_name = getattr(synapse, '__class__', {}).__name__ if hasattr(synapse, '__class__') else 'Synapse'
-
+                
                 # CRITICAL: Check for StartRoundSynapse first (handles Bittensor deserialization issues)
                 if self._is_start_round_synapse(synapse):
                     bt.logging.info(f"🔄 ROUND_START: {validator_ip} - Detected StartRoundSynapse: round_id={getattr(synapse, 'round_id', None)}, task_type={getattr(synapse, 'task_type', None)}")
@@ -345,11 +345,11 @@ class AutoppiaMiner:
                             message=f"Round start failed: {e}"
                         )
                         return error_response
-
+                
                 # Handle regular task synapses
                 bt.logging.info(f"📋 TASK_RECEIVED: {validator_ip} - Processing {synapse_name}: id={getattr(synapse, 'id', 'unknown')}")
                 print(f"📋 TASK_RECEIVED: {validator_ip} - Processing {synapse_name}", flush=True)
-
+                
                 result = await self.process_task(synapse)
 
                 bt.logging.info(f"📤 TASK_RESPONSE: {validator_ip} - Completed {synapse_name}: success={getattr(result, 'success', False)}, actions={len(getattr(result, 'actions', []))}")
