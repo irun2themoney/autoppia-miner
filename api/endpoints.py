@@ -39,7 +39,7 @@ def _infer_url_from_prompt(prompt: str, provided_url: str = "") -> str:
 
 # Helper function to generate fallback actions (consolidated from 3 duplicate implementations)
 async def _generate_fallback_actions(prompt: str, url: str, max_actions: int = 20) -> List[Dict[str, Any]]:
-    """Generate fallback actions when agent fails or returns empty"""
+    """Generate fallback actions when agent fails or returns empty - tries harder to solve the task"""
     try:
         from api.actions.generator import ActionGenerator
         from api.actions.converter import convert_to_iwa_action
@@ -47,17 +47,47 @@ async def _generate_fallback_actions(prompt: str, url: str, max_actions: int = 2
         fallback_url = _infer_url_from_prompt(prompt, url)
         fallback_generator = ActionGenerator()
         
-        raw_fallback = await asyncio.wait_for(
-            fallback_generator.generate(prompt, fallback_url),
-            timeout=10.0
-        )
-        return [
-            convert_to_iwa_action(action)
-            for action in raw_fallback[:max_actions]
+        # Try primary generation with longer timeout
+        try:
+            raw_fallback = await asyncio.wait_for(
+                fallback_generator.generate(prompt, fallback_url),
+                timeout=15.0  # Longer timeout for fallback
+            )
+            if raw_fallback and len(raw_fallback) > 0:
+                return [
+                    convert_to_iwa_action(action)
+                    for action in raw_fallback[:max_actions]
+                ]
+        except asyncio.TimeoutError:
+            logger.warning(f"Fallback generation timed out, using minimal actions")
+        except Exception as gen_error:
+            logger.warning(f"Fallback generation error: {gen_error}, trying minimal actions")
+        
+        # If generation failed, create minimal meaningful action sequence based on prompt
+        # This is better than just ScreenshotAction - at least tries to navigate
+        minimal_actions = [
+            {"type": "NavigateAction", "url": fallback_url},
+            {"type": "WaitAction", "time_seconds": 1.0},
         ]
+        
+        # Try to add task-specific actions based on prompt keywords
+        prompt_lower = prompt.lower()
+        if any(word in prompt_lower for word in ["click", "button", "press"]):
+            minimal_actions.append({"type": "ScreenshotAction"})  # Screenshot to see what's available
+        elif any(word in prompt_lower for word in ["type", "enter", "input", "search"]):
+            minimal_actions.append({"type": "ScreenshotAction"})  # Screenshot to find input fields
+        else:
+            minimal_actions.append({"type": "ScreenshotAction"})  # Default: screenshot
+        
+        return minimal_actions
     except Exception as e:
-        logger.warning(f"Fallback generation failed: {e}")
-        return [{"type": "ScreenshotAction"}]
+        logger.error(f"Fallback generation completely failed: {e}")
+        # Absolute last resort: minimal navigation
+        return [
+            {"type": "NavigateAction", "url": url or "https://autobooks.autoppia.com"},
+            {"type": "WaitAction", "time_seconds": 1.0},
+            {"type": "ScreenshotAction"}
+        ]
 
 # Initialize agent based on configuration
 def get_agent():

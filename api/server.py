@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from .endpoints import router
-from .endpoints_feedback import router as feedback_router
+# SIMPLIFIED: Removed feedback endpoints (not needed for core functionality)
 # SIMPLIFIED: Removed dashboard and learning endpoints (not needed)
 from config.settings import settings
 import logging
@@ -75,8 +75,7 @@ app.add_middleware(
 
 # Include routes
 app.include_router(router)
-app.include_router(feedback_router, prefix="/api")
-# SIMPLIFIED: Removed dashboard and learning routers (not needed)
+# SIMPLIFIED: Removed feedback, dashboard and learning routers (not needed)
 
 
 @app.get("/health")
