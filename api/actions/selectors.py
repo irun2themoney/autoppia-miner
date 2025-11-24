@@ -4,9 +4,9 @@ from ..utils.keywords import extract_keywords
 
 
 def create_selector(
-    selector_type: str,
-    value: str,
-    attribute: str = None,
+    selector_type: str, 
+    value: str, 
+    attribute: str = None, 
     case_sensitive: bool = False
 ) -> Dict[str, Any]:
     """Create IWA selector object - Returns Autoppia framework format"""
@@ -17,10 +17,10 @@ def create_selector(
         if attribute:
             return {
                 "type": "attributeValueSelector",
-                "attribute": attribute,
-                "value": value,
-                "case_sensitive": case_sensitive
-            }
+                    "attribute": attribute,
+                    "value": value,
+                    "case_sensitive": case_sensitive
+                }
         else:
             # Fallback to tagContainsSelector if no attribute
             return {

@@ -214,7 +214,7 @@ class ActionGenerator:
         
         if not is_test_request and url and isinstance(url, str) and url.startswith("http"):
             from config.settings import settings
-
+            
             # DEBUG: Log browser automation attempt
             logger.info(f"🔍 Attempting browser automation: enabled={settings.enable_browser_automation}, playwright_available={PLAYWRIGHT_AVAILABLE}, analyzer_available={get_browser_analyzer is not None}, is_test_request={is_test_request}")
             
@@ -1346,7 +1346,7 @@ class ActionGenerator:
         # Step 2: Type search query (handle complex constraints)
         if search_selectors:
             query_text = search_query or ""
-
+            
             # Parse complex criteria from prompt (e.g., "query is NOT equal to 'DataStream Inc.'")
             import re
             exclude_match = re.search(r"query is NOT equal to ['\"]([^'\"]+)['\"]", str(constraints))
@@ -1921,9 +1921,9 @@ class ActionGenerator:
                 "action_type": "click",
                 "selector": create_selector("tagContainsSelector", "connect")
             })
-
+        
         return actions
-
+    
     def _generate_comment_actions(self, parsed: Dict[str, Any], prompt_lower: str) -> List[Dict[str, Any]]:
         """Generate comment/post actions - CRITICAL: Must include navigation"""
         actions = []

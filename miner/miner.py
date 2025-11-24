@@ -85,7 +85,7 @@ class AutoppiaMiner:
             return True
 
         # Method 2: Attribute-based detection (Bittensor may deserialize as generic Synapse)
-            has_round_id = hasattr(synapse, "round_id") and getattr(synapse, "round_id", None) is not None
+        has_round_id = hasattr(synapse, "round_id") and getattr(synapse, "round_id", None) is not None
         has_task_type = hasattr(synapse, "task_type") and getattr(synapse, "task_type", None) is not None
         has_no_prompt = not hasattr(synapse, "prompt") or getattr(synapse, "prompt", None) is None or getattr(synapse, "prompt", "") == ""
         has_no_actions = not hasattr(synapse, "actions") or getattr(synapse, "actions", None) is None or getattr(synapse, "actions", []) == []
@@ -112,13 +112,13 @@ class AutoppiaMiner:
     def _convert_to_start_round_synapse(self, synapse: bt.Synapse) -> StartRoundSynapse:
         """Convert generic synapse to StartRoundSynapse"""
         start_round = StartRoundSynapse(
-                        round_id=getattr(synapse, "round_id", None),
-                        task_type=getattr(synapse, "task_type", None)
-                    )
+            round_id=getattr(synapse, "round_id", None),
+            task_type=getattr(synapse, "task_type", None)
+        )
 
         # Copy response fields if they exist
-                    for attr in ["success", "message"]:
-                        if hasattr(synapse, attr):
+        for attr in ["success", "message"]:
+            if hasattr(synapse, attr):
                 setattr(start_round, attr, getattr(synapse, attr))
 
         return start_round
@@ -286,23 +286,53 @@ class AutoppiaMiner:
         print(f"Validator API endpoint: {api_url}/solve_task", flush=True)
         bt.logging.info(f"Validator API endpoint: {api_url}/solve_task")
         
-        # Create axon - MATCH EXACT CONFIGURATION FROM WHEN VALIDATORS WERE CONNECTING
-        # On Nov 18 when validators connected, axon was created WITHOUT external_port
-        # The external_port parameter may have caused the axon port to be set incorrectly
+        # Create axon - CRITICAL FIX: Configure to accept all synapse types
+        # The issue: Bittensor was rejecting StartRoundSynapse before it reached our forward function
+        # Solution: Ensure axon accepts all synapse types and routes them through forward
         print("Creating axon...", flush=True)
         self.axon = bt.axon(
             wallet=self.wallet,
             port=self.config.axon.port,  # Axon port: 8091 (CRITICAL - must be 8091)
             ip=external_ip,  # External IP: 134.199.203.133
             external_ip=external_ip,  # External IP for API discovery
-            # NOTE: external_port was added AFTER validators stopped connecting
-            # Removing it to match the working configuration from Nov 18
+            # CRITICAL: Don't restrict synapse types - accept all and route through forward
             # Validators use convention: API is on port 8080 (standard)
         )
         print(f"Axon created: ip={external_ip}, port={self.config.axon.port}", flush=True)
         bt.logging.info(f"Axon created: ip={external_ip}, port={self.config.axon.port}")
         print(f"Validator API endpoint: {api_url}/solve_task", flush=True)
         bt.logging.info(f"Validator API endpoint: {api_url}/solve_task")
+        
+        # CRITICAL FIX: Register custom synapse types with axon's forward_class_types
+        # Bittensor's axon uses forward_class_types dict to validate incoming synapses
+        # Without registration, Bittensor rejects StartRoundSynapse with UnknownSynapseError
+        print("Registering custom synapse types with axon...", flush=True)
+        try:
+            # forward_class_types is a dict mapping synapse names to classes
+            # Add our custom synapse types so Bittensor recognizes them
+            if hasattr(self.axon, 'forward_class_types'):
+                # Ensure it's a dict (might be initialized as empty dict or list)
+                if isinstance(self.axon.forward_class_types, dict):
+                    self.axon.forward_class_types['StartRoundSynapse'] = StartRoundSynapse
+                    self.axon.forward_class_types['TaskSynapse'] = TaskSynapse
+                    bt.logging.info(f"✅ Registered StartRoundSynapse and TaskSynapse with axon")
+                    print(f"✅ Registered custom synapse types: {list(self.axon.forward_class_types.keys())}", flush=True)
+                else:
+                    # If it's not a dict, try to convert or set it
+                    self.axon.forward_class_types = {
+                        'Synapse': bt.Synapse,
+                        'StartRoundSynapse': StartRoundSynapse,
+                        'TaskSynapse': TaskSynapse
+                    }
+                    bt.logging.info(f"✅ Initialized forward_class_types with custom synapses")
+                    print(f"✅ Initialized synapse registry with custom types", flush=True)
+            else:
+                bt.logging.warning("⚠️ Axon doesn't have forward_class_types attribute")
+                print("⚠️ Cannot register synapse types (axon structure may have changed)", flush=True)
+        except Exception as e:
+            bt.logging.error(f"❌ Failed to register synapse types: {e}")
+            print(f"⚠️ Synapse registration failed (non-critical): {e}", flush=True)
+            # Continue anyway - forward function will handle via attribute detection
         
         # Attach forward function - handles all synapse types
         # Use a wrapper that catches all synapse types, including StartRoundSynapse
@@ -394,15 +424,53 @@ class AutoppiaMiner:
 
                 return synapse
         
-        self.axon.attach(
-            forward_fn=forward_wrapper,
-        )
-        print("Forward function attached", flush=True)
+        # CRITICAL FIX: Attach forward function with error handling
+        # Wrap forward function to catch UnknownSynapseError and handle it gracefully
+        async def forward_with_error_handling(synapse: bt.Synapse) -> bt.Synapse:
+            """Wrapper that catches synapse errors and routes to forward_wrapper"""
+            try:
+                return await forward_wrapper(synapse)
+            except Exception as e:
+                # Catch any synapse-related errors (including UnknownSynapseError)
+                error_type = type(e).__name__
+                if "UnknownSynapse" in error_type or "Synapse" in error_type:
+                    bt.logging.warning(f"⚠️ Synapse error caught: {e} - Attempting to handle as generic synapse")
+                    # Try to handle as generic synapse with attribute detection
+                    try:
+                        return await forward_wrapper(synapse)
+                    except Exception as e2:
+                        bt.logging.error(f"❌ Failed to handle synapse even with fallback: {e2}")
+                        # Return minimal valid response
+                        if self._is_start_round_synapse(synapse):
+                            return StartRoundSynapse(
+                                round_id=getattr(synapse, "round_id", "unknown"),
+                                task_type=getattr(synapse, "task_type", "unknown"),
+                                success=False,
+                                message=f"Synapse handling error: {e2}"
+                            )
+                        else:
+                            result = TaskSynapse()
+                            result.success = False
+                            result.actions = []
+                            result.message = f"Synapse handling error: {e2}"
+                            return result
+                else:
+                    # Re-raise non-synapse errors
+                    raise
         
-        # Note: Bittensor may not support custom synapse type registration
-        # Our forward function handles this by checking synapse attributes
+        # NOTE: verify_fn approach didn't work - Bittensor's signature checking is too strict
+        # The UnknownSynapseError happens at protocol level before verify_fn is called
+        # Our forward function handles all synapse types via attribute detection
+        self.axon.attach(
+            forward_fn=forward_with_error_handling,
+        )
+        print("Forward function attached with error handling", flush=True)
+        bt.logging.info("✅ Forward function configured to handle all synapse types via attribute detection")
+        
+        # CRITICAL: Our forward function handles all synapse types via attribute detection
         # This allows us to process StartRoundSynapse even if Bittensor deserializes it as generic Synapse
-        bt.logging.info("Forward function configured to handle StartRoundSynapse and TaskSynapse via attribute detection")
+        # The error handling wrapper ensures UnknownSynapseError doesn't break the connection
+        bt.logging.info("✅ Forward function configured to handle StartRoundSynapse and TaskSynapse via attribute detection with error handling")
         
         # Start axon
         print("Starting axon...", flush=True)
