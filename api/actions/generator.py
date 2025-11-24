@@ -228,20 +228,24 @@ class ActionGenerator:
                         import asyncio
                         start_time = time.time()
                         
-                        # Fetch page with full browser automation (with timeout to prevent hanging)
+                        # Fetch page with full browser automation (OPTIMIZED: faster timeout)
+                        from config.settings import settings
+                        browser_timeout = getattr(settings, 'browser_fetch_timeout', 3.0)
+                        dom_timeout = getattr(settings, 'dom_analysis_timeout', 1.5)
+                        
                         try:
                             page_data = await asyncio.wait_for(
-                                browser_analyzer.fetch_page(url),
-                                timeout=5.0  # 5 second max for browser automation
+                                browser_analyzer.fetch_page(url, timeout=browser_timeout),
+                                timeout=browser_timeout + 0.5  # Slight buffer
                             )
                             if page_data:
                                 intent = prompt_lower
                                 
-                                # Analyze DOM (also with timeout)
+                                # Analyze DOM (OPTIMIZED: faster timeout)
                                 try:
                                     live_selectors = await asyncio.wait_for(
                                         asyncio.to_thread(browser_analyzer.analyze_dom, page_data, intent, task_type),
-                                        timeout=2.0  # 2 second max for DOM analysis
+                                        timeout=dom_timeout
                                     )
                                     
                                     elapsed = time.time() - start_time
@@ -250,10 +254,10 @@ class ActionGenerator:
                                     else:
                                         logger.info(f"Browser Automation completed in {elapsed:.2f}s but found no candidates")
                                 except asyncio.TimeoutError:
-                                    logger.warning(f"Browser DOM analysis timeout, falling back to HTTP fetching")
+                                    logger.warning(f"Browser DOM analysis timeout ({dom_timeout}s), falling back to HTTP fetching")
                                     live_selectors = []
                         except asyncio.TimeoutError:
-                            logger.warning(f"Browser automation timeout (5s), falling back to HTTP fetching")
+                            logger.warning(f"Browser automation timeout ({browser_timeout}s), falling back to HTTP fetching")
                             live_selectors = []
                 except Exception as e:
                     logger.warning(f"Browser automation failed: {e}, falling back to HTTP fetching")
@@ -352,11 +356,19 @@ class ActionGenerator:
         def finalize_actions(action_list: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             """
             Apply validation, verification, and optimization to action sequence
-            Enhanced with Tok-style quality checks (target 5-8s response time)
+            Enhanced with performance optimizations for better accuracy and speed
             CRITICAL: Converts all actions to IWA format using convert_to_iwa_action
             """
             # CRITICAL: Convert all actions to IWA format FIRST
             from .converter import convert_to_iwa_action
+            
+            # PERFORMANCE OPTIMIZATION: Import optimizer
+            try:
+                from ..utils.action_optimizer import ActionOptimizer
+                optimizer = ActionOptimizer()
+            except ImportError:
+                optimizer = None
+            
             converted_actions = []
             for action in action_list:
                 try:
@@ -368,6 +380,29 @@ class ActionGenerator:
                     converted_actions.append({"type": "ScreenshotAction"})
             
             action_list = converted_actions
+            
+            # PERFORMANCE ENHANCEMENT: Optimize action sequence
+            if optimizer:
+                try:
+                    # Optimize sequence for better accuracy
+                    action_list = optimizer.optimize_action_sequence(action_list, task_type)
+                    # Enhance selectors for better accuracy
+                    action_list = optimizer.enhance_selectors(action_list)
+                    logger.debug(f"✅ Optimized action sequence: {len(action_list)} actions")
+                except Exception as e:
+                    logger.warning(f"Optimization failed: {e}, using original actions")
+            
+            # QUALITY ENHANCEMENT: Improve response quality
+            try:
+                from ..utils.response_quality import ResponseQualityEnhancer
+                quality_enhancer = ResponseQualityEnhancer()
+                action_list = quality_enhancer.enhance_action_sequence(action_list)
+                quality_score = quality_enhancer.calculate_quality_score(action_list)
+                logger.info(f"✅ Quality score: {quality_score:.2f} for {len(action_list)} actions")
+            except ImportError:
+                pass
+            except Exception as e:
+                logger.warning(f"Quality enhancement failed: {e}")
             # LIVE ANALYSIS OVERRIDE
             if live_selectors:
                 for action in action_list:

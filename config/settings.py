@@ -40,6 +40,13 @@ class Settings(BaseSettings):
     enable_browser_automation: bool = True  # Enable Playwright browser automation (better accuracy, slower)
     browser_automation_timeout: float = 15.0  # Timeout for browser page loads (seconds)
     
+    # Performance Optimization Settings
+    fast_mode: bool = True  # Enable fast mode: optimize for speed while maintaining accuracy
+    browser_fetch_timeout: float = 3.0  # Reduced from 5.0s - faster browser fetching
+    dom_analysis_timeout: float = 1.5  # Reduced from 2.0s - faster DOM analysis
+    enable_selector_caching: bool = True  # Cache common selectors for faster responses
+    parallel_processing: bool = True  # Enable parallel processing where possible
+    
     class Config:
         env_file = ".env"
         case_sensitive = False

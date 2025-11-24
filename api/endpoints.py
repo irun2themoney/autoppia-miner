@@ -275,7 +275,14 @@ async def solve_task(request: TaskRequest, http_request: Request):
                 validator_ip in ["127.0.0.1", "localhost", "::1"] or
                 (request.id and (request.id.startswith("test-") or request.id.startswith("cache-test-")))
             )
-            timeout_seconds = 10.0 if is_test_request else 90.0  # Fast for tests, longer for validators
+            # PERFORMANCE OPTIMIZATION: Use faster timeout for production (validators prefer speed)
+            # But still allow enough time for complex tasks
+            from config.settings import settings
+            fast_mode = getattr(settings, 'fast_mode', True)
+            if fast_mode and not is_test_request:
+                timeout_seconds = 30.0  # Faster timeout: 30s instead of 90s (still safe)
+            else:
+                timeout_seconds = 10.0 if is_test_request else 90.0
             
             # SIMPLIFIED: TemplateAgent doesn't need validator_ip parameter
             actions = await asyncio.wait_for(

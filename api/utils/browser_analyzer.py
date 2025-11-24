@@ -40,8 +40,14 @@ class BrowserAnalyzer:
                     await page.close()
                     return None
                 
-                # Wait for page to be interactive
-                await page.wait_for_load_state("networkidle", timeout=5000)
+                # OPTIMIZED: Use domcontentloaded instead of networkidle for faster loading
+                # networkidle waits for all network activity to stop (slower)
+                # domcontentloaded is faster and sufficient for most cases
+                try:
+                    await page.wait_for_load_state("domcontentloaded", timeout=3000)
+                except:
+                    # Fallback: just wait a bit if domcontentloaded fails
+                    await asyncio.sleep(0.5)
                 
                 # Get page data
                 html = await page.content()

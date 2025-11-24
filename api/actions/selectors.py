@@ -295,16 +295,21 @@ class SelectorStrategy:
             action = keywords["actions"][0]
             strategies.append(create_selector("tagContainsSelector", action.title(), case_sensitive=False))
         
-        # Common form field selectors
+        # ENHANCED: Common form field selectors with better accuracy
         form_fields = ["username", "password", "email", "name", "submit", "button"]
         for field in form_fields:
             if field in prompt_lower:
-                strategies.append(create_selector("attributeValueSelector", field, attribute="name", case_sensitive=False))
-                strategies.append(create_selector("attributeValueSelector", field, attribute="type", case_sensitive=False))
+                # Priority order: id > name > data-testid > type > class
                 strategies.append(create_selector("attributeValueSelector", field, attribute="id", case_sensitive=False))
-                # Try data attributes
+                strategies.append(create_selector("attributeValueSelector", field, attribute="name", case_sensitive=False))
                 strategies.append(create_selector("attributeValueSelector", field, attribute="data-testid", case_sensitive=False))
+                strategies.append(create_selector("attributeValueSelector", field, attribute="type", case_sensitive=False))
                 strategies.append(create_selector("attributeValueSelector", field, attribute="data-cy", case_sensitive=False))
+                strategies.append(create_selector("attributeValueSelector", field, attribute="class", case_sensitive=False))
+                # Add placeholder-based selectors for better accuracy
+                if field in ["username", "email"]:
+                    strategies.append(create_selector("attributeValueSelector", "email", attribute="placeholder", case_sensitive=False))
+                    strategies.append(create_selector("attributeValueSelector", "username", attribute="placeholder", case_sensitive=False))
         
         # XPath fallbacks for complex cases
         if keywords["targets"]:
