@@ -691,6 +691,7 @@ async def solve_task(request: TaskRequest, http_request: Request):
         # 🧠 SELF-LEARNING: Enhance actions using learned patterns (if enabled)
         # CRITICAL FIX: Wrap in try-except to prevent NameError if LEARNING_ENABLED is not defined
         try:
+            from config.settings import settings
             LEARNING_ENABLED = getattr(settings, 'learning_enabled', False)
             if LEARNING_ENABLED:
                 try:
