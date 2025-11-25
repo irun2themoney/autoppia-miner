@@ -343,6 +343,35 @@ async def solve_task(request: TaskRequest, http_request: Request):
             logger.error(f"🚨 CRITICAL: Actions is empty in final check for task {request.id}, using fallback")
             actions = [{"type": "ScreenshotAction"}]
         
+        # CRITICAL FIX: Final cleanup - ensure ALL actions use camelCase (playground requirement)
+        from api.actions.converter import convert_to_iwa_action
+        cleaned_actions = []
+        for action in actions:
+            try:
+                # Re-convert to ensure camelCase (removes any snake_case that slipped through)
+                cleaned_action = convert_to_iwa_action(action)
+                # Double-check: remove any remaining snake_case fields
+                if "time_seconds" in cleaned_action:
+                    if "timeSeconds" not in cleaned_action:
+                        cleaned_action["timeSeconds"] = cleaned_action["time_seconds"]
+                    del cleaned_action["time_seconds"]
+                if "duration" in cleaned_action:
+                    if "timeSeconds" not in cleaned_action:
+                        cleaned_action["timeSeconds"] = cleaned_action["duration"]
+                    del cleaned_action["duration"]
+                # Clean selector fields
+                if "selector" in cleaned_action and isinstance(cleaned_action["selector"], dict):
+                    selector = cleaned_action["selector"]
+                    if "case_sensitive" in selector:
+                        if "caseSensitive" not in selector:
+                            selector["caseSensitive"] = selector["case_sensitive"]
+                        del selector["case_sensitive"]
+                cleaned_actions.append(cleaned_action)
+            except Exception as e:
+                logger.warning(f"Failed to clean action {action}: {e}, using as-is")
+                cleaned_actions.append(action)
+        actions = cleaned_actions
+        
         # Validate IWA format before returning
         try:
             from api.utils.iwa_validator import validate_iwa_action_sequence

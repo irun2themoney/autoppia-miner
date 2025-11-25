@@ -16,7 +16,7 @@ class ActionOptimizer:
         return {
             "login": [
                 {"type": "NavigateAction"},
-                {"type": "WaitAction", "time_seconds": 1.0},
+                {"type": "WaitAction", "timeSeconds": 1.0},  # camelCase for playground
                 {"type": "ScreenshotAction"},
                 {"type": "TypeAction"},  # username
                 {"type": "TypeAction"},  # password
@@ -24,13 +24,13 @@ class ActionOptimizer:
             ],
             "search": [
                 {"type": "NavigateAction"},
-                {"type": "WaitAction", "time_seconds": 1.0},
+                {"type": "WaitAction", "timeSeconds": 1.0},  # camelCase for playground
                 {"type": "TypeAction"},  # search query
                 {"type": "ClickAction"},  # search button
             ],
             "form": [
                 {"type": "NavigateAction"},
-                {"type": "WaitAction", "time_seconds": 1.0},
+                {"type": "WaitAction", "timeSeconds": 1.0},  # camelCase for playground
                 {"type": "ScreenshotAction"},
                 # Then fill form fields
             ],
@@ -50,10 +50,13 @@ class ActionOptimizer:
             
             # Skip redundant waits
             if action_type == "WaitAction" and prev_action and prev_action.get("type") == "WaitAction":
-                # Merge consecutive waits
-                prev_wait = prev_action.get("time_seconds", 0) or prev_action.get("duration", 0)
-                curr_wait = action.get("time_seconds", 0) or action.get("duration", 0)
-                optimized[-1]["time_seconds"] = prev_wait + curr_wait
+                # Merge consecutive waits (use camelCase: timeSeconds)
+                prev_wait = prev_action.get("timeSeconds", 0) or prev_action.get("time_seconds", 0) or prev_action.get("duration", 0)
+                curr_wait = action.get("timeSeconds", 0) or action.get("time_seconds", 0) or action.get("duration", 0)
+                optimized[-1]["timeSeconds"] = prev_wait + curr_wait
+                # Remove snake_case if present
+                if "time_seconds" in optimized[-1]:
+                    del optimized[-1]["time_seconds"]
                 continue
             
             # Ensure proper action ordering
@@ -130,9 +133,13 @@ class ActionOptimizer:
                         else:
                             selector["attribute"] = "name"
                 
-                # Ensure case_sensitive is set
-                if "case_sensitive" not in selector:
-                    selector["case_sensitive"] = False
+                # Ensure caseSensitive is set (camelCase for playground)
+                if "caseSensitive" not in selector:
+                    # Convert snake_case to camelCase if present
+                    if "case_sensitive" in selector:
+                        selector["caseSensitive"] = selector.pop("case_sensitive")
+                    else:
+                        selector["caseSensitive"] = False
             
             enhanced.append(action)
         
@@ -149,10 +156,10 @@ class ActionOptimizer:
             
             # Add verification after critical actions
             if action_type in ["ClickAction", "TypeAction", "NavigateAction"]:
-                # Add short wait and screenshot for verification
+                # Add short wait and screenshot for verification (camelCase for playground)
                 verified.append({
                     "type": "WaitAction",
-                    "time_seconds": 0.5
+                    "timeSeconds": 0.5  # camelCase for playground
                 })
                 # Don't add screenshot after every action (too many)
                 # Only add after important actions

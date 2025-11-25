@@ -62,11 +62,15 @@ def convert_to_iwa_action(action: Dict[str, Any]) -> Dict[str, Any]:
                         "caseSensitive": False  # camelCase for validator
                     }
             else:
-                # Already in correct format - but ensure only camelCase (remove snake_case if present)
+                # Already in correct format - but ensure only camelCase (convert snake_case to camelCase)
                 cleaned_selector = dict(selector)
-                # CRITICAL FIX: Remove snake_case if camelCase exists (avoid duplicate fields)
-                if "caseSensitive" in cleaned_selector and "case_sensitive" in cleaned_selector:
+                # CRITICAL FIX: Convert snake_case to camelCase (playground requires camelCase)
+                if "case_sensitive" in cleaned_selector:
+                    cleaned_selector["caseSensitive"] = cleaned_selector["case_sensitive"]
                     del cleaned_selector["case_sensitive"]
+                # Also ensure caseSensitive exists (default to False if missing)
+                if "caseSensitive" not in cleaned_selector:
+                    cleaned_selector["caseSensitive"] = False
                 result["selector"] = cleaned_selector
         else:
             # String selector -> convert to IWA format
@@ -106,6 +110,11 @@ def convert_to_iwa_action(action: Dict[str, Any]) -> Dict[str, Any]:
             result["timeSeconds"] = action["time_seconds"]  # Convert to camelCase
         elif "duration" in action:
             result["timeSeconds"] = action["duration"]  # Convert to camelCase
+        # CRITICAL: Remove old snake_case fields to prevent duplicate fields
+        if "time_seconds" in result:
+            del result["time_seconds"]
+        if "duration" in result:
+            del result["duration"]
     
     elif iwa_type == "TypeAction":
         if "text" in action:
