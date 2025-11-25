@@ -832,11 +832,12 @@ async def solve_task(request: TaskRequest, http_request: Request):
             )
             
             # Verify the response content one final time
-            verify_parsed = json_module.loads(response_json_str)
-            if "webAgentId" in verify_parsed:
-                logger.error(f"🚨 FATAL: webAgentId STILL in final response! This should be impossible!")
-            else:
-                logger.info(f"✅ Created response with ONLY web_agent_id (no webAgentId) - VERIFIED")
+            try:
+                verify_parsed = json_module.loads(response_json_str)
+                if "webAgentId" in verify_parsed:
+                    logger.error(f"🚨 FATAL: webAgentId STILL in final response! This should be impossible!")
+                else:
+                    logger.info(f"✅ Created response with ONLY web_agent_id (no webAgentId) - VERIFIED")
             except Exception as verify_err:
                 logger.debug(f"Response verification error (non-critical): {verify_err}")
             
