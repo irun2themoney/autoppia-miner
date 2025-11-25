@@ -66,7 +66,10 @@ def _infer_url_from_prompt(prompt: str, provided_url: str = "") -> str:
 
 # Helper function to generate fallback actions (consolidated from 3 duplicate implementations)
 async def _generate_fallback_actions(prompt: str, url: str, max_actions: int = 20) -> List[Dict[str, Any]]:
-    """Generate fallback actions when agent fails or returns empty - tries harder to solve the task"""
+    """
+    Generate fallback actions when agent fails or returns empty - tries harder to solve the task
+    GUARANTEED to return at least one action (never empty list)
+    """
     try:
         from api.actions.generator import ActionGenerator
         from api.actions.converter import convert_to_iwa_action
@@ -81,24 +84,42 @@ async def _generate_fallback_actions(prompt: str, url: str, max_actions: int = 2
                 timeout=15.0  # Longer timeout for fallback
             )
             if raw_fallback and len(raw_fallback) > 0:
-                return [
+                converted = [
                     convert_to_iwa_action(action)
                     for action in raw_fallback[:max_actions]
                 ]
+                # CRITICAL: Ensure converted actions are not empty
+                if converted and len(converted) > 0:
+                    logger.info(f"✅ Fallback generation succeeded: {len(converted)} actions")
+                    return converted
+                else:
+                    logger.warning(f"⚠️ Fallback generation returned empty after conversion, using minimal actions")
         except asyncio.TimeoutError:
             logger.warning(f"Fallback generation timed out, using minimal actions")
         except Exception as gen_error:
             logger.warning(f"Fallback generation error: {gen_error}, trying minimal actions")
+            import traceback
+            logger.debug(f"Fallback error traceback: {traceback.format_exc()}")
         
         # If generation failed, create minimal meaningful action sequence based on prompt
         # This is better than just ScreenshotAction - at least tries to navigate
-        minimal_actions = [
-            {"type": "NavigateAction", "url": fallback_url},
-            {"type": "WaitAction", "timeSeconds": 1.0},  # CRITICAL FIX: camelCase for validator
-        ]
+        minimal_actions = []
+        
+        # GUARANTEED: Always add NavigateAction if URL is available
+        if fallback_url:
+            minimal_actions.append({
+                "type": "NavigateAction",
+                "url": fallback_url
+            })
+        
+        # GUARANTEED: Always add WaitAction for page load
+        minimal_actions.append({
+            "type": "WaitAction",
+            "timeSeconds": 1.0  # CRITICAL FIX: camelCase for validator
+        })
         
         # Try to add task-specific actions based on prompt keywords
-        prompt_lower = prompt.lower()
+        prompt_lower = prompt.lower() if prompt else ""
         if any(word in prompt_lower for word in ["click", "button", "press"]):
             minimal_actions.append({"type": "ScreenshotAction"})  # Screenshot to see what's available
         elif any(word in prompt_lower for word in ["type", "enter", "input", "search"]):
@@ -106,7 +127,41 @@ async def _generate_fallback_actions(prompt: str, url: str, max_actions: int = 2
         else:
             minimal_actions.append({"type": "ScreenshotAction"})  # Default: screenshot
         
+        # CRITICAL: Final guarantee - if somehow minimal_actions is empty, add ScreenshotAction
+        if not minimal_actions or len(minimal_actions) == 0:
+            logger.error(f"🚨 CRITICAL: Minimal actions is empty! Adding guaranteed ScreenshotAction")
+            minimal_actions = [{"type": "ScreenshotAction"}]
+        
+        logger.info(f"✅ Generated {len(minimal_actions)} guaranteed minimal actions")
         return minimal_actions
+        
+    except Exception as e:
+        # CRITICAL: Even if everything fails, return guaranteed minimal actions
+        import traceback
+        logger.error(f"🚨 FATAL ERROR in _generate_fallback_actions: {e}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        
+        # GUARANTEED MINIMAL FALLBACK: Always return at least one action
+        fallback_url = _infer_url_from_prompt(prompt, url) if prompt or url else "https://example.com"
+        guaranteed_actions = []
+        
+        if fallback_url:
+            guaranteed_actions.append({
+                "type": "NavigateAction",
+                "url": fallback_url
+            })
+        
+        guaranteed_actions.append({
+            "type": "WaitAction",
+            "timeSeconds": 1.0
+        })
+        
+        guaranteed_actions.append({
+            "type": "ScreenshotAction"
+        })
+        
+        logger.error(f"🚨 Returning GUARANTEED minimal actions: {len(guaranteed_actions)} actions")
+        return guaranteed_actions
     except Exception as e:
         logger.error(f"Fallback generation completely failed: {e}")
         # Absolute last resort: minimal navigation
@@ -534,6 +589,21 @@ async def solve_task(request: TaskRequest, http_request: Request):
         # CRITICAL: Final conversion using dedicated function - GUARANTEED to run
         response_content["actions"] = ensure_camelcase_response(response_content["actions"])
         
+        # CRITICAL: FINAL GUARANTEE - Ensure actions is NEVER empty before creating response
+        if not response_content["actions"] or len(response_content["actions"]) == 0:
+            logger.error(f"🚨 FATAL: Actions is empty AFTER conversion! Creating GUARANTEED minimal actions for task {request.id}")
+            # GUARANTEED MINIMAL ACTIONS - This should NEVER happen, but if it does, we have a failsafe
+            guaranteed_url = request.url if request.url else _infer_url_from_prompt(request.prompt, "")
+            if not guaranteed_url:
+                guaranteed_url = "https://example.com"
+            
+            response_content["actions"] = [
+                {"type": "NavigateAction", "url": guaranteed_url},
+                {"type": "WaitAction", "timeSeconds": 1.0},
+                {"type": "ScreenshotAction"}
+            ]
+            logger.error(f"🚨 Created GUARANTEED minimal actions: {len(response_content['actions'])} actions")
+        
         # CRITICAL: Log the actual response content size and first few actions
         response_json = json.dumps(response_content)
         logger.info(f"📦 Response size: {len(response_json)} bytes, actions in response: {len(response_content.get('actions', []))}")
@@ -541,8 +611,12 @@ async def solve_task(request: TaskRequest, http_request: Request):
             first_action = response_content["actions"][0]
             logger.info(f"📋 First action keys: {list(first_action.keys())}, has timeSeconds: {'timeSeconds' in first_action}")
             logger.info(f"📋 First 3 actions: {[a.get('type', 'N/A') for a in response_content['actions'][:3]]}")
+            logger.info(f"✅ FINAL VERIFICATION: Returning {len(response_content['actions'])} actions for task {request.id}")
         else:
             logger.error(f"🚨 CRITICAL: Response has EMPTY actions array! This should never happen!")
+            # This should be impossible now, but if it happens, log it heavily
+            import traceback
+            logger.error(f"🚨 CRITICAL ERROR TRACEBACK: {traceback.format_exc()}")
         
         return JSONResponse(
             content=response_content,
