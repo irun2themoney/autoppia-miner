@@ -671,6 +671,15 @@ async def solve_task(request: TaskRequest, http_request: Request):
                 
                 # CRITICAL: Log actual JSON to verify it's correct
                 logger.info(f"📋 Response JSON preview (first 500 chars): {response_json[:500]}")
+                # CRITICAL: Check if webAgentId appeared in the JSON (should not be there)
+                if "webAgentId" in response_json:
+                    logger.error(f"🚨 CRITICAL: webAgentId found in response JSON preview! Removing it immediately.")
+                    # Parse JSON, remove webAgentId, and update response_content
+                    parsed_preview = json.loads(response_json)
+                    if "webAgentId" in parsed_preview:
+                        del parsed_preview["webAgentId"]
+                        response_content = parsed_preview
+                        logger.warning(f"⚠️ Removed webAgentId from response_content after JSON preview check")
             else:
                 logger.error(f"🚨 CRITICAL: Response has EMPTY actions array! This should never happen!")
                 # This should be impossible now, but if it happens, log it heavily
@@ -678,6 +687,11 @@ async def solve_task(request: TaskRequest, http_request: Request):
                 logger.error(f"🚨 CRITICAL ERROR TRACEBACK: {traceback.format_exc()}")
         except Exception as log_err:
             logger.error(f"❌ FATAL: Error logging response for task {request.id}: {log_err}", exc_info=True)
+        
+        # CRITICAL: Final check - ensure webAgentId is NEVER in response_content before cleanup
+        if "webAgentId" in response_content:
+            logger.error(f"🚨 CRITICAL: webAgentId found in response_content BEFORE cleanup! Removing it.")
+            del response_content["webAgentId"]
         
         # CRITICAL: Final check before creating JSONResponse
         if not response_content.get("actions") or len(response_content["actions"]) == 0:
