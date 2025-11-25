@@ -420,9 +420,6 @@ async def solve_task(request: TaskRequest, http_request: Request):
         except Exception as e:
             logger.warning(f"⚠️ IWA validation error: {e}")
         
-        # CRITICAL: Log final response before returning
-        logger.info(f"✅ RETURNING RESPONSE: task_id={request.id}, actions_count={len(actions)}, first_action={actions[0] if actions else 'NONE'}")
-        
         # CRITICAL: Match official Autoppia response format exactly
         # Official format: {actions: [], web_agent_id: str, recording: str}
         # Do NOT include extra fields like 'id' or 'task_id' - playground may reject them
