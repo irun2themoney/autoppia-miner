@@ -689,20 +689,27 @@ async def solve_task(request: TaskRequest, http_request: Request):
             ]
         
         # 🧠 SELF-LEARNING: Enhance actions using learned patterns (if enabled)
-        if LEARNING_ENABLED:
-            try:
-                learning_system = get_learning_system()
-                # Enhance actions based on learned patterns
-                enhanced_actions = learning_system.enhance_actions(
-                    actions=response_content["actions"],
-                    task_type=task_type,
-                    prompt=request.prompt
-                )
-                if enhanced_actions != response_content["actions"]:
-                    logger.info(f"✨ Enhanced {len(enhanced_actions)} actions using learned patterns")
-                    response_content["actions"] = enhanced_actions
-            except Exception as learn_err:
-                logger.debug(f"Learning enhancement error (non-critical): {learn_err}")
+        # CRITICAL FIX: Wrap in try-except to prevent NameError if LEARNING_ENABLED is not defined
+        try:
+            LEARNING_ENABLED = getattr(settings, 'learning_enabled', False)
+            if LEARNING_ENABLED:
+                try:
+                    from api.utils.learning_system import LearningSystem
+        learning_system = LearningSystem()
+                    # Enhance actions based on learned patterns
+                    enhanced_actions = learning_system.enhance_actions(
+                        actions=response_content["actions"],
+                        task_type=task_type,
+                        prompt=request.prompt
+                    )
+                    if enhanced_actions != response_content["actions"]:
+                        logger.info(f"✨ Enhanced {len(enhanced_actions)} actions using learned patterns")
+                        response_content["actions"] = enhanced_actions
+                except Exception as learn_err:
+                    logger.debug(f"Learning enhancement error (non-critical): {learn_err}")
+        except (NameError, AttributeError):
+            # Learning system not available - skip enhancement
+            pass
         
         # 🔍 DIAGNOSTIC: Track response before sending and validate
         try:
@@ -866,14 +873,22 @@ async def solve_task(request: TaskRequest, http_request: Request):
 @router.get("/learning/stats")
 async def get_learning_stats():
     """Get learning system statistics - view self-learning progress"""
-    if not LEARNING_ENABLED:
+    try:
+        LEARNING_ENABLED = getattr(settings, 'learning_enabled', False)
+        if not LEARNING_ENABLED:
+            return JSONResponse(
+                content={"error": "Learning system not enabled"},
+                status_code=503
+            )
+    except (NameError, AttributeError):
         return JSONResponse(
-            content={"error": "Learning system not enabled"},
+            content={"error": "Learning system not available"},
             status_code=503
         )
     
     try:
-        learning_system = get_learning_system()
+        from api.utils.learning_system import LearningSystem
+        learning_system = LearningSystem()
         stats = learning_system.get_statistics()
         return JSONResponse(content=stats, status_code=200)
     except Exception as e:
@@ -901,14 +916,22 @@ async def record_feedback(feedback: Dict[str, Any]):
         "actions": [...]
     }
     """
-    if not LEARNING_ENABLED:
+    try:
+        LEARNING_ENABLED = getattr(settings, 'learning_enabled', False)
+        if not LEARNING_ENABLED:
+            return JSONResponse(
+                content={"error": "Learning system not enabled"},
+                status_code=503
+            )
+    except (NameError, AttributeError):
         return JSONResponse(
-            content={"error": "Learning system not enabled"},
+            content={"error": "Learning system not available"},
             status_code=503
         )
     
     try:
-        learning_system = get_learning_system()
+        from api.utils.learning_system import LearningSystem
+        learning_system = LearningSystem()
         feedback_analyzer = get_feedback_analyzer()
         
         task_id = feedback.get("task_id", "unknown")
@@ -956,14 +979,22 @@ async def record_feedback(feedback: Dict[str, Any]):
 @router.get("/learning/stats")
 async def get_learning_stats():
     """Get learning system statistics - view self-learning progress"""
-    if not LEARNING_ENABLED:
+    try:
+        LEARNING_ENABLED = getattr(settings, 'learning_enabled', False)
+        if not LEARNING_ENABLED:
+            return JSONResponse(
+                content={"error": "Learning system not enabled"},
+                status_code=503
+            )
+    except (NameError, AttributeError):
         return JSONResponse(
-            content={"error": "Learning system not enabled"},
+            content={"error": "Learning system not available"},
             status_code=503
         )
     
     try:
-        learning_system = get_learning_system()
+        from api.utils.learning_system import LearningSystem
+        learning_system = LearningSystem()
         stats = learning_system.get_statistics()
         return JSONResponse(content=stats, status_code=200)
     except Exception as e:
@@ -991,14 +1022,22 @@ async def record_feedback(feedback: Dict[str, Any]):
         "actions": [...]
     }
     """
-    if not LEARNING_ENABLED:
+    try:
+        LEARNING_ENABLED = getattr(settings, 'learning_enabled', False)
+        if not LEARNING_ENABLED:
+            return JSONResponse(
+                content={"error": "Learning system not enabled"},
+                status_code=503
+            )
+    except (NameError, AttributeError):
         return JSONResponse(
-            content={"error": "Learning system not enabled"},
+            content={"error": "Learning system not available"},
             status_code=503
         )
     
     try:
-        learning_system = get_learning_system()
+        from api.utils.learning_system import LearningSystem
+        learning_system = LearningSystem()
         feedback_analyzer = get_feedback_analyzer()
         
         task_id = feedback.get("task_id", "unknown")
