@@ -39,6 +39,8 @@
 
 ### **Technical Excellence**
 - ✅ **IWA Format Compliance** - NavigateAction, TypeAction, ClickAction, WaitAction
+- ✅ **IWA Format Validator** - Automatic validation of action format compliance
+- ✅ **Enhanced Logging** - Comprehensive timing metrics and response tracking
 - ✅ **Browser Automation** - Playwright integration for accurate DOM analysis
 - ✅ **Selector Strategies** - Multiple fallback selectors for reliability
 - ✅ **Error Recovery** - Graceful fallback when browser analysis fails
@@ -124,13 +126,16 @@ autoppia-miner/
 │   │   └── selectors.py   # Selector strategies
 │   ├── utils/             # Utilities for browser automation
 │   │   ├── browser_analyzer.py    # Playwright DOM analysis
+│   │   ├── iwa_validator.py      # IWA format validator
+│   │   ├── action_optimizer.py   # Action sequence optimizer
+│   │   ├── response_quality.py   # Response quality enhancer
 │   │   ├── classification.py      # Task classification
 │   │   ├── keywords.py           # Keyword processing
 │   │   └── task_parser.py        # Task parsing utilities
-│   ├── endpoints.py       # Main API endpoints
+│   ├── endpoints.py       # Main API endpoints (with IWA validation)
 │   └── server.py          # FastAPI server
 ├── miner/                  # Bittensor miner
-│   ├── miner.py           # Main miner logic
+│   ├── miner.py           # Main miner logic (with enhanced logging)
 │   └── protocol.py        # Synapse definitions
 ├── config/                 # Configuration
 │   └── settings.py        # Pydantic settings
@@ -166,6 +171,39 @@ curl -X POST http://localhost:8080/solve_task \
 ---
 
 ## 📊 **Monitoring**
+
+### Enhanced Logging & Validation
+
+The miner now includes comprehensive logging and IWA format validation to help diagnose issues and ensure validator acceptance:
+
+**Key Features**:
+- ⏱️ **Response Time Tracking** - Monitor processing times (< 3s target)
+- ✅ **IWA Format Validation** - Automatic validation of action format compliance
+- 📊 **Action Quality Metrics** - Track action counts and success rates
+- ⚠️ **Warning System** - Alerts for slow responses, minimal actions, invalid IWA format
+
+### Monitor Logs
+
+**On Production Server**:
+```bash
+# Monitor enhanced logs
+journalctl -u autoppia-miner -f | grep -E 'TASK_RESPONSE|IWA_VALIDATION|SLOW_RESPONSE|MINIMAL_RESPONSE'
+
+# Check recent activity
+journalctl -u autoppia-miner --since '10 minutes ago' | grep -E 'TASK_RESPONSE|IWA_VALIDATION'
+```
+
+**Success Indicators**:
+```
+📤 TASK_RESPONSE: {validator_ip} - Completed TaskSynapse | Success: True | Actions: 5 | Time: 1.23s | IWA: ✅ VALID
+```
+
+**Warning Signs**:
+```
+⚠️ SLOW_RESPONSE: Task took 4.5s (validators may timeout)
+⚠️ MINIMAL_RESPONSE: Only ScreenshotAction (may receive low score)
+❌ IWA_VALIDATION_FAILED: Invalid action format detected
+```
 
 ### Health Check
 ```bash
@@ -230,9 +268,11 @@ sudo systemctl restart autoppia-api autoppia-miner
 ## 🎯 **Performance**
 
 - **Social Task Success**: Handles complex user connections and comments
-- **Response Time**: 1-3s average with browser automation
-- **IWA Compliance**: Full BaseAction format support
+- **Response Time**: 1-3s average with browser automation (target < 3s)
+- **IWA Compliance**: Full BaseAction format support with automatic validation
+- **Action Quality**: Multiple actions per task (not just ScreenshotAction)
 - **Production Uptime**: 99.9%+ with systemd services
+- **Validator Acceptance**: Enhanced logging helps track validator acceptance
 
 ---
 
@@ -260,6 +300,8 @@ AXON_PORT=8091
 
 - ✅ **Social Intelligence** - Advanced user connection and comment capabilities
 - ✅ **IWA Benchmark Ready** - Handles complex social automation tasks
+- ✅ **Enhanced Logging** - Comprehensive timing metrics and response tracking
+- ✅ **IWA Format Validator** - Automatic validation of action format compliance
 - ✅ **Production Deployed** - UID 160 actively earning TAO rewards
 - ✅ **Clean Architecture** - Streamlined codebase for stability
 - ✅ **Browser Automation** - Playwright integration for accurate DOM analysis
