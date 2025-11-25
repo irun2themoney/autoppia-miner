@@ -621,16 +621,16 @@ async def solve_task(request: TaskRequest, http_request: Request):
         }
         
         # CRITICAL: Debug - log immediately after creation
-        logger.info(f"🔍 DEBUG: response_content keys immediately after creation: {list(response_content.keys())}")
-        logger.info(f"🔍 DEBUG: Has webAgentId immediately after creation: {'webAgentId' in response_content}")
+        logger.error(f"🔍 DEBUG: response_content keys immediately after creation: {list(response_content.keys())}")
+        logger.error(f"🔍 DEBUG: Has webAgentId immediately after creation: {'webAgentId' in response_content}")
         
         # CRITICAL: Apply recursive filter IMMEDIATELY after creation to remove webAgentId from anywhere
         response_content = remove_webagentid_recursive(response_content)
+        logger.error(f"🔍 DEBUG: After recursive filter - keys: {list(response_content.keys())}, has webAgentId: {'webAgentId' in response_content}")
         
         # CRITICAL: Immediately check and remove webAgentId if somehow present (double-check)
-        if "webAgentId" in response_content:
-            logger.error(f"🚨 CRITICAL: webAgentId found IMMEDIATELY after creation AND recursive filter! Removing it.")
-            del response_content["webAgentId"]
+        response_content.pop("webAgentId", None)  # Use pop to avoid KeyError
+        logger.error(f"🔍 DEBUG: After pop - keys: {list(response_content.keys())}, has webAgentId: {'webAgentId' in response_content}")
         
         # CRITICAL: Final conversion using dedicated function - GUARANTEED to run
         try:
@@ -694,12 +694,16 @@ async def solve_task(request: TaskRequest, http_request: Request):
         
         # CRITICAL: Apply recursive filter RIGHT BEFORE JSON serialization to catch any webAgentId added after creation
         response_content = remove_webagentid_recursive(response_content)
+        logger.error(f"🔍 DEBUG: Before JSON serialization - keys: {list(response_content.keys())}, has webAgentId: {'webAgentId' in response_content}")
         
         # CRITICAL: Log the actual response content size and first few actions
         try:
             # CRITICAL: Apply filter one more time before serialization
             response_content = remove_webagentid_recursive(response_content)
+            response_content.pop("webAgentId", None)  # Force remove
+            logger.error(f"🔍 DEBUG: Right before json.dumps - keys: {list(response_content.keys())}, has webAgentId: {'webAgentId' in response_content}")
             response_json = json.dumps(response_content)
+            logger.error(f"🔍 DEBUG: After json.dumps - JSON contains webAgentId: {'webAgentId' in response_json}")
             logger.info(f"📦 Response size: {len(response_json)} bytes, actions in response: {len(response_content.get('actions', []))}")
             if response_content["actions"] and len(response_content["actions"]) > 0:
                 first_action = response_content["actions"][0]
