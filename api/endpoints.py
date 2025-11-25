@@ -906,19 +906,34 @@ async def solve_task(request: TaskRequest, http_request: Request):
         import json as json_module
         from fastapi import Response
         
+        # CRITICAL: Create response with ONLY allowed fields (playground strict validation)
         exception_response_content = {
             "actions": fallback_actions,
             "web_agent_id": request.id,  # snake_case - official playground format
             "recording": "",
         }
         
+        # CRITICAL: Verify no webAgentId before serialization
+        if "webAgentId" in exception_response_content:
+            logger.error(f"🚨 EXCEPTION HANDLER: webAgentId found in dict! Removing it.")
+            del exception_response_content["webAgentId"]
+        
         # CRITICAL: Serialize to JSON string and verify no webAgentId
         exception_json_str = json_module.dumps(exception_response_content, ensure_ascii=False)
         exception_parsed = json_module.loads(exception_json_str)
         if "webAgentId" in exception_parsed:
-            logger.error(f"🚨 EXCEPTION HANDLER: webAgentId found! Removing it.")
+            logger.error(f"🚨 EXCEPTION HANDLER: webAgentId found in JSON! Removing it.")
             del exception_parsed["webAgentId"]
             exception_json_str = json_module.dumps(exception_parsed, ensure_ascii=False)
+        
+        # CRITICAL: Final verification before returning
+        final_exception_parsed = json_module.loads(exception_json_str)
+        if "webAgentId" in final_exception_parsed:
+            logger.error(f"🚨 EXCEPTION HANDLER: webAgentId STILL present! Removing it.")
+            del final_exception_parsed["webAgentId"]
+            exception_json_str = json_module.dumps(final_exception_parsed, ensure_ascii=False)
+        else:
+            logger.info(f"✅ EXCEPTION HANDLER: Response verified - no webAgentId")
         
         # Return actions (fallback if available) instead of empty
         # Benchmark expects actions, not empty array
