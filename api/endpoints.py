@@ -741,6 +741,11 @@ async def solve_task(request: TaskRequest, http_request: Request):
         except Exception as diag_err:
             logger.debug(f"Diagnostic error (non-critical): {diag_err}")
         
+        # CRITICAL: Remove webAgentId if it exists (playground expects ONLY web_agent_id)
+        if "webAgentId" in response_content:
+            logger.warning(f"⚠️ Removing webAgentId from response - playground expects only web_agent_id")
+            del response_content["webAgentId"]
+        
         try:
             # CRITICAL: Create response and immediately verify
             response = JSONResponse(
