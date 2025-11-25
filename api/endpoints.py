@@ -915,9 +915,20 @@ async def solve_task(request: TaskRequest, http_request: Request):
                 # One more recursive filter
                 final_clean = remove_webagentid_recursive(final_clean)
                 
-                # Recreate response with manually built dict
+                # CRITICAL: Build JSON string manually - NO webAgentId possible
+                # Don't use json.dumps on the dict - build the JSON string manually
+                actions_json = json_module.dumps(final_clean.get("actions", []), ensure_ascii=False)
+                web_agent_id_value = json_module.dumps(final_clean.get("web_agent_id", request.id), ensure_ascii=False)
+                recording_value = json_module.dumps(final_clean.get("recording", ""), ensure_ascii=False)
+                
+                # Build JSON string manually - NO webAgentId possible
+                final_json_str = f'{{"actions":{actions_json},"web_agent_id":{web_agent_id_value},"recording":{recording_value}}}'
+                
+                logger.error(f"🔍 DEBUG: Manual JSON string contains webAgentId: {'webAgentId' in final_json_str}")
+                
+                # Recreate response with manually built JSON
                 response = Response(
-                    content=json_module.dumps(final_clean, ensure_ascii=False),
+                    content=final_json_str,
                     status_code=200,
                     media_type="application/json",
                     headers=CORS_HEADERS
@@ -928,7 +939,7 @@ async def solve_task(request: TaskRequest, http_request: Request):
                 if "webAgentId" in verify_final:
                     logger.error(f"🚨 FATAL: webAgentId in final response after manual build!")
                 else:
-                    logger.info(f"✅ VERIFIED: Final response has NO webAgentId")
+                    logger.error(f"✅ VERIFIED: Final response has NO webAgentId")
             except Exception as final_err:
                 logger.error(f"Final check error: {final_err}", exc_info=True)
             
