@@ -906,12 +906,17 @@ async def solve_task(request: TaskRequest, http_request: Request):
         import json as json_module
         from fastapi import Response
         
+        logger.error(f"🚨 EXCEPTION HANDLER: Creating exception response for task {request.id}")
+        
         # CRITICAL: Create response with ONLY allowed fields (playground strict validation)
-        exception_response_content = {
-            "actions": fallback_actions,
-            "web_agent_id": request.id,  # snake_case - official playground format
-            "recording": "",
-        }
+        # Build manually to ensure NO webAgentId can sneak in
+        exception_response_content = {}
+        exception_response_content["actions"] = fallback_actions
+        exception_response_content["web_agent_id"] = request.id  # snake_case - official playground format
+        exception_response_content["recording"] = ""
+        
+        logger.error(f"🚨 EXCEPTION HANDLER: Created dict with keys: {list(exception_response_content.keys())}")
+        logger.error(f"🚨 EXCEPTION HANDLER: Has webAgentId in dict: {'webAgentId' in exception_response_content}")
         
         # CRITICAL: Verify no webAgentId before serialization
         if "webAgentId" in exception_response_content:
@@ -920,9 +925,12 @@ async def solve_task(request: TaskRequest, http_request: Request):
         
         # CRITICAL: Serialize to JSON string and verify no webAgentId
         exception_json_str = json_module.dumps(exception_response_content, ensure_ascii=False)
+        logger.error(f"🚨 EXCEPTION HANDLER: JSON string (first 200 chars): {exception_json_str[:200]}")
+        logger.error(f"🚨 EXCEPTION HANDLER: Has webAgentId in JSON string: {'webAgentId' in exception_json_str}")
+        
         exception_parsed = json_module.loads(exception_json_str)
         if "webAgentId" in exception_parsed:
-            logger.error(f"🚨 EXCEPTION HANDLER: webAgentId found in JSON! Removing it.")
+            logger.error(f"🚨 EXCEPTION HANDLER: webAgentId found in parsed JSON! Removing it.")
             del exception_parsed["webAgentId"]
             exception_json_str = json_module.dumps(exception_parsed, ensure_ascii=False)
         
@@ -933,7 +941,10 @@ async def solve_task(request: TaskRequest, http_request: Request):
             del final_exception_parsed["webAgentId"]
             exception_json_str = json_module.dumps(final_exception_parsed, ensure_ascii=False)
         else:
-            logger.info(f"✅ EXCEPTION HANDLER: Response verified - no webAgentId")
+            logger.error(f"✅ EXCEPTION HANDLER: Response verified - no webAgentId")
+        
+        logger.error(f"🚨 EXCEPTION HANDLER: Final JSON string (first 200 chars): {exception_json_str[:200]}")
+        logger.error(f"🚨 EXCEPTION HANDLER: Final check - Has webAgentId: {'webAgentId' in exception_json_str}")
         
         # Return actions (fallback if available) instead of empty
         # Benchmark expects actions, not empty array
