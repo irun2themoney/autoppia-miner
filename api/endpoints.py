@@ -426,8 +426,24 @@ async def solve_task(request: TaskRequest, http_request: Request):
         # CRITICAL: Match official Autoppia response format exactly
         # Official format: {actions: [], web_agent_id: str, recording: str}
         # Do NOT include extra fields like 'id' or 'task_id' - playground may reject them
+        # FINAL CAMELCASE FIX: Convert actions right before creating response
+        import copy
+        final_actions = []
+        for action in actions:
+            action_copy = copy.deepcopy(action)
+            # Convert time_seconds -> timeSeconds
+            if action_copy.get("type") == "WaitAction" and "time_seconds" in action_copy:
+                action_copy["timeSeconds"] = action_copy.pop("time_seconds")
+            if action_copy.get("type") == "WaitAction" and "duration" in action_copy:
+                action_copy["timeSeconds"] = action_copy.pop("duration")
+            # Convert case_sensitive -> caseSensitive in selectors
+            if "selector" in action_copy and isinstance(action_copy["selector"], dict):
+                if "case_sensitive" in action_copy["selector"]:
+                    action_copy["selector"]["caseSensitive"] = action_copy["selector"].pop("case_sensitive")
+            final_actions.append(action_copy)
+        
         response_content = {
-            "actions": actions,
+            "actions": final_actions,
             "web_agent_id": request.id,
             "recording": "",
         }
