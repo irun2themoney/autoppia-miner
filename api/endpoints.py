@@ -605,6 +605,11 @@ async def solve_task(request: TaskRequest, http_request: Request):
             "recording": "",
         }
         
+        # CRITICAL: Immediately check and remove webAgentId if somehow present
+        if "webAgentId" in response_content:
+            logger.error(f"🚨 CRITICAL: webAgentId found IMMEDIATELY after creation! Removing it.")
+            del response_content["webAgentId"]
+        
         # CRITICAL: Final conversion using dedicated function - GUARANTEED to run
         try:
             response_content["actions"] = ensure_camelcase_response(response_content["actions"])
