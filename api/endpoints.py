@@ -994,21 +994,16 @@ async def solve_task(request: TaskRequest, http_request: Request):
         logger.error(f"🚨 EXCEPTION HANDLER: JSON string (first 200 chars): {exception_json_str[:200]}")
         logger.error(f"🚨 EXCEPTION HANDLER: Has webAgentId in JSON string: {'webAgentId' in exception_json_str}")
         
-        exception_parsed = json_module.loads(exception_json_str)
-        if "webAgentId" in exception_parsed:
-            logger.error(f"🚨 EXCEPTION HANDLER: webAgentId found in parsed JSON! Removing it.")
-            del exception_parsed["webAgentId"]
-            exception_json_str = json_module.dumps(exception_parsed, ensure_ascii=False)
-        
-        # CRITICAL: Final verification before returning
+        # CRITICAL: Final verification before returning - apply recursive filter one more time
         final_exception_parsed = json_module.loads(exception_json_str)
+        final_exception_parsed = remove_webagentid_recursive(final_exception_parsed)
         if "webAgentId" in final_exception_parsed:
-            logger.error(f"🚨 EXCEPTION HANDLER: webAgentId STILL present! Removing it.")
-            del final_exception_parsed["webAgentId"]
-            exception_json_str = json_module.dumps(final_exception_parsed, ensure_ascii=False)
+            logger.error(f"🚨 EXCEPTION HANDLER: webAgentId STILL present after recursive filter!")
+            final_exception_parsed.pop("webAgentId", None)
         else:
-            logger.error(f"✅ EXCEPTION HANDLER: Response verified - no webAgentId")
+            logger.error(f"✅ EXCEPTION HANDLER: Response verified - no webAgentId after recursive filter")
         
+        exception_json_str = json_module.dumps(final_exception_parsed, ensure_ascii=False)
         logger.error(f"🚨 EXCEPTION HANDLER: Final JSON string (first 200 chars): {exception_json_str[:200]}")
         logger.error(f"🚨 EXCEPTION HANDLER: Final check - Has webAgentId: {'webAgentId' in exception_json_str}")
         
