@@ -779,3 +779,93 @@ async def solve_task(request: TaskRequest, http_request: Request):
             headers=CORS_HEADERS
         )
 
+
+
+@router.get("/learning/stats")
+async def get_learning_stats():
+    """Get learning system statistics - view self-learning progress"""
+    if not LEARNING_ENABLED:
+        return JSONResponse(
+            content={"error": "Learning system not enabled"},
+            status_code=503
+        )
+    
+    try:
+        learning_system = get_learning_system()
+        stats = learning_system.get_statistics()
+        return JSONResponse(content=stats, status_code=200)
+    except Exception as e:
+        logger.error(f"Error getting learning stats: {e}", exc_info=True)
+        return JSONResponse(
+            content={"error": str(e)},
+            status_code=500
+        )
+
+
+@router.post("/learning/feedback")
+async def record_feedback(feedback: Dict[str, Any]):
+    """
+    Record feedback from playground/validators for self-learning
+    
+    Expected format:
+    {
+        "task_id": "...",
+        "task_type": "login|form|search|...",
+        "prompt": "...",
+        "url": "...",
+        "success": true/false,
+        "execution_time": 0.5,
+        "error": "optional error message",
+        "actions": [...]
+    }
+    """
+    if not LEARNING_ENABLED:
+        return JSONResponse(
+            content={"error": "Learning system not enabled"},
+            status_code=503
+        )
+    
+    try:
+        learning_system = get_learning_system()
+        feedback_analyzer = get_feedback_analyzer()
+        
+        task_id = feedback.get("task_id", "unknown")
+        success = feedback.get("success", False)
+        execution_time = feedback.get("execution_time", 0.0)
+        error = feedback.get("error")
+        actions = feedback.get("actions", [])
+        
+        # Analyze feedback
+        analysis = feedback_analyzer.analyze_execution_result(
+            task_id=task_id,
+            actions=actions,
+            result={"success": 1 if success else 0}
+        )
+        
+        # Record in learning system
+        learning_system.record_task_result(
+            task_id=task_id,
+            task_type=feedback.get("task_type", "generic"),
+            prompt=feedback.get("prompt", ""),
+            url=feedback.get("url", ""),
+            actions=actions,
+            success=success,
+            execution_time=execution_time,
+            error=error
+        )
+        
+        return JSONResponse(
+            content={
+                "status": "recorded",
+                "analysis": analysis,
+                "suggestions": feedback_analyzer.get_improvement_suggestions()
+            },
+            status_code=200
+        )
+    except Exception as e:
+        logger.error(f"Error recording feedback: {e}", exc_info=True)
+        return JSONResponse(
+            content={"error": str(e)},
+            status_code=500
+        )
+
