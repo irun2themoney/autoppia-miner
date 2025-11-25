@@ -62,8 +62,12 @@ def convert_to_iwa_action(action: Dict[str, Any]) -> Dict[str, Any]:
                         "caseSensitive": False  # camelCase for validator
                     }
             else:
-                # Already in correct format
-                result["selector"] = selector
+                # Already in correct format - but ensure only camelCase (remove snake_case if present)
+                cleaned_selector = dict(selector)
+                # CRITICAL FIX: Remove snake_case if camelCase exists (avoid duplicate fields)
+                if "caseSensitive" in cleaned_selector and "case_sensitive" in cleaned_selector:
+                    del cleaned_selector["case_sensitive"]
+                result["selector"] = cleaned_selector
         else:
             # String selector -> convert to IWA format
             selector_str = str(action["selector"])
