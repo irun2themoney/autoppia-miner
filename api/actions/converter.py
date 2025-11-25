@@ -104,13 +104,18 @@ def convert_to_iwa_action(action: Dict[str, Any]) -> Dict[str, Any]:
     # CRITICAL FIX: Validator expects camelCase (timeSeconds) not snake_case (time_seconds)
     if iwa_type == "WaitAction":
         # Handle both "duration" and "time_seconds" (convert to camelCase)
+        # ALWAYS convert to camelCase - this is the source of truth
         if "timeSeconds" in action:
             result["timeSeconds"] = action["timeSeconds"]
         elif "time_seconds" in action:
             result["timeSeconds"] = action["time_seconds"]  # Convert to camelCase
         elif "duration" in action:
             result["timeSeconds"] = action["duration"]  # Convert to camelCase
-        # CRITICAL: Remove old snake_case fields to prevent duplicate fields
+        else:
+            # Default wait time if none specified
+            result["timeSeconds"] = 1.0
+        # CRITICAL: Ensure result ONLY has camelCase (timeSeconds), never snake_case
+        # Remove any snake_case fields that might have been copied
         if "time_seconds" in result:
             del result["time_seconds"]
         if "duration" in result:
