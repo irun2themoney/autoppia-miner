@@ -824,14 +824,17 @@ async def solve_task(request: TaskRequest, http_request: Request):
             # CRITICAL: Use Response with manual JSON serialization to prevent FastAPI/Pydantic from adding webAgentId
             # FastAPI's JSONResponse might use Pydantic serialization which could add aliases
             import json as json_module
+            
+            # CRITICAL: Final filter - remove webAgentId from clean_response_content before serialization
+            clean_response_content.pop("webAgentId", None)
+            
+            # CRITICAL: Serialize and immediately parse to check for webAgentId
             response_json_str = json_module.dumps(clean_response_content, ensure_ascii=False)
             
             # CRITICAL: Parse back to verify no webAgentId was added during serialization
             parsed_final = json_module.loads(response_json_str)
-            if "webAgentId" in parsed_final:
-                logger.error(f"🚨 CRITICAL: webAgentId appeared during JSON serialization - removing it")
-                del parsed_final["webAgentId"]
-                response_json_str = json_module.dumps(parsed_final, ensure_ascii=False)
+            parsed_final.pop("webAgentId", None)  # Remove if present
+            response_json_str = json_module.dumps(parsed_final, ensure_ascii=False)
             
             # Use Response with raw JSON string to bypass FastAPI serialization
             from fastapi import Response
