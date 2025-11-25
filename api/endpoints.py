@@ -329,8 +329,7 @@ async def solve_task(request: TaskRequest, http_request: Request):
         return JSONResponse(
             content={
                 "actions": fallback_actions,  # Return fallback instead of empty
-                "webAgentId": request.id or "unknown",  # camelCase for playground compatibility
-                "web_agent_id": request.id or "unknown",  # Keep snake_case for backward compatibility
+                "web_agent_id": request.id or "unknown",  # snake_case - official playground format
                 "recording": "",
             },
             status_code=200,  # Return 200 with fallback actions (benchmark requirement)
@@ -597,12 +596,12 @@ async def solve_task(request: TaskRequest, http_request: Request):
                 if "case_sensitive" in action["selector"]:
                     action["selector"]["caseSensitive"] = action["selector"].pop("case_sensitive")
         
-        # CRITICAL: Playground may expect camelCase for web_agent_id too
-        # Use webAgentId to match IWA playground expectations (consistent with Bittensor synapse format)
+        # CRITICAL: Playground expects ONLY web_agent_id (snake_case) - NOT webAgentId
+        # Based on PLAYGROUND_ENDPOINT.md, the official format is: {actions: [], web_agent_id: str, recording: str}
+        # Including webAgentId may cause playground to reject the response
         response_content = {
             "actions": final_actions,
-            "webAgentId": request.id,  # camelCase for playground compatibility
-            "web_agent_id": request.id,  # Keep snake_case for backward compatibility
+            "web_agent_id": request.id,  # snake_case - official playground format
             "recording": "",
         }
         
@@ -655,8 +654,7 @@ async def solve_task(request: TaskRequest, http_request: Request):
                     {"type": "WaitAction", "timeSeconds": 1.0},
                     {"type": "ScreenshotAction"}
                 ],
-                "webAgentId": request.id,
-                "web_agent_id": request.id,
+                "web_agent_id": request.id,  # snake_case - official playground format
                 "recording": ""
             }
             logger.error(f"🚨 Created emergency fallback response: {len(response_content['actions'])} actions")
@@ -783,8 +781,7 @@ async def solve_task(request: TaskRequest, http_request: Request):
                     {"type": "WaitAction", "timeSeconds": 1.0},
                     {"type": "ScreenshotAction"}
                 ],
-                "webAgentId": request.id,
-                "web_agent_id": request.id,
+                "web_agent_id": request.id,  # snake_case - official playground format
                 "recording": ""
             }
             logger.error(f"🚨 Returning emergency response: {len(emergency_response['actions'])} actions")
@@ -808,8 +805,7 @@ async def solve_task(request: TaskRequest, http_request: Request):
         return JSONResponse(
             content={
                 "actions": fallback_actions,  # Return fallback actions instead of empty
-                "webAgentId": request.id,  # camelCase for playground compatibility
-                "web_agent_id": request.id,  # Keep snake_case for backward compatibility
+                "web_agent_id": request.id,  # snake_case - official playground format
                 "recording": "",
             },
             status_code=200,  # Return 200 with fallback actions
@@ -841,8 +837,7 @@ async def solve_task(request: TaskRequest, http_request: Request):
         return JSONResponse(
             content={
                 "actions": fallback_actions,
-                "webAgentId": request.id,  # camelCase for playground compatibility
-                "web_agent_id": request.id,  # Keep snake_case for backward compatibility
+                "web_agent_id": request.id,  # snake_case - official playground format
                 "recording": "",
             },
             status_code=200,  # Return 200 with fallback actions (better than 500 with empty)
