@@ -692,6 +692,11 @@ async def solve_task(request: TaskRequest, http_request: Request):
                         del parsed_preview["webAgentId"]
                         response_content = parsed_preview
                         logger.warning(f"⚠️ Removed webAgentId from response_content after JSON preview check")
+                
+                # CRITICAL: IMMEDIATE removal - do this BEFORE any other code that might cause exceptions
+                if "webAgentId" in response_content:
+                    logger.error(f"🚨 CRITICAL: webAgentId STILL in response_content after JSON check! Removing NOW.")
+                    del response_content["webAgentId"]
             else:
                 logger.error(f"🚨 CRITICAL: Response has EMPTY actions array! This should never happen!")
                 # This should be impossible now, but if it happens, log it heavily
@@ -777,8 +782,14 @@ async def solve_task(request: TaskRequest, http_request: Request):
             logger.debug(f"Diagnostic error (non-critical): {diag_err}")
         
         # CRITICAL: Remove webAgentId if it exists (playground expects ONLY web_agent_id)
+        # Do this MULTIPLE times to ensure it's gone
         if "webAgentId" in response_content:
             logger.warning(f"⚠️ Removing webAgentId from response - playground expects only web_agent_id")
+            del response_content["webAgentId"]
+        
+        # CRITICAL: Final check before try block - ensure webAgentId is gone
+        if "webAgentId" in response_content:
+            logger.error(f"🚨 CRITICAL: webAgentId STILL present before try block! Removing it.")
             del response_content["webAgentId"]
         
         try:
