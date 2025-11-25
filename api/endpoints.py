@@ -449,6 +449,7 @@ async def solve_task(request: TaskRequest, http_request: Request):
             logger.debug(f"Action {i} after: {action_copy}")
             final_actions.append(action_copy)
         logger.info(f"✅ FINAL CONVERSION COMPLETE: First action keys: {list(final_actions[0].keys()) if final_actions else 'NONE'}")
+        logger.info(f"✅ RETURNING RESPONSE: task_id={request.id}, actions_count={len(final_actions)}, first_action={final_actions[0] if final_actions else 'NONE'}")
         
         response_content = {
             "actions": final_actions,
@@ -460,8 +461,8 @@ async def solve_task(request: TaskRequest, http_request: Request):
         import json as json_module
         response_json = json_module.dumps(response_content)
         logger.info(f"📦 Response size: {len(response_json)} bytes, actions in response: {len(response_content.get('actions', []))}")
-        if actions and len(actions) > 0:
-            logger.info(f"📋 First 3 actions: {[a.get('type', 'N/A') for a in actions[:3]]}")
+        if final_actions and len(final_actions) > 0:
+            logger.info(f"📋 First 3 actions: {[a.get('type', 'N/A') for a in final_actions[:3]]}")
         else:
             logger.error(f"🚨 CRITICAL: Response has EMPTY actions array! This should never happen!")
         
