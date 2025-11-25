@@ -6,6 +6,33 @@ from typing import Dict, Any, List, Optional
 from config.settings import settings
 import os
 import time
+import json
+
+
+def ensure_camelcase_response(actions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """CRITICAL: Convert all actions to camelCase - this ALWAYS runs"""
+    converted = []
+    for action in actions:
+        if not isinstance(action, dict):
+            converted.append(action)
+            continue
+        action_copy = dict(action)
+        # Convert WaitAction: time_seconds/duration -> timeSeconds
+        if action_copy.get("type") == "WaitAction":
+            if "time_seconds" in action_copy:
+                action_copy["timeSeconds"] = action_copy.pop("time_seconds")
+            if "duration" in action_copy:
+                if "timeSeconds" not in action_copy:
+                    action_copy["timeSeconds"] = action_copy.pop("duration")
+                else:
+                    del action_copy["duration"]
+        # Convert selector: case_sensitive -> caseSensitive
+        if "selector" in action_copy and isinstance(action_copy["selector"], dict):
+            selector = action_copy["selector"]
+            if "case_sensitive" in selector:
+                selector["caseSensitive"] = selector.pop("case_sensitive")
+        converted.append(action_copy)
+    return converted
 import logging
 import asyncio
 
@@ -500,28 +527,11 @@ async def solve_task(request: TaskRequest, http_request: Request):
             "recording": "",
         }
         
-        # CRITICAL: Final in-place conversion of response_content - GUARANTEED to run
-        # This modifies the dict directly, so it will definitely execute
-        for action in response_content["actions"]:
-            if isinstance(action, dict):
-                # Convert WaitAction: time_seconds/duration -> timeSeconds
-                if action.get("type") == "WaitAction":
-                    if "time_seconds" in action:
-                        action["timeSeconds"] = action.pop("time_seconds")
-                    if "duration" in action:
-                        if "timeSeconds" not in action:
-                            action["timeSeconds"] = action.pop("duration")
-                        else:
-                            del action["duration"]
-                # Convert selector: case_sensitive -> caseSensitive
-                if "selector" in action and isinstance(action["selector"], dict):
-                    selector = action["selector"]
-                    if "case_sensitive" in selector:
-                        selector["caseSensitive"] = selector.pop("case_sensitive")
+        # CRITICAL: Final conversion using dedicated function - GUARANTEED to run
+        response_content["actions"] = ensure_camelcase_response(response_content["actions"])
         
         # CRITICAL: Log the actual response content size and first few actions
-        import json as json_module
-        response_json = json_module.dumps(response_content)
+        response_json = json.dumps(response_content)
         logger.info(f"📦 Response size: {len(response_json)} bytes, actions in response: {len(response_content.get('actions', []))}")
         if response_content["actions"] and len(response_content["actions"]) > 0:
             first_action = response_content["actions"][0]
