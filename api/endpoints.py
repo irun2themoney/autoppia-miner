@@ -425,19 +425,24 @@ async def solve_task(request: TaskRequest, http_request: Request):
         # Do NOT include extra fields like 'id' or 'task_id' - playground may reject them
         # FINAL CAMELCASE FIX: Convert actions right before creating response
         import copy
-        logger.info(f"🔄 FINAL CONVERSION: Converting {len(actions)} actions to camelCase")
+        logger.info(f"🔄 FINAL CONVERSION START: Converting {len(actions)} actions to camelCase")
+        logger.info(f"🔍 First action BEFORE conversion: {actions[0] if actions else 'NONE'}")
+        logger.info(f"🔍 First action keys BEFORE: {list(actions[0].keys()) if actions else 'NONE'}")
         final_actions = []
         for i, action in enumerate(actions):
             action_copy = copy.deepcopy(action)
-            logger.debug(f"Action {i} before: {action_copy}")
+            logger.info(f"🔍 Action {i} type: {action_copy.get('type')}, keys: {list(action_copy.keys())}")
             # Convert time_seconds -> timeSeconds
             if action_copy.get("type") == "WaitAction":
+                logger.info(f"🔍 WaitAction {i} - checking for time_seconds: {'time_seconds' in action_copy}")
                 if "time_seconds" in action_copy:
                     action_copy["timeSeconds"] = action_copy.pop("time_seconds")
-                    logger.info(f"✅ Converted time_seconds -> timeSeconds in action {i}")
+                    logger.info(f"✅ Converted time_seconds -> timeSeconds in action {i}, new keys: {list(action_copy.keys())}")
                 elif "duration" in action_copy:
                     action_copy["timeSeconds"] = action_copy.pop("duration")
                     logger.info(f"✅ Converted duration -> timeSeconds in action {i}")
+                else:
+                    logger.warning(f"⚠️ WaitAction {i} has neither time_seconds nor duration!")
             # Convert case_sensitive -> caseSensitive in selectors
             if "selector" in action_copy and isinstance(action_copy["selector"], dict):
                 if "case_sensitive" in action_copy["selector"]:
