@@ -479,6 +479,21 @@ async def solve_task(request: TaskRequest, http_request: Request):
         else:
             logger.info(f"✅ Conversion verified: First action is camelCase")
         
+        # CRITICAL: Final safety check - ensure camelCase RIGHT before creating response
+        # Modify final_actions in-place as last resort
+        for action in final_actions:
+            if isinstance(action, dict) and action.get("type") == "WaitAction":
+                if "time_seconds" in action:
+                    action["timeSeconds"] = action.pop("time_seconds")
+                if "duration" in action:
+                    if "timeSeconds" not in action:
+                        action["timeSeconds"] = action.pop("duration")
+                    else:
+                        del action["duration"]
+            if isinstance(action, dict) and "selector" in action and isinstance(action["selector"], dict):
+                if "case_sensitive" in action["selector"]:
+                    action["selector"]["caseSensitive"] = action["selector"].pop("case_sensitive")
+        
         response_content = {
             "actions": final_actions,
             "web_agent_id": request.id,
