@@ -425,6 +425,7 @@ async def solve_task(request: TaskRequest, http_request: Request):
         # Do NOT include extra fields like 'id' or 'task_id' - playground may reject them
         # FINAL CAMELCASE FIX: Convert actions right before creating response
         # CRITICAL: This MUST execute - convert snake_case to camelCase for playground
+        logger.error(f"🚨 DEBUG: REACHED CONVERSION CODE - {len(actions)} actions")  # ERROR level to ensure it shows
         import copy
         import json as json_module
         logger.info(f"🔄 FINAL CONVERSION: Processing {len(actions)} actions")
