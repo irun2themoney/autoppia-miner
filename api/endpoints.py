@@ -350,25 +350,42 @@ async def solve_task(request: TaskRequest, http_request: Request):
             try:
                 # Re-convert to ensure camelCase (removes any snake_case that slipped through)
                 cleaned_action = convert_to_iwa_action(action)
-                # Double-check: remove any remaining snake_case fields
-                if "time_seconds" in cleaned_action:
+                
+                # AGGRESSIVE CLEANUP: Directly modify dict to ensure camelCase (playground requirement)
+                # Handle WaitAction: time_seconds/duration -> timeSeconds
+                if cleaned_action.get("type") == "WaitAction":
+                    if "time_seconds" in cleaned_action:
+                        cleaned_action["timeSeconds"] = cleaned_action.pop("time_seconds")
+                    elif "duration" in cleaned_action:
+                        cleaned_action["timeSeconds"] = cleaned_action.pop("duration")
+                    # Ensure timeSeconds exists
                     if "timeSeconds" not in cleaned_action:
-                        cleaned_action["timeSeconds"] = cleaned_action["time_seconds"]
-                    del cleaned_action["time_seconds"]
-                if "duration" in cleaned_action:
-                    if "timeSeconds" not in cleaned_action:
-                        cleaned_action["timeSeconds"] = cleaned_action["duration"]
-                    del cleaned_action["duration"]
-                # Clean selector fields
+                        cleaned_action["timeSeconds"] = 1.0
+                
+                # Clean selector fields: case_sensitive -> caseSensitive
                 if "selector" in cleaned_action and isinstance(cleaned_action["selector"], dict):
                     selector = cleaned_action["selector"]
                     if "case_sensitive" in selector:
-                        if "caseSensitive" not in selector:
-                            selector["caseSensitive"] = selector["case_sensitive"]
-                        del selector["case_sensitive"]
+                        selector["caseSensitive"] = selector.pop("case_sensitive")
+                    # Ensure caseSensitive exists
+                    if "caseSensitive" not in selector:
+                        selector["caseSensitive"] = False
+                
+                # Remove any other snake_case fields that might exist
+                keys_to_remove = [k for k in cleaned_action.keys() if "_" in k and k != "web_agent_id"]
+                for key in keys_to_remove:
+                    logger.warning(f"Removing unexpected snake_case field: {key}")
+                    del cleaned_action[key]
+                
                 cleaned_actions.append(cleaned_action)
             except Exception as e:
                 logger.warning(f"Failed to clean action {action}: {e}, using as-is")
+                # Even on error, try basic cleanup
+                if isinstance(action, dict):
+                    if "time_seconds" in action:
+                        action["timeSeconds"] = action.pop("time_seconds")
+                    if "selector" in action and isinstance(action["selector"], dict) and "case_sensitive" in action["selector"]:
+                        action["selector"]["caseSensitive"] = action["selector"].pop("case_sensitive")
                 cleaned_actions.append(action)
         actions = cleaned_actions
         
