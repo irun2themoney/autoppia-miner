@@ -924,10 +924,21 @@ async def solve_task(request: TaskRequest, http_request: Request):
                 "web_agent_id": request.id,  # snake_case - official playground format
                 "recording": ""
             }
+            # CRITICAL: Apply recursive filter to emergency response
+            emergency_response = remove_webagentid_recursive(emergency_response)
             logger.error(f"🚨 Returning emergency response: {len(emergency_response['actions'])} actions")
-            return JSONResponse(
-                content=emergency_response,
+            # Use raw Response with manual JSON serialization to prevent FastAPI from adding webAgentId
+            import json as json_module
+            from fastapi import Response
+            emergency_json = json_module.dumps(emergency_response, ensure_ascii=False)
+            # Apply filter one more time
+            emergency_parsed = json_module.loads(emergency_json)
+            emergency_parsed = remove_webagentid_recursive(emergency_parsed)
+            emergency_json = json_module.dumps(emergency_parsed, ensure_ascii=False)
+            return Response(
+                content=emergency_json,
                 status_code=200,
+                media_type="application/json",
                 headers=CORS_HEADERS
             )
     
