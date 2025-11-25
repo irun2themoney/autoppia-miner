@@ -624,9 +624,12 @@ async def solve_task(request: TaskRequest, http_request: Request):
         logger.info(f"🔍 DEBUG: response_content keys immediately after creation: {list(response_content.keys())}")
         logger.info(f"🔍 DEBUG: Has webAgentId immediately after creation: {'webAgentId' in response_content}")
         
-        # CRITICAL: Immediately check and remove webAgentId if somehow present
+        # CRITICAL: Apply recursive filter IMMEDIATELY after creation to remove webAgentId from anywhere
+        response_content = remove_webagentid_recursive(response_content)
+        
+        # CRITICAL: Immediately check and remove webAgentId if somehow present (double-check)
         if "webAgentId" in response_content:
-            logger.error(f"🚨 CRITICAL: webAgentId found IMMEDIATELY after creation! Removing it.")
+            logger.error(f"🚨 CRITICAL: webAgentId found IMMEDIATELY after creation AND recursive filter! Removing it.")
             del response_content["webAgentId"]
         
         # CRITICAL: Final conversion using dedicated function - GUARANTEED to run
