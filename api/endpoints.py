@@ -774,30 +774,27 @@ async def solve_task(request: TaskRequest, http_request: Request):
                 logger.error(f"🚨 FATAL: webAgentId still in clean_response_content after cleanup!")
                 del clean_response_content["webAgentId"]
             
-            response = JSONResponse(
-                content=clean_response_content,
+            # CRITICAL: Use Response with manual JSON serialization to prevent FastAPI/Pydantic from adding webAgentId
+            # FastAPI's JSONResponse might use Pydantic serialization which could add aliases
+            import json as json_module
+            response_json_str = json_module.dumps(clean_response_content, ensure_ascii=False)
+            
+            # CRITICAL: Parse back to verify no webAgentId was added during serialization
+            parsed_final = json_module.loads(response_json_str)
+            if "webAgentId" in parsed_final:
+                logger.error(f"🚨 CRITICAL: webAgentId appeared during JSON serialization - removing it")
+                del parsed_final["webAgentId"]
+                response_json_str = json_module.dumps(parsed_final, ensure_ascii=False)
+            
+            # Use Response with raw JSON string to bypass FastAPI serialization
+            from fastapi import Response
+            response = Response(
+                content=response_json_str,
                 status_code=200,
+                media_type="application/json",
                 headers=CORS_HEADERS
             )
-            
-            # CRITICAL: Verify response body after creation and remove webAgentId if present
-            try:
-                import json as json_module
-                # Serialize response to check for webAgentId
-                response_json = json_module.dumps(clean_response_content)
-                parsed_body = json_module.loads(response_json)
-                
-                # CRITICAL: Remove webAgentId if it exists (playground expects ONLY web_agent_id)
-                if "webAgentId" in parsed_body:
-                    logger.error(f"🚨 CRITICAL: Found webAgentId in serialized response - removing it")
-                    del parsed_body["webAgentId"]
-                    # Recreate response without webAgentId
-                    response = JSONResponse(
-                        content=parsed_body,
-                        status_code=200,
-                        headers=CORS_HEADERS
-                    )
-                    logger.info(f"✅ Recreated response without webAgentId")
+            logger.info(f"✅ Created response with ONLY web_agent_id (no webAgentId)")
                     
                     if not parsed_body.get("actions") or len(parsed_body["actions"]) == 0:
                         logger.error(f"🚨 CRITICAL: JSONResponse body has empty actions! Regenerating...")
