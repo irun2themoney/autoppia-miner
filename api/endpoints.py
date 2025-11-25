@@ -605,6 +605,10 @@ async def solve_task(request: TaskRequest, http_request: Request):
             "recording": "",
         }
         
+        # CRITICAL: Debug - log immediately after creation
+        logger.info(f"🔍 DEBUG: response_content keys immediately after creation: {list(response_content.keys())}")
+        logger.info(f"🔍 DEBUG: Has webAgentId immediately after creation: {'webAgentId' in response_content}")
+        
         # CRITICAL: Immediately check and remove webAgentId if somehow present
         if "webAgentId" in response_content:
             logger.error(f"🚨 CRITICAL: webAgentId found IMMEDIATELY after creation! Removing it.")
