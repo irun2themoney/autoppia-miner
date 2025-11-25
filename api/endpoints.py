@@ -424,34 +424,57 @@ async def solve_task(request: TaskRequest, http_request: Request):
         # Official format: {actions: [], web_agent_id: str, recording: str}
         # Do NOT include extra fields like 'id' or 'task_id' - playground may reject them
         # FINAL CAMELCASE FIX: Convert actions right before creating response
-        # This is a safety net - actions should already be camelCase from converter, but ensure it
+        # CRITICAL: This MUST execute - convert snake_case to camelCase for playground
         import copy
         import json as json_module
+        logger.info(f"🔄 FINAL CONVERSION: Processing {len(actions)} actions")
+        logger.info(f"🔍 Sample action BEFORE: {str(actions[0])[:150] if actions else 'NONE'}")
         final_actions = []
-        for action in actions:
-            action_copy = copy.deepcopy(action)
-            # Convert time_seconds/duration -> timeSeconds for WaitAction
-            if action_copy.get("type") == "WaitAction":
-                if "time_seconds" in action_copy:
-                    action_copy["timeSeconds"] = action_copy.pop("time_seconds")
-                elif "duration" in action_copy:
-                    action_copy["timeSeconds"] = action_copy.pop("duration")
-                # Ensure timeSeconds exists
-                if "timeSeconds" not in action_copy:
-                    action_copy["timeSeconds"] = 1.0
-            # Convert case_sensitive -> caseSensitive in selectors
-            if "selector" in action_copy and isinstance(action_copy["selector"], dict):
-                if "case_sensitive" in action_copy["selector"]:
-                    action_copy["selector"]["caseSensitive"] = action_copy["selector"].pop("case_sensitive")
-                # Ensure caseSensitive exists
-                if "caseSensitive" not in action_copy["selector"]:
-                    action_copy["selector"]["caseSensitive"] = False
-            final_actions.append(action_copy)
+        for i, action in enumerate(actions):
+            try:
+                action_copy = dict(action)  # Shallow copy first
+                # Deep copy nested structures
+                if "selector" in action_copy and isinstance(action_copy["selector"], dict):
+                    action_copy["selector"] = dict(action_copy["selector"])
+                
+                # Convert time_seconds/duration -> timeSeconds for WaitAction
+                if action_copy.get("type") == "WaitAction":
+                    if "time_seconds" in action_copy:
+                        val = action_copy.pop("time_seconds")
+                        action_copy["timeSeconds"] = val
+                        logger.info(f"✅ Action {i}: Converted time_seconds={val} -> timeSeconds")
+                    elif "duration" in action_copy:
+                        val = action_copy.pop("duration")
+                        action_copy["timeSeconds"] = val
+                        logger.info(f"✅ Action {i}: Converted duration={val} -> timeSeconds")
+                    # Ensure timeSeconds exists
+                    if "timeSeconds" not in action_copy:
+                        action_copy["timeSeconds"] = 1.0
+                        logger.info(f"✅ Action {i}: Added default timeSeconds=1.0")
+                
+                # Convert case_sensitive -> caseSensitive in selectors
+                if "selector" in action_copy and isinstance(action_copy["selector"], dict):
+                    selector = action_copy["selector"]
+                    if "case_sensitive" in selector:
+                        val = selector.pop("case_sensitive")
+                        selector["caseSensitive"] = val
+                        logger.info(f"✅ Action {i}: Converted case_sensitive={val} -> caseSensitive")
+                    # Ensure caseSensitive exists
+                    if "caseSensitive" not in selector:
+                        selector["caseSensitive"] = False
+                
+                final_actions.append(action_copy)
+            except Exception as e:
+                logger.error(f"❌ Error converting action {i}: {e}")
+                import traceback
+                logger.error(traceback.format_exc())
+                final_actions.append(action)  # Use original on error
         
         # Verify conversion worked
+        logger.info(f"🔍 Sample action AFTER: {str(final_actions[0])[:150] if final_actions else 'NONE'}")
         first_action_json = json_module.dumps(final_actions[0] if final_actions else {})
         if "time_seconds" in first_action_json or "case_sensitive" in first_action_json:
-            logger.error(f"❌ CRITICAL: Conversion failed! First action still has snake_case: {first_action_json[:200]}")
+            logger.error(f"❌ CRITICAL: Conversion failed! JSON: {first_action_json[:200]}")
         else:
             logger.info(f"✅ Conversion verified: First action is camelCase")
         
