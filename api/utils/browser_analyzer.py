@@ -1,6 +1,7 @@
 """Browser automation using Playwright for accurate selector generation"""
 import asyncio
 import logging
+import re
 from typing import Dict, Any, List, Optional
 from playwright.async_api import async_playwright, Browser, Page, TimeoutError as PlaywrightTimeoutError
 
@@ -20,41 +21,123 @@ class BrowserAnalyzer:
     
     async def fetch_page(self, url: str, timeout: float = 15.0) -> Optional[Dict[str, Any]]:
         """
-        Fetch page with full browser automation
+        Fetch page with full browser automation - OPTIMIZED for < 1.5s target
+        
+        EXPERT LLM FEEDBACK: Implement resource blocking and fast content extraction
+        to minimize network latency and CPU time.
         
         Returns:
             Dict with 'html', 'url', 'title', 'elements' or None if failed
         """
+        context = None
+        page = None
+        
         try:
-            page = await self.browser.new_page()
+            # EXPERT LLM FEEDBACK: Create context for resource blocking
+            context = await self.browser.new_context()
+            page = await context.new_page()
             
             # Set reasonable timeouts
             page.set_default_timeout(timeout * 1000)  # Convert to ms
             
+            # EXPERT LLM FEEDBACK: Block heavy resources (images, media, fonts, tracking)
+            # This reduces network latency and memory usage significantly
+            async def route_handler(route):
+                resource_type = route.request.resource_type
+                url_path = route.request.url.lower()
+                
+                # Block images and media (not needed for DOM analysis)
+                if resource_type in ["image", "media"]:
+                    await route.abort()
+                # Block fonts (not needed for selector generation)
+                elif any(ext in url_path for ext in ['.woff', '.woff2', '.ttf', '.otf', '.eot']):
+                    await route.abort()
+                # Block tracking scripts (not needed)
+                elif any(tracker in url_path for tracker in ['google-analytics', 'gtag', 'analytics', 'tracking']):
+                    await route.abort()
+                # Block CSS if not critical (optional - can enable if needed)
+                # elif resource_type == "stylesheet":
+                #     await route.abort()
+                else:
+                    await route.continue_()
+            
+            await page.route("**/*", route_handler)
+            
             try:
                 # EXPERT LLM FEEDBACK: Use domcontentloaded for faster loading
                 # This is already faster than default 'load' event which waits for images/resources
-                # domcontentloaded is sufficient for finding basic selectors
                 response = await page.goto(url, wait_until="domcontentloaded", timeout=timeout * 1000)
                 
                 if not response or response.status >= 400:
                     logger.warning(f"Page returned status {response.status if response else 'None'} for {url}")
-                    await page.close()
                     return None
                 
-                # EXPERT LLM FEEDBACK: Already using domcontentloaded in goto()
-                # No need to wait again - page is ready for DOM analysis
-                # This saves ~0.5-1 second per request
+                # EXPERT LLM FEEDBACK: Fast content extraction using page.evaluate()
+                # Instead of page.content() which pulls entire HTML, extract only what we need
+                # This is much faster and reduces memory usage
+                page_data = await page.evaluate("""
+                    () => {
+                        return {
+                            title: document.title,
+                            url: window.location.href,
+                            // Extract only interactive elements we need
+                            buttons: Array.from(document.querySelectorAll('button, input[type="submit"], input[type="button"], a[role="button"]')).slice(0, 30).map(el => ({
+                                text: el.innerText || el.value || '',
+                                id: el.id || '',
+                                name: el.name || '',
+                                type: el.type || 'button',
+                                className: el.className || '',
+                                dataTestId: el.getAttribute('data-testid') || '',
+                                ariaLabel: el.getAttribute('aria-label') || ''
+                            })),
+                            inputs: Array.from(document.querySelectorAll('input, textarea, select')).slice(0, 30).map(el => ({
+                                type: el.type || 'text',
+                                id: el.id || '',
+                                name: el.name || '',
+                                placeholder: el.placeholder || '',
+                                className: el.className || '',
+                                dataTestId: el.getAttribute('data-testid') || ''
+                            }))
+                        };
+                    }
+                """)
                 
-                # Get page data
-                html = await page.content()
-                title = await page.title()
-                final_url = page.url
+                title = page_data.get("title", "")
+                final_url = page_data.get("url", url)
                 
-                # Extract key elements (forms, buttons, inputs)
-                elements = await self._extract_elements(page)
+                # Convert extracted data to our format
+                elements = []
                 
-                await page.close()
+                # Process buttons
+                for btn_data in page_data.get("buttons", []):
+                    elements.append({
+                        "type": "button",
+                        "tag": "button",
+                        "text": btn_data.get("text", "").strip(),
+                        "id": btn_data.get("id"),
+                        "name": btn_data.get("name"),
+                        "class": btn_data.get("className"),
+                        "data-testid": btn_data.get("dataTestId"),
+                        "aria-label": btn_data.get("ariaLabel"),
+                        "selector": self._generate_selector_from_data(btn_data, "button")
+                    })
+                
+                # Process inputs
+                for inp_data in page_data.get("inputs", []):
+                    elements.append({
+                        "type": inp_data.get("type", "text"),
+                        "tag": "input",
+                        "id": inp_data.get("id"),
+                        "name": inp_data.get("name"),
+                        "placeholder": inp_data.get("placeholder"),
+                        "class": inp_data.get("className"),
+                        "data-testid": inp_data.get("dataTestId"),
+                        "selector": self._generate_selector_from_data(inp_data, "input")
+                    })
+                
+                # Get minimal HTML (only if needed for fallback)
+                # EXPERT LLM FEEDBACK: Avoid full HTML extraction unless absolutely necessary
+                html = await page.content() if len(elements) == 0 else ""  # Only get HTML if no elements found
                 
                 return {
                     "html": html,
@@ -65,16 +148,60 @@ class BrowserAnalyzer:
                 
             except PlaywrightTimeoutError:
                 logger.warning(f"Timeout loading page {url}")
-                await page.close()
                 return None
             except Exception as e:
                 logger.error(f"Error loading page {url}: {e}")
-                await page.close()
                 return None
+            finally:
+                # EXPERT LLM FEEDBACK: Proper cleanup - close page and context
+                if page:
+                    try:
+                        await page.close()
+                    except:
+                        pass
+                if context:
+                    try:
+                        await context.close()
+                    except:
+                        pass
                 
         except Exception as e:
             logger.error(f"Error creating page for {url}: {e}")
+            # Ensure cleanup even on error
+            if page:
+                try:
+                    await page.close()
+                except:
+                    pass
+            if context:
+                try:
+                    await context.close()
+                except:
+                    pass
             return None
+    
+    def _generate_selector_from_data(self, element_data: Dict[str, Any], element_type: str) -> str:
+        """Generate CSS selector from extracted element data (fast, no DOM queries)"""
+        # Try ID first (most specific)
+        if element_data.get("id"):
+            return f"#{element_data['id']}"
+        
+        # Try data-testid
+        if element_data.get("dataTestId"):
+            return f"[data-testid='{element_data['dataTestId']}']"
+        
+        # Try name
+        if element_data.get("name"):
+            return f"[name='{element_data['name']}']"
+        
+        # Try class (first class only)
+        if element_data.get("className"):
+            first_class = element_data["className"].split()[0] if element_data["className"] else None
+            if first_class:
+                return f".{first_class}"
+        
+        # Fallback to tag
+        return element_type
     
     async def _extract_elements(self, page: Page) -> List[Dict[str, Any]]:
         """Extract key interactive elements from page"""
@@ -317,6 +444,7 @@ async def _get_browser() -> Optional[Browser]:
             logger.info("🚀 Launching Playwright browser instance (cached for all requests)...")
             _playwright = await async_playwright().start()
             # EXPERT LLM FEEDBACK: Ensure full headless mode (no GUI window, even on server)
+            # EXPERT LLM FEEDBACK: Minimize Chrome arguments to reduce background activity
             _browser = await _playwright.chromium.launch(
                 headless=True,  # Critical: full headless mode saves overhead
                 args=[
@@ -324,7 +452,23 @@ async def _get_browser() -> Optional[Browser]:
                     '--disable-setuid-sandbox',  # For server environments
                     '--disable-dev-shm-usage',   # Reduce memory usage
                     '--disable-gpu',             # No GPU needed in headless
-                    '--disable-software-rasterizer'  # Faster rendering
+                    '--disable-software-rasterizer',  # Faster rendering
+                    '--disable-background-networking',  # Reduce background activity
+                    '--disable-background-timer-throttling',  # Reduce background activity
+                    '--disable-backgrounding-occluded-windows',  # Reduce background activity
+                    '--disable-breakpad',  # Disable crash reporting
+                    '--disable-component-extensions-with-background-pages',  # Reduce background pages
+                    '--disable-extensions',  # Disable extensions
+                    '--disable-features=TranslateUI',  # Disable translation UI
+                    '--disable-ipc-flooding-protection',  # Reduce IPC overhead
+                    '--disable-renderer-backgrounding',  # Reduce background activity
+                    '--disable-sync',  # Disable sync
+                    '--metrics-recording-only',  # Reduce metrics overhead
+                    '--mute-audio',  # Mute audio
+                    '--no-first-run',  # Skip first run
+                    '--no-default-browser-check',  # Skip default browser check
+                    '--disable-default-apps',  # Disable default apps
+                    '--disable-background-downloads',  # Disable background downloads
                 ]
             )
             logger.info("✅ Playwright browser instance cached (critical for < 1.5s response time)")
