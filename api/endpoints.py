@@ -377,8 +377,13 @@ async def solve_task(request: TaskRequest, http_request: Request):
                 timeout=timeout_seconds
             )
             logger.info(f"✅ agent.solve_task returned: type={type(actions)}, length={len(actions) if actions else 'None'} for task {request.id}")
-        except asyncio.TimeoutError:
-            logger.warning(f"⏱️ agent.solve_task timed out after {timeout_seconds}s for task {request.id} (test request: {is_test_request})")
+        except asyncio.TimeoutError as timeout_err:
+            # CRITICAL: Log timeout with full traceback
+            logger.error(
+                f"❌ FATAL: agent.solve_task TIMEOUT for task {request.id} after {timeout_seconds}s. "
+                f"Test request: {is_test_request}",
+                exc_info=True
+            )
             # For test requests, return minimal actions immediately
             if is_test_request:
                 # Use 3 actions to satisfy god-tier test requirement (needs 3+ actions)
@@ -390,7 +395,14 @@ async def solve_task(request: TaskRequest, http_request: Request):
             else:
                 actions = None
         except Exception as agent_error:
-            logger.error(f"🚨 agent.solve_task raised exception: {agent_error} for task {request.id}")
+            # CRITICAL: Catch and log ANY exception from agent.solve_task with full traceback
+            logger.error(
+                f"❌ FATAL: Uncaught exception in agent.solve_task for task {request.id}. "
+                f"Error type: {type(agent_error).__name__}, Error: {str(agent_error)}",
+                exc_info=True
+            )
+            import traceback
+            logger.error(f"❌ Full traceback:\n{traceback.format_exc()}")
             actions = None
         
         response_time = time.time() - start_time
