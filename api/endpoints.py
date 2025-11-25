@@ -815,13 +815,28 @@ async def solve_task(request: TaskRequest, http_request: Request):
             
             # Use Response with raw JSON string to bypass FastAPI serialization
             from fastapi import Response
+            
+            # FINAL SAFEGUARD: Parse and verify one more time before creating Response
+            final_parsed = json_module.loads(response_json_str)
+            if "webAgentId" in final_parsed:
+                logger.error(f"🚨 FINAL SAFEGUARD: webAgentId STILL present! Removing it now.")
+                del final_parsed["webAgentId"]
+                response_json_str = json_module.dumps(final_parsed, ensure_ascii=False)
+                logger.error(f"🚨 FINAL SAFEGUARD: Re-serialized without webAgentId")
+            
             response = Response(
                 content=response_json_str,
                 status_code=200,
                 media_type="application/json",
                 headers=CORS_HEADERS
             )
-            logger.info(f"✅ Created response with ONLY web_agent_id (no webAgentId)")
+            
+            # Verify the response content one final time
+            verify_parsed = json_module.loads(response_json_str)
+            if "webAgentId" in verify_parsed:
+                logger.error(f"🚨 FATAL: webAgentId STILL in final response! This should be impossible!")
+            else:
+                logger.info(f"✅ Created response with ONLY web_agent_id (no webAgentId) - VERIFIED")
                     
                     if not parsed_body.get("actions") or len(parsed_body["actions"]) == 0:
                         logger.error(f"🚨 CRITICAL: JSONResponse body has empty actions! Regenerating...")
