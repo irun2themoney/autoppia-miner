@@ -837,20 +837,6 @@ async def solve_task(request: TaskRequest, http_request: Request):
                 logger.error(f"🚨 FATAL: webAgentId STILL in final response! This should be impossible!")
             else:
                 logger.info(f"✅ Created response with ONLY web_agent_id (no webAgentId) - VERIFIED")
-                    
-                    if not parsed_body.get("actions") or len(parsed_body["actions"]) == 0:
-                        logger.error(f"🚨 CRITICAL: JSONResponse body has empty actions! Regenerating...")
-                        # Regenerate response with forced actions
-                        parsed_body["actions"] = [
-                            {"type": "NavigateAction", "url": request.url or "https://example.com"},
-                            {"type": "WaitAction", "timeSeconds": 1.0},
-                            {"type": "ScreenshotAction"}
-                        ]
-                        response = JSONResponse(
-                            content=parsed_body,
-                            status_code=200,
-                            headers=CORS_HEADERS
-                        )
             except Exception as verify_err:
                 logger.debug(f"Response verification error (non-critical): {verify_err}")
             
