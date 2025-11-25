@@ -695,7 +695,7 @@ async def solve_task(request: TaskRequest, http_request: Request):
             if LEARNING_ENABLED:
                 try:
                     from api.utils.learning_system import LearningSystem
-        learning_system = LearningSystem()
+                    learning_system = LearningSystem()
                     # Enhance actions based on learned patterns
                     enhanced_actions = learning_system.enhance_actions(
                         actions=response_content["actions"],
