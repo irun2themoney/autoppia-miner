@@ -274,7 +274,8 @@ async def solve_task(request: TaskRequest, http_request: Request):
         return JSONResponse(
             content={
                 "actions": fallback_actions,  # Return fallback instead of empty
-                "web_agent_id": request.id or "unknown",
+                "webAgentId": request.id or "unknown",  # camelCase for playground compatibility
+                "web_agent_id": request.id or "unknown",  # Keep snake_case for backward compatibility
                 "recording": "",
             },
             status_code=200,  # Return 200 with fallback actions (benchmark requirement)
@@ -521,9 +522,12 @@ async def solve_task(request: TaskRequest, http_request: Request):
                 if "case_sensitive" in action["selector"]:
                     action["selector"]["caseSensitive"] = action["selector"].pop("case_sensitive")
         
+        # CRITICAL: Playground may expect camelCase for web_agent_id too
+        # Use webAgentId to match IWA playground expectations (consistent with Bittensor synapse format)
         response_content = {
             "actions": final_actions,
-            "web_agent_id": request.id,
+            "webAgentId": request.id,  # camelCase for playground compatibility
+            "web_agent_id": request.id,  # Keep snake_case for backward compatibility
             "recording": "",
         }
         
@@ -560,7 +564,8 @@ async def solve_task(request: TaskRequest, http_request: Request):
         return JSONResponse(
             content={
                 "actions": fallback_actions,  # Return fallback actions instead of empty
-                "web_agent_id": request.id,
+                "webAgentId": request.id,  # camelCase for playground compatibility
+                "web_agent_id": request.id,  # Keep snake_case for backward compatibility
                 "recording": "",
             },
             status_code=200,  # Return 200 with fallback actions
@@ -592,7 +597,8 @@ async def solve_task(request: TaskRequest, http_request: Request):
         return JSONResponse(
             content={
                 "actions": fallback_actions,
-                "web_agent_id": request.id,
+                "webAgentId": request.id,  # camelCase for playground compatibility
+                "web_agent_id": request.id,  # Keep snake_case for backward compatibility
                 "recording": "",
             },
             status_code=200,  # Return 200 with fallback actions (better than 500 with empty)
