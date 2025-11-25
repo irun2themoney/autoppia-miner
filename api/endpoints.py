@@ -725,22 +725,19 @@ async def solve_task(request: TaskRequest, http_request: Request):
         
         if LEARNING_ENABLED:
             try:
-                try:
-                    from api.utils.learning_system import LearningSystem
-                    learning_system = LearningSystem()
-                    # Enhance actions based on learned patterns
-                    enhanced_actions = learning_system.enhance_actions(
-                        actions=response_content["actions"],
-                        task_type=task_type,
-                        prompt=request.prompt
-                    )
-                    if enhanced_actions != response_content["actions"]:
-                        logger.info(f"✨ Enhanced {len(enhanced_actions)} actions using learned patterns")
-                        response_content["actions"] = enhanced_actions
-                except Exception as learn_err:
-                    logger.debug(f"Learning enhancement error (non-critical): {learn_err}")
+                from api.utils.learning_system import LearningSystem
+                learning_system = LearningSystem()
+                # Enhance actions based on learned patterns
+                enhanced_actions = learning_system.enhance_actions(
+                    actions=response_content["actions"],
+                    task_type=task_type,
+                    prompt=request.prompt
+                )
+                if enhanced_actions != response_content["actions"]:
+                    logger.info(f"✨ Enhanced {len(enhanced_actions)} actions using learned patterns")
+                    response_content["actions"] = enhanced_actions
             except Exception as learn_err:
-                logger.debug(f"Learning system error (non-critical): {learn_err}")
+                logger.debug(f"Learning enhancement error (non-critical): {learn_err}")
         
         # 🔍 DIAGNOSTIC: Track response before sending and validate
         try:
