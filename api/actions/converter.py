@@ -1,6 +1,9 @@
 """Convert actions to IWA BaseAction format"""
 from typing import Dict, Any
+import logging
 from .selectors import create_selector
+
+logger = logging.getLogger(__name__)
 
 
 def convert_to_iwa_action(action: Dict[str, Any]) -> Dict[str, Any]:
@@ -107,19 +110,26 @@ def convert_to_iwa_action(action: Dict[str, Any]) -> Dict[str, Any]:
         # ALWAYS convert to camelCase - this is the source of truth
         if "timeSeconds" in action:
             result["timeSeconds"] = action["timeSeconds"]
+            logger.debug(f"Converter: WaitAction already has timeSeconds: {result['timeSeconds']}")
         elif "time_seconds" in action:
             result["timeSeconds"] = action["time_seconds"]  # Convert to camelCase
+            logger.info(f"✅ Converter: Converted time_seconds -> timeSeconds: {result['timeSeconds']}")
         elif "duration" in action:
             result["timeSeconds"] = action["duration"]  # Convert to camelCase
+            logger.info(f"✅ Converter: Converted duration -> timeSeconds: {result['timeSeconds']}")
         else:
             # Default wait time if none specified
             result["timeSeconds"] = 1.0
+            logger.debug(f"Converter: WaitAction has no time field, using default: 1.0")
         # CRITICAL: Ensure result ONLY has camelCase (timeSeconds), never snake_case
         # Remove any snake_case fields that might have been copied
         if "time_seconds" in result:
+            logger.warning(f"⚠️ Converter: Removing time_seconds from result!")
             del result["time_seconds"]
         if "duration" in result:
+            logger.warning(f"⚠️ Converter: Removing duration from result!")
             del result["duration"]
+        logger.debug(f"Converter: Final WaitAction keys: {list(result.keys())}")
     
     elif iwa_type == "TypeAction":
         if "text" in action:
