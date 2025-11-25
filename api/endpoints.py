@@ -661,6 +661,11 @@ async def solve_task(request: TaskRequest, http_request: Request):
         
         # CRITICAL: Log the actual response content size and first few actions
         try:
+            # DEBUG: Check response_content keys BEFORE JSON serialization
+            logger.error(f"🔍 DEBUG: response_content keys BEFORE JSON: {list(response_content.keys())}")
+            logger.error(f"🔍 DEBUG: Has webAgentId BEFORE JSON: {'webAgentId' in response_content}")
+            logger.error(f"🔍 DEBUG: Has web_agent_id BEFORE JSON: {'web_agent_id' in response_content}")
+            
             response_json = json.dumps(response_content)
             logger.info(f"📦 Response size: {len(response_json)} bytes, actions in response: {len(response_content.get('actions', []))}")
             if response_content["actions"] and len(response_content["actions"]) > 0:
@@ -672,14 +677,22 @@ async def solve_task(request: TaskRequest, http_request: Request):
                 # CRITICAL: Log actual JSON to verify it's correct
                 logger.info(f"📋 Response JSON preview (first 500 chars): {response_json[:500]}")
                 # CRITICAL: Check if webAgentId appeared in the JSON (should not be there)
+                logger.error(f"🔍 DEBUG: Checking for webAgentId in JSON string: {'webAgentId' in response_json}")
                 if "webAgentId" in response_json:
                     logger.error(f"🚨 CRITICAL: webAgentId found in response JSON preview! Removing it immediately.")
                     # Parse JSON, remove webAgentId, and update response_content
                     parsed_preview = json.loads(response_json)
+                    logger.error(f"🔍 DEBUG: Parsed preview keys: {list(parsed_preview.keys())}")
                     if "webAgentId" in parsed_preview:
+                        logger.error(f"🚨 CRITICAL: webAgentId found in parsed_preview! Removing it.")
                         del parsed_preview["webAgentId"]
                         response_content = parsed_preview
                         logger.warning(f"⚠️ Removed webAgentId from response_content after JSON preview check")
+                        logger.error(f"🔍 DEBUG: response_content keys AFTER removal: {list(response_content.keys())}")
+                    else:
+                        logger.error(f"🚨 CRITICAL: webAgentId in JSON string but NOT in parsed_preview! This is strange.")
+                else:
+                    logger.error(f"🔍 DEBUG: webAgentId NOT found in JSON string (good!)")
             else:
                 logger.error(f"🚨 CRITICAL: Response has EMPTY actions array! This should never happen!")
                 # This should be impossible now, but if it happens, log it heavily
