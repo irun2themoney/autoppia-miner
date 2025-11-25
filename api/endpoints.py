@@ -931,8 +931,9 @@ async def record_feedback(feedback: Dict[str, Any]):
     
     try:
         from api.utils.learning_system import LearningSystem
+        from api.utils.feedback_analyzer import FeedbackAnalyzer
         learning_system = LearningSystem()
-        feedback_analyzer = get_feedback_analyzer()
+        feedback_analyzer = FeedbackAnalyzer()
         
         task_id = feedback.get("task_id", "unknown")
         success = feedback.get("success", False)
@@ -1037,8 +1038,9 @@ async def record_feedback(feedback: Dict[str, Any]):
     
     try:
         from api.utils.learning_system import LearningSystem
+        from api.utils.feedback_analyzer import FeedbackAnalyzer
         learning_system = LearningSystem()
-        feedback_analyzer = get_feedback_analyzer()
+        feedback_analyzer = FeedbackAnalyzer()
         
         task_id = feedback.get("task_id", "unknown")
         success = feedback.get("success", False)
