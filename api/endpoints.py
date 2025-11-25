@@ -428,19 +428,27 @@ async def solve_task(request: TaskRequest, http_request: Request):
         # Do NOT include extra fields like 'id' or 'task_id' - playground may reject them
         # FINAL CAMELCASE FIX: Convert actions right before creating response
         import copy
+        logger.info(f"🔄 FINAL CONVERSION: Converting {len(actions)} actions to camelCase")
         final_actions = []
-        for action in actions:
+        for i, action in enumerate(actions):
             action_copy = copy.deepcopy(action)
+            logger.debug(f"Action {i} before: {action_copy}")
             # Convert time_seconds -> timeSeconds
-            if action_copy.get("type") == "WaitAction" and "time_seconds" in action_copy:
-                action_copy["timeSeconds"] = action_copy.pop("time_seconds")
-            if action_copy.get("type") == "WaitAction" and "duration" in action_copy:
-                action_copy["timeSeconds"] = action_copy.pop("duration")
+            if action_copy.get("type") == "WaitAction":
+                if "time_seconds" in action_copy:
+                    action_copy["timeSeconds"] = action_copy.pop("time_seconds")
+                    logger.info(f"✅ Converted time_seconds -> timeSeconds in action {i}")
+                elif "duration" in action_copy:
+                    action_copy["timeSeconds"] = action_copy.pop("duration")
+                    logger.info(f"✅ Converted duration -> timeSeconds in action {i}")
             # Convert case_sensitive -> caseSensitive in selectors
             if "selector" in action_copy and isinstance(action_copy["selector"], dict):
                 if "case_sensitive" in action_copy["selector"]:
                     action_copy["selector"]["caseSensitive"] = action_copy["selector"].pop("case_sensitive")
+                    logger.info(f"✅ Converted case_sensitive -> caseSensitive in action {i}")
+            logger.debug(f"Action {i} after: {action_copy}")
             final_actions.append(action_copy)
+        logger.info(f"✅ FINAL CONVERSION COMPLETE: First action keys: {list(final_actions[0].keys()) if final_actions else 'NONE'}")
         
         response_content = {
             "actions": final_actions,
