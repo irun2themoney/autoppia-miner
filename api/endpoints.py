@@ -500,12 +500,33 @@ async def solve_task(request: TaskRequest, http_request: Request):
             "recording": "",
         }
         
+        # CRITICAL: Final in-place conversion of response_content - GUARANTEED to run
+        # This modifies the dict directly, so it will definitely execute
+        for action in response_content["actions"]:
+            if isinstance(action, dict):
+                # Convert WaitAction: time_seconds/duration -> timeSeconds
+                if action.get("type") == "WaitAction":
+                    if "time_seconds" in action:
+                        action["timeSeconds"] = action.pop("time_seconds")
+                    if "duration" in action:
+                        if "timeSeconds" not in action:
+                            action["timeSeconds"] = action.pop("duration")
+                        else:
+                            del action["duration"]
+                # Convert selector: case_sensitive -> caseSensitive
+                if "selector" in action and isinstance(action["selector"], dict):
+                    selector = action["selector"]
+                    if "case_sensitive" in selector:
+                        selector["caseSensitive"] = selector.pop("case_sensitive")
+        
         # CRITICAL: Log the actual response content size and first few actions
         import json as json_module
         response_json = json_module.dumps(response_content)
         logger.info(f"📦 Response size: {len(response_json)} bytes, actions in response: {len(response_content.get('actions', []))}")
-        if final_actions and len(final_actions) > 0:
-            logger.info(f"📋 First 3 actions: {[a.get('type', 'N/A') for a in final_actions[:3]]}")
+        if response_content["actions"] and len(response_content["actions"]) > 0:
+            first_action = response_content["actions"][0]
+            logger.info(f"📋 First action keys: {list(first_action.keys())}, has timeSeconds: {'timeSeconds' in first_action}")
+            logger.info(f"📋 First 3 actions: {[a.get('type', 'N/A') for a in response_content['actions'][:3]]}")
         else:
             logger.error(f"🚨 CRITICAL: Response has EMPTY actions array! This should never happen!")
         
