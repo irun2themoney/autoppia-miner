@@ -346,24 +346,28 @@ async def solve_task(request: TaskRequest, http_request: Request):
         # CRITICAL FIX: Final cleanup - ensure ALL actions use camelCase (playground requirement)
         # AGGRESSIVE CLEANUP: Directly modify dicts to ensure camelCase (playground requirement)
         import copy
+        logger.info(f"🧹 STARTING CLEANUP: {len(actions)} actions to clean")
         cleaned_actions = []
         for i, action in enumerate(actions):
             try:
                 # Create a deep copy to avoid modifying original (nested dicts need deep copy)
                 cleaned_action = copy.deepcopy(action)
+                action_before = str(cleaned_action)[:100]  # Log first 100 chars
                 
                 # Handle WaitAction: time_seconds/duration -> timeSeconds
                 if cleaned_action.get("type") == "WaitAction":
                     if "time_seconds" in cleaned_action:
                         cleaned_action["timeSeconds"] = cleaned_action.pop("time_seconds")
-                        logger.debug(f"Converted time_seconds -> timeSeconds in action {i}")
+                        logger.info(f"✅ Converted time_seconds -> timeSeconds in WaitAction {i}")
                     elif "duration" in cleaned_action:
                         cleaned_action["timeSeconds"] = cleaned_action.pop("duration")
-                        logger.debug(f"Converted duration -> timeSeconds in action {i}")
+                        logger.info(f"✅ Converted duration -> timeSeconds in WaitAction {i}")
                     # Ensure timeSeconds exists
                     if "timeSeconds" not in cleaned_action:
                         cleaned_action["timeSeconds"] = 1.0
-                        logger.debug(f"Added default timeSeconds to WaitAction {i}")
+                        logger.info(f"✅ Added default timeSeconds to WaitAction {i}")
+                else:
+                    logger.debug(f"Action {i} is not WaitAction: {cleaned_action.get('type')}")
                 
                 # Clean selector fields: case_sensitive -> caseSensitive
                 if "selector" in cleaned_action and isinstance(cleaned_action["selector"], dict):
