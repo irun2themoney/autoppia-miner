@@ -9,6 +9,21 @@ import time
 import json
 
 
+def remove_webagentid_recursive(obj: Any) -> Any:
+    """
+    Recursively remove webAgentId from dictionaries and lists
+    """
+    if isinstance(obj, dict):
+        # Remove webAgentId if present
+        obj.pop("webAgentId", None)
+        # Recursively process all values
+        return {k: remove_webagentid_recursive(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        # Recursively process all items
+        return [remove_webagentid_recursive(item) for item in obj]
+    else:
+        return obj
+
 def ensure_camelcase_response(actions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """CRITICAL: Convert all actions to camelCase - this ALWAYS runs"""
     converted = []
