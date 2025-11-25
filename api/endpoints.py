@@ -692,8 +692,13 @@ async def solve_task(request: TaskRequest, http_request: Request):
             logger.error(f"🚨 CRITICAL: webAgentId found in response_content! Removing it immediately.")
             del response_content["webAgentId"]
         
+        # CRITICAL: Apply recursive filter RIGHT BEFORE JSON serialization to catch any webAgentId added after creation
+        response_content = remove_webagentid_recursive(response_content)
+        
         # CRITICAL: Log the actual response content size and first few actions
         try:
+            # CRITICAL: Apply filter one more time before serialization
+            response_content = remove_webagentid_recursive(response_content)
             response_json = json.dumps(response_content)
             logger.info(f"📦 Response size: {len(response_json)} bytes, actions in response: {len(response_content.get('actions', []))}")
             if response_content["actions"] and len(response_content["actions"]) > 0:
