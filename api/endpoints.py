@@ -754,22 +754,34 @@ async def solve_task(request: TaskRequest, http_request: Request):
                 headers=CORS_HEADERS
             )
             
-            # CRITICAL: Verify response body after creation
+            # CRITICAL: Verify response body after creation and remove webAgentId if present
             try:
                 import json as json_module
                 if hasattr(response, 'body') and response.body:
                     body_str = response.body.decode('utf-8') if isinstance(response.body, bytes) else str(response.body)
                     parsed_body = json_module.loads(body_str)
+                    
+                    # CRITICAL: Remove webAgentId if it exists (playground expects ONLY web_agent_id)
+                    if "webAgentId" in parsed_body:
+                        logger.warning(f"⚠️ Found webAgentId in response body - removing it")
+                        del parsed_body["webAgentId"]
+                        # Recreate response without webAgentId
+                        response = JSONResponse(
+                            content=parsed_body,
+                            status_code=200,
+                            headers=CORS_HEADERS
+                        )
+                    
                     if not parsed_body.get("actions") or len(parsed_body["actions"]) == 0:
                         logger.error(f"🚨 CRITICAL: JSONResponse body has empty actions! Regenerating...")
                         # Regenerate response with forced actions
-                        response_content["actions"] = [
+                        parsed_body["actions"] = [
                             {"type": "NavigateAction", "url": request.url or "https://example.com"},
                             {"type": "WaitAction", "timeSeconds": 1.0},
                             {"type": "ScreenshotAction"}
                         ]
                         response = JSONResponse(
-                            content=response_content,
+                            content=parsed_body,
                             status_code=200,
                             headers=CORS_HEADERS
                         )
