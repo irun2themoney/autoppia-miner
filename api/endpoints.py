@@ -897,19 +897,36 @@ async def solve_task(request: TaskRequest, http_request: Request):
                 logger.debug(f"Response verification error (non-critical): {verify_err}")
             
             # FINAL FINAL CHECK: Parse response content one last time before returning
+            # CRITICAL: Build response manually with ONLY allowed fields - NO webAgentId possible
             try:
                 final_check = json_module.loads(response.content.decode('utf-8'))
-                if "webAgentId" in final_check:
-                    logger.error(f"🚨 FINAL FINAL CHECK: webAgentId found! Removing and recreating response.")
-                    del final_check["webAgentId"]
-                    response = Response(
-                        content=json_module.dumps(final_check, ensure_ascii=False),
-                        status_code=200,
-                        media_type="application/json",
-                        headers=CORS_HEADERS
-                    )
-            except Exception:
-                pass  # Ignore errors in final check
+                final_check = remove_webagentid_recursive(final_check)
+                
+                # Build manually to guarantee no webAgentId
+                final_clean = {}
+                final_clean["actions"] = final_check.get("actions", [])
+                final_clean["web_agent_id"] = final_check.get("web_agent_id", request.id)
+                final_clean["recording"] = final_check.get("recording", "")
+                
+                # One more recursive filter
+                final_clean = remove_webagentid_recursive(final_clean)
+                
+                # Recreate response with manually built dict
+                response = Response(
+                    content=json_module.dumps(final_clean, ensure_ascii=False),
+                    status_code=200,
+                    media_type="application/json",
+                    headers=CORS_HEADERS
+                )
+                
+                # Verify one last time
+                verify_final = json_module.loads(response.content.decode('utf-8'))
+                if "webAgentId" in verify_final:
+                    logger.error(f"🚨 FATAL: webAgentId in final response after manual build!")
+                else:
+                    logger.info(f"✅ VERIFIED: Final response has NO webAgentId")
+            except Exception as final_err:
+                logger.error(f"Final check error: {final_err}", exc_info=True)
             
             return response
         except Exception as response_err:
