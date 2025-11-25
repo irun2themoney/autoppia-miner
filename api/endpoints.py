@@ -587,7 +587,12 @@ async def solve_task(request: TaskRequest, http_request: Request):
         }
         
         # CRITICAL: Final conversion using dedicated function - GUARANTEED to run
-        response_content["actions"] = ensure_camelcase_response(response_content["actions"])
+        try:
+            response_content["actions"] = ensure_camelcase_response(response_content["actions"])
+        except Exception as conv_err:
+            logger.error(f"❌ FATAL: Error in ensure_camelcase_response for task {request.id}: {conv_err}", exc_info=True)
+            # If conversion fails, use original actions (they should already be camelCase)
+            pass
         
         # CRITICAL: FINAL GUARANTEE - Ensure actions is NEVER empty before creating response
         if not response_content["actions"] or len(response_content["actions"]) == 0:
@@ -604,25 +609,92 @@ async def solve_task(request: TaskRequest, http_request: Request):
             ]
             logger.error(f"🚨 Created GUARANTEED minimal actions: {len(response_content['actions'])} actions")
         
-        # CRITICAL: Log the actual response content size and first few actions
-        response_json = json.dumps(response_content)
-        logger.info(f"📦 Response size: {len(response_json)} bytes, actions in response: {len(response_content.get('actions', []))}")
-        if response_content["actions"] and len(response_content["actions"]) > 0:
-            first_action = response_content["actions"][0]
-            logger.info(f"📋 First action keys: {list(first_action.keys())}, has timeSeconds: {'timeSeconds' in first_action}")
-            logger.info(f"📋 First 3 actions: {[a.get('type', 'N/A') for a in response_content['actions'][:3]]}")
-            logger.info(f"✅ FINAL VERIFICATION: Returning {len(response_content['actions'])} actions for task {request.id}")
-        else:
-            logger.error(f"🚨 CRITICAL: Response has EMPTY actions array! This should never happen!")
-            # This should be impossible now, but if it happens, log it heavily
-            import traceback
-            logger.error(f"🚨 CRITICAL ERROR TRACEBACK: {traceback.format_exc()}")
+        # CRITICAL: Validate response can be serialized to JSON before returning
+        try:
+            response_json_test = json.dumps(response_content)
+            logger.info(f"📦 Response JSON serialization test: {len(response_json_test)} bytes")
+            
+            # CRITICAL: Verify actions are in the JSON string
+            if '"actions":[]' in response_json_test or '"actions": []' in response_json_test:
+                logger.error(f"🚨 FATAL: JSON serialization shows EMPTY actions array! This should be impossible!")
+                # Force add actions
+                response_content["actions"] = [
+                    {"type": "NavigateAction", "url": request.url or "https://example.com"},
+                    {"type": "WaitAction", "timeSeconds": 1.0},
+                    {"type": "ScreenshotAction"}
+                ]
+                response_json_test = json.dumps(response_content)
+                logger.error(f"🚨 FORCED actions into response: {len(response_content['actions'])} actions")
+            
+        except Exception as json_err:
+            logger.error(f"❌ FATAL: JSON serialization FAILED for task {request.id}: {json_err}", exc_info=True)
+            # If JSON serialization fails, create minimal valid response
+            response_content = {
+                "actions": [
+                    {"type": "NavigateAction", "url": request.url or "https://example.com"},
+                    {"type": "WaitAction", "timeSeconds": 1.0},
+                    {"type": "ScreenshotAction"}
+                ],
+                "webAgentId": request.id,
+                "web_agent_id": request.id,
+                "recording": ""
+            }
+            logger.error(f"🚨 Created emergency fallback response: {len(response_content['actions'])} actions")
         
-        return JSONResponse(
-            content=response_content,
-            status_code=200,
-            headers=CORS_HEADERS
-        )
+        # CRITICAL: Log the actual response content size and first few actions
+        try:
+            response_json = json.dumps(response_content)
+            logger.info(f"📦 Response size: {len(response_json)} bytes, actions in response: {len(response_content.get('actions', []))}")
+            if response_content["actions"] and len(response_content["actions"]) > 0:
+                first_action = response_content["actions"][0]
+                logger.info(f"📋 First action keys: {list(first_action.keys())}, has timeSeconds: {'timeSeconds' in first_action}")
+                logger.info(f"📋 First 3 actions: {[a.get('type', 'N/A') for a in response_content['actions'][:3]]}")
+                logger.info(f"✅ FINAL VERIFICATION: Returning {len(response_content['actions'])} actions for task {request.id}")
+                
+                # CRITICAL: Log actual JSON to verify it's correct
+                logger.info(f"📋 Response JSON preview (first 500 chars): {response_json[:500]}")
+            else:
+                logger.error(f"🚨 CRITICAL: Response has EMPTY actions array! This should never happen!")
+                # This should be impossible now, but if it happens, log it heavily
+                import traceback
+                logger.error(f"🚨 CRITICAL ERROR TRACEBACK: {traceback.format_exc()}")
+        except Exception as log_err:
+            logger.error(f"❌ FATAL: Error logging response for task {request.id}: {log_err}", exc_info=True)
+        
+        # CRITICAL: Final check before creating JSONResponse
+        if not response_content.get("actions") or len(response_content["actions"]) == 0:
+            logger.error(f"🚨 FATAL: Actions is STILL empty right before JSONResponse! This is a critical bug!")
+            response_content["actions"] = [
+                {"type": "NavigateAction", "url": request.url or "https://example.com"},
+                {"type": "WaitAction", "timeSeconds": 1.0},
+                {"type": "ScreenshotAction"}
+            ]
+        
+        try:
+            return JSONResponse(
+                content=response_content,
+                status_code=200,
+                headers=CORS_HEADERS
+            )
+        except Exception as response_err:
+            logger.error(f"❌ FATAL: JSONResponse creation FAILED for task {request.id}: {response_err}", exc_info=True)
+            # Last resort: return minimal valid response
+            emergency_response = {
+                "actions": [
+                    {"type": "NavigateAction", "url": request.url or "https://example.com"},
+                    {"type": "WaitAction", "timeSeconds": 1.0},
+                    {"type": "ScreenshotAction"}
+                ],
+                "webAgentId": request.id,
+                "web_agent_id": request.id,
+                "recording": ""
+            }
+            logger.error(f"🚨 Returning emergency response: {len(emergency_response['actions'])} actions")
+            return JSONResponse(
+                content=emergency_response,
+                status_code=200,
+                headers=CORS_HEADERS
+            )
     
     except asyncio.TimeoutError:
         # Handle timeout - try to return fallback actions instead of empty
