@@ -1051,7 +1051,14 @@ async def solve_task(request: TaskRequest, http_request: Request):
         else:
             logger.error(f"✅ EXCEPTION HANDLER: Response verified - no webAgentId after recursive filter")
         
-        exception_json_str = json_module.dumps(final_exception_parsed, ensure_ascii=False)
+        # CRITICAL: Build JSON string manually - NO webAgentId possible
+        actions_json = json_module.dumps(final_exception_parsed.get("actions", []), ensure_ascii=False)
+        web_agent_id_value = json_module.dumps(final_exception_parsed.get("web_agent_id", request.id), ensure_ascii=False)
+        recording_value = json_module.dumps(final_exception_parsed.get("recording", ""), ensure_ascii=False)
+        
+        # Build JSON string manually - NO webAgentId possible
+        exception_json_str = f'{{"actions":{actions_json},"web_agent_id":{web_agent_id_value},"recording":{recording_value}}}'
+        
         logger.error(f"🚨 EXCEPTION HANDLER: Final JSON string (first 200 chars): {exception_json_str[:200]}")
         logger.error(f"🚨 EXCEPTION HANDLER: Final check - Has webAgentId: {'webAgentId' in exception_json_str}")
         
