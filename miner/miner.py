@@ -632,12 +632,40 @@ class AutoppiaMiner:
             return
         
         # PERFORMANCE OPT: More frequent metagraph sync and axon re-serving for better visibility
+        # EXPERT LLM FEEDBACK: Also check on-chain status (incentive, active status, last_update)
         async def sync_metagraph():
             while True:
                 try:
-                    await asyncio.sleep(120)  # Sync every 2 minutes (more frequent for better discovery)
+                    await asyncio.sleep(300)  # Check every 5 minutes (expert recommendation)
                     self.metagraph = self.subtensor.metagraph(settings.subnet_uid)
                     bt.logging.debug("Metagraph synced")
+                    
+                    # EXPERT LLM FEEDBACK: Check on-chain status for validator acceptance indicators
+                    if self.uid is not None:
+                        try:
+                            active_status = int(self.metagraph.active[self.uid]) if hasattr(self.metagraph, 'active') else 0
+                            last_update = int(self.metagraph.last_update[self.uid]) if hasattr(self.metagraph, 'last_update') else 0
+                            incentive = float(self.metagraph.incentive[self.uid]) if hasattr(self.metagraph, 'incentive') else 0.0
+                            emissions = float(self.metagraph.E[self.uid]) if hasattr(self.metagraph, 'E') else 0.0
+                            current_block = self.subtensor.get_current_block()
+                            blocks_since_update = current_block - last_update if last_update > 0 else 0
+                            
+                            # Log on-chain status (expert LLM recommendation)
+                            bt.logging.info(
+                                f"--- ON-CHAIN STATUS --- | Active: {active_status} | "
+                                f"Last Update: {last_update} ({blocks_since_update} blocks ago) | "
+                                f"Incentive: {incentive:.6f}τ | Emissions: {emissions:.6f}τ"
+                            )
+                            
+                            # EXPERT LLM FEEDBACK: If incentive > 0 but Active = 0, update is imminent
+                            if incentive > 0 and active_status == 0:
+                                bt.logging.success("🎯 INCENTIVE DETECTED! Active status update is imminent.")
+                                print("🎯 INCENTIVE DETECTED! Active status update is imminent.", flush=True)
+                            elif incentive > 0 and active_status == 1:
+                                bt.logging.success("✅ ACTIVE! Miner is active and being evaluated")
+                                print("✅ ACTIVE! Miner is active and being evaluated", flush=True)
+                        except Exception as status_e:
+                            bt.logging.debug(f"Error checking on-chain status: {status_e}")
                     
                     # Re-serve axon periodically to ensure it stays registered
                     # PERFORMANCE OPT: More frequent re-serving increases validator discovery
