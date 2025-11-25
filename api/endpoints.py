@@ -698,9 +698,13 @@ async def solve_task(request: TaskRequest, http_request: Request):
                         logger.warning(f"⚠️ Removed webAgentId from response_content after JSON preview check")
                 
                 # CRITICAL: IMMEDIATE removal - do this BEFORE any other code that might cause exceptions
+                # This MUST happen before the learning system code runs
                 if "webAgentId" in response_content:
                     logger.error(f"🚨 CRITICAL: webAgentId STILL in response_content after JSON check! Removing NOW.")
                     del response_content["webAgentId"]
+                
+                # CRITICAL: Force remove webAgentId one more time right before learning system code
+                response_content.pop("webAgentId", None)  # Use pop to avoid KeyError
             else:
                 logger.error(f"🚨 CRITICAL: Response has EMPTY actions array! This should never happen!")
                 # This should be impossible now, but if it happens, log it heavily
