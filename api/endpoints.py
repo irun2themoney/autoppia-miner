@@ -344,50 +344,59 @@ async def solve_task(request: TaskRequest, http_request: Request):
             actions = [{"type": "ScreenshotAction"}]
         
         # CRITICAL FIX: Final cleanup - ensure ALL actions use camelCase (playground requirement)
-        from api.actions.converter import convert_to_iwa_action
+        # AGGRESSIVE CLEANUP: Directly modify dicts to ensure camelCase (playground requirement)
         cleaned_actions = []
-        for action in actions:
+        for i, action in enumerate(actions):
             try:
-                # Re-convert to ensure camelCase (removes any snake_case that slipped through)
-                cleaned_action = convert_to_iwa_action(action)
+                # Create a copy to avoid modifying original
+                cleaned_action = dict(action)
                 
-                # AGGRESSIVE CLEANUP: Directly modify dict to ensure camelCase (playground requirement)
                 # Handle WaitAction: time_seconds/duration -> timeSeconds
                 if cleaned_action.get("type") == "WaitAction":
                     if "time_seconds" in cleaned_action:
                         cleaned_action["timeSeconds"] = cleaned_action.pop("time_seconds")
+                        logger.debug(f"Converted time_seconds -> timeSeconds in action {i}")
                     elif "duration" in cleaned_action:
                         cleaned_action["timeSeconds"] = cleaned_action.pop("duration")
+                        logger.debug(f"Converted duration -> timeSeconds in action {i}")
                     # Ensure timeSeconds exists
                     if "timeSeconds" not in cleaned_action:
                         cleaned_action["timeSeconds"] = 1.0
+                        logger.debug(f"Added default timeSeconds to WaitAction {i}")
                 
                 # Clean selector fields: case_sensitive -> caseSensitive
                 if "selector" in cleaned_action and isinstance(cleaned_action["selector"], dict):
                     selector = cleaned_action["selector"]
                     if "case_sensitive" in selector:
                         selector["caseSensitive"] = selector.pop("case_sensitive")
+                        logger.debug(f"Converted case_sensitive -> caseSensitive in action {i}")
                     # Ensure caseSensitive exists
                     if "caseSensitive" not in selector:
                         selector["caseSensitive"] = False
                 
-                # Remove any other snake_case fields that might exist
-                keys_to_remove = [k for k in cleaned_action.keys() if "_" in k and k != "web_agent_id"]
+                # Remove any other snake_case fields that might exist (except web_agent_id in response)
+                keys_to_remove = [k for k in list(cleaned_action.keys()) if "_" in k and k not in ["web_agent_id"]]
                 for key in keys_to_remove:
-                    logger.warning(f"Removing unexpected snake_case field: {key}")
+                    logger.warning(f"Removing unexpected snake_case field '{key}' from action {i}")
                     del cleaned_action[key]
                 
                 cleaned_actions.append(cleaned_action)
             except Exception as e:
-                logger.warning(f"Failed to clean action {action}: {e}, using as-is")
+                logger.error(f"Failed to clean action {i} {action}: {e}")
+                import traceback
+                logger.error(traceback.format_exc())
                 # Even on error, try basic cleanup
                 if isinstance(action, dict):
-                    if "time_seconds" in action:
-                        action["timeSeconds"] = action.pop("time_seconds")
-                    if "selector" in action and isinstance(action["selector"], dict) and "case_sensitive" in action["selector"]:
-                        action["selector"]["caseSensitive"] = action["selector"].pop("case_sensitive")
-                cleaned_actions.append(action)
+                    action_copy = dict(action)
+                    if "time_seconds" in action_copy:
+                        action_copy["timeSeconds"] = action_copy.pop("time_seconds")
+                    if "selector" in action_copy and isinstance(action_copy["selector"], dict) and "case_sensitive" in action_copy["selector"]:
+                        action_copy["selector"]["caseSensitive"] = action_copy["selector"].pop("case_sensitive")
+                    cleaned_actions.append(action_copy)
+                else:
+                    cleaned_actions.append(action)
         actions = cleaned_actions
+        logger.info(f"✅ Cleaned {len(actions)} actions - checking first action: {actions[0] if actions else 'NONE'}")
         
         # Validate IWA format before returning
         try:
