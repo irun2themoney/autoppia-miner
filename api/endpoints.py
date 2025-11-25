@@ -915,15 +915,31 @@ async def solve_task(request: TaskRequest, http_request: Request):
         fallback_actions = await _generate_fallback_actions(request.prompt, request.url or "", max_actions=20)
         logger.info(f"Generated {len(fallback_actions)} fallback actions after error")
         
+        # CRITICAL: Create clean response content with ONLY web_agent_id (no webAgentId)
+        # Use raw JSON Response to prevent FastAPI from adding webAgentId
+        import json as json_module
+        from fastapi import Response
+        
+        exception_response_content = {
+            "actions": fallback_actions,
+            "web_agent_id": request.id,  # snake_case - official playground format
+            "recording": "",
+        }
+        
+        # CRITICAL: Serialize to JSON string and verify no webAgentId
+        exception_json_str = json_module.dumps(exception_response_content, ensure_ascii=False)
+        exception_parsed = json_module.loads(exception_json_str)
+        if "webAgentId" in exception_parsed:
+            logger.error(f"🚨 EXCEPTION HANDLER: webAgentId found! Removing it.")
+            del exception_parsed["webAgentId"]
+            exception_json_str = json_module.dumps(exception_parsed, ensure_ascii=False)
+        
         # Return actions (fallback if available) instead of empty
         # Benchmark expects actions, not empty array
-        return JSONResponse(
-            content={
-                "actions": fallback_actions,
-                "web_agent_id": request.id,  # snake_case - official playground format
-                "recording": "",
-            },
+        return Response(
+            content=exception_json_str,
             status_code=200,  # Return 200 with fallback actions (better than 500 with empty)
+            media_type="application/json",
             headers=CORS_HEADERS
         )
 
