@@ -32,7 +32,9 @@ class BrowserAnalyzer:
             page.set_default_timeout(timeout * 1000)  # Convert to ms
             
             try:
-                # Navigate to page
+                # EXPERT LLM FEEDBACK: Use domcontentloaded for faster loading
+                # This is already faster than default 'load' event which waits for images/resources
+                # domcontentloaded is sufficient for finding basic selectors
                 response = await page.goto(url, wait_until="domcontentloaded", timeout=timeout * 1000)
                 
                 if not response or response.status >= 400:
@@ -40,14 +42,9 @@ class BrowserAnalyzer:
                     await page.close()
                     return None
                 
-                # OPTIMIZED: Use domcontentloaded instead of networkidle for faster loading
-                # networkidle waits for all network activity to stop (slower)
-                # domcontentloaded is faster and sufficient for most cases
-                try:
-                    await page.wait_for_load_state("domcontentloaded", timeout=3000)
-                except:
-                    # Fallback: just wait a bit if domcontentloaded fails
-                    await asyncio.sleep(0.5)
+                # EXPERT LLM FEEDBACK: Already using domcontentloaded in goto()
+                # No need to wait again - page is ready for DOM analysis
+                # This saves ~0.5-1 second per request
                 
                 # Get page data
                 html = await page.content()
@@ -304,18 +301,33 @@ class BrowserAnalyzer:
 
 
 # Singleton browser instance
+# EXPERT LLM FEEDBACK: Critical to cache browser instance - starting new browser takes 2-4 seconds
 async def _get_browser() -> Optional[Browser]:
-    """Get or create browser instance"""
+    """
+    Get or create browser instance (singleton pattern)
+    
+    EXPERT LLM FEEDBACK: This is the single most important optimization.
+    Starting a new browser process for every TaskSynapse takes 2-4 seconds alone,
+    guaranteeing a timeout. Browser must be cached and reused.
+    """
     global _browser, _playwright
     
     if _browser is None:
         try:
+            logger.info("🚀 Launching Playwright browser instance (cached for all requests)...")
             _playwright = await async_playwright().start()
+            # EXPERT LLM FEEDBACK: Ensure full headless mode (no GUI window, even on server)
             _browser = await _playwright.chromium.launch(
-                headless=True,
-                args=['--no-sandbox', '--disable-setuid-sandbox']  # For server environments
+                headless=True,  # Critical: full headless mode saves overhead
+                args=[
+                    '--no-sandbox', 
+                    '--disable-setuid-sandbox',  # For server environments
+                    '--disable-dev-shm-usage',   # Reduce memory usage
+                    '--disable-gpu',             # No GPU needed in headless
+                    '--disable-software-rasterizer'  # Faster rendering
+                ]
             )
-            logger.info("✅ Playwright browser launched")
+            logger.info("✅ Playwright browser instance cached (critical for < 1.5s response time)")
         except Exception as e:
             logger.error(f"❌ Failed to launch Playwright browser: {e}")
             return None

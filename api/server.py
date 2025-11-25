@@ -27,9 +27,35 @@ CORS_HEADERS = {
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Lifespan context manager for startup and shutdown events"""
-    # SIMPLIFIED: No startup/shutdown tasks needed
+    """
+    Lifespan context manager for startup and shutdown events
+    EXPERT LLM FEEDBACK: Initialize browser at startup to avoid 2-4s delay per request
+    """
+    # EXPERT LLM FEEDBACK: Start browser instance at startup (critical for < 1.5s response time)
+    # Starting a new browser for every request takes 2-4 seconds alone, guaranteeing timeout
+    logger.info("🚀 Starting API server...")
+    
+    try:
+        from api.utils.browser_analyzer import _get_browser, close_browser
+        # Pre-initialize browser instance (singleton pattern)
+        browser = await _get_browser()
+        if browser:
+            logger.info("✅ Playwright browser instance cached at startup (critical for performance)")
+        else:
+            logger.warning("⚠️ Failed to initialize browser at startup - will be lazy-loaded")
+    except Exception as e:
+        logger.warning(f"⚠️ Browser initialization at startup failed (non-critical): {e}")
+        logger.info("   Browser will be initialized on first use (slower)")
+    
     yield
+    
+    # Cleanup: Close browser on shutdown
+    try:
+        from api.utils.browser_analyzer import close_browser
+        await close_browser()
+        logger.info("✅ Browser instance closed on shutdown")
+    except Exception as e:
+        logger.warning(f"⚠️ Error closing browser on shutdown: {e}")
 
 
 app = FastAPI(
