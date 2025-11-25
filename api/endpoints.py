@@ -343,6 +343,23 @@ async def solve_task(request: TaskRequest, http_request: Request):
             logger.error(f"🚨 CRITICAL: Actions is empty in final check for task {request.id}, using fallback")
             actions = [{"type": "ScreenshotAction"}]
         
+        # Validate IWA format before returning
+        try:
+            from api.utils.iwa_validator import validate_iwa_action_sequence
+            is_valid, errors = validate_iwa_action_sequence(actions)
+            if not is_valid:
+                logger.error(f"❌ IWA Validation Failed for task {request.id}:")
+                for error in errors[:5]:  # Limit to first 5 errors
+                    logger.error(f"   - {error}")
+                # Log warning but still return actions (validators will reject if invalid)
+                logger.warning(f"⚠️ Returning invalid IWA actions - validators may reject")
+            else:
+                logger.info(f"✅ IWA Validation Passed: {len(actions)} actions valid")
+        except ImportError:
+            logger.warning("⚠️ IWA validator not available - skipping validation")
+        except Exception as e:
+            logger.warning(f"⚠️ IWA validation error: {e}")
+        
         # CRITICAL: Log final response before returning
         logger.info(f"✅ RETURNING RESPONSE: task_id={request.id}, actions_count={len(actions)}, first_action={actions[0] if actions else 'NONE'}")
         

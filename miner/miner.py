@@ -5,6 +5,7 @@ Connects to network and forwards requests to API
 import os
 import asyncio
 import argparse
+import time
 from typing import Optional
 from dotenv import load_dotenv
 import bittensor as bt
@@ -394,7 +395,9 @@ class AutoppiaMiner:
         print("Attaching forward function...", flush=True)
         
         async def forward_wrapper(synapse: bt.Synapse) -> bt.Synapse:
-            """Universal synapse handler - handles StartRoundSynapse, TaskSynapse, and generic synapses"""
+            """Universal synapse handler - handles StartRoundSynapse, TaskSynapse, and generic synapses with enhanced logging"""
+            import traceback
+            start_time = time.time()
             validator_ip = "unknown"
 
             try:
@@ -404,7 +407,9 @@ class AutoppiaMiner:
                 
                 # CRITICAL: Check for StartRoundSynapse first (handles Bittensor deserialization issues)
                 if self._is_start_round_synapse(synapse):
-                    bt.logging.info(f"🔄 ROUND_START: {validator_ip} - Detected StartRoundSynapse: round_id={getattr(synapse, 'round_id', None)}, task_type={getattr(synapse, 'task_type', None)}")
+                    round_id = getattr(synapse, 'round_id', None)
+                    task_type = getattr(synapse, 'task_type', None)
+                    bt.logging.info(f"🔄 ROUND_START: {validator_ip} - Detected StartRoundSynapse: round_id={round_id}, task_type={task_type}")
                     print(f"🔄 ROUND_START: {validator_ip} - Processing StartRoundSynapse", flush=True)
 
                     try:
@@ -414,13 +419,20 @@ class AutoppiaMiner:
                         # Process the round start
                         result = await self.process_start_round(start_round_synapse)
 
-                        bt.logging.info(f"✅ ROUND_START_SUCCESS: {validator_ip} - Round {getattr(result, 'round_id', 'unknown')} started successfully")
-                        print(f"✅ ROUND_START_SUCCESS: {validator_ip} - Round started", flush=True)
+                        end_time = time.time()
+                        processing_time = end_time - start_time
+                        bt.logging.success(
+                            f"✅ ROUND_START_SUCCESS: {validator_ip} - Round {getattr(result, 'round_id', 'unknown')} started successfully | "
+                            f"Time: {processing_time:.2f}s | Success: {getattr(result, 'success', False)}"
+                        )
+                        print(f"✅ ROUND_START_SUCCESS: {validator_ip} - Round started | Time: {processing_time:.2f}s", flush=True)
                         return result
 
                     except Exception as e:
-                        bt.logging.error(f"❌ ROUND_START_ERROR: {validator_ip} - Failed to process StartRoundSynapse: {e}")
-                        print(f"❌ ROUND_START_ERROR: {validator_ip} - {e}", flush=True)
+                        end_time = time.time()
+                        processing_time = end_time - start_time
+                        bt.logging.error(f"❌ ROUND_START_ERROR: {validator_ip} - Failed to process StartRoundSynapse: {e} | Time: {processing_time:.2f}s")
+                        print(f"❌ ROUND_START_ERROR: {validator_ip} - {e} | Time: {processing_time:.2f}s", flush=True)
 
                         # Return valid response even on error to prevent breaking the round
                         error_response = StartRoundSynapse(
@@ -431,13 +443,71 @@ class AutoppiaMiner:
                         )
                         return error_response
                 
-                # Handle regular task synapses
-                bt.logging.info(f"📋 TASK_RECEIVED: {validator_ip} - Processing {synapse_name}: id={getattr(synapse, 'id', 'unknown')}")
-                print(f"📋 TASK_RECEIVED: {validator_ip} - Processing {synapse_name}", flush=True)
+                # Handle regular task synapses (Priority for rewards)
+                task_id = getattr(synapse, 'id', 'unknown')
+                prompt = getattr(synapse, 'prompt', '')
+                url = getattr(synapse, 'url', '')
+                
+                bt.logging.info(
+                    f"📋 TASK_RECEIVED: {validator_ip} - Processing {synapse_name} | "
+                    f"ID: {task_id} | URL: {url[:50] if url else 'N/A'}... | "
+                    f"Prompt: {prompt[:50] if prompt else 'N/A'}..."
+                )
+                print(f"📋 TASK_RECEIVED: {validator_ip} - Processing task {task_id}", flush=True)
                 
                 result = await self.process_task(synapse)
 
-                bt.logging.info(f"📤 TASK_RESPONSE: {validator_ip} - Completed {synapse_name}: success={getattr(result, 'success', False)}, actions={len(getattr(result, 'actions', []))}")
+                # Enhanced logging with timing and validation
+                end_time = time.time()
+                processing_time = end_time - start_time
+                action_count = len(getattr(result, 'actions', []))
+                success = getattr(result, 'success', False)
+                actions = getattr(result, 'actions', [])
+                
+                # Validate IWA format
+                validation_status = "⚠️ VALIDATOR_NOT_AVAILABLE"
+                try:
+                    from api.utils.iwa_validator import validate_iwa_action_sequence
+                    is_valid, errors = validate_iwa_action_sequence(actions)
+                    validation_status = "✅ VALID" if is_valid else f"❌ INVALID ({len(errors)} errors)"
+                    
+                    if not is_valid:
+                        bt.logging.error(f"❌ IWA_VALIDATION_FAILED: {validator_ip} - Task {task_id}")
+                        for error in errors[:5]:  # Limit to first 5 errors
+                            bt.logging.error(f"   - {error}")
+                except ImportError:
+                    validation_status = "⚠️ VALIDATOR_NOT_AVAILABLE"
+                except Exception as e:
+                    validation_status = f"⚠️ VALIDATION_ERROR: {e}"
+                
+                # Log comprehensive response details
+                bt.logging.success(
+                    f"📤 TASK_RESPONSE: {validator_ip} - Completed {synapse_name} | "
+                    f"Success: {success} | Actions: {action_count} | "
+                    f"Time: {processing_time:.2f}s | IWA: {validation_status}"
+                )
+                print(
+                    f"📤 TASK_RESPONSE: {validator_ip} - Success: {success}, "
+                    f"Actions: {action_count}, Time: {processing_time:.2f}s",
+                    flush=True
+                )
+                
+                # Warn if response is slow (validators may timeout)
+                if processing_time > 3.0:
+                    bt.logging.warning(
+                        f"⚠️ SLOW_RESPONSE: {validator_ip} - Task {task_id} took {processing_time:.2f}s "
+                        f"(validators may timeout if > 3s)"
+                    )
+                
+                # Warn if action count is low (may indicate poor quality)
+                if action_count == 0:
+                    bt.logging.error(f"🚨 EMPTY_ACTIONS: {validator_ip} - Task {task_id} returned 0 actions!")
+                elif action_count == 1 and actions and actions[0].get("type") == "ScreenshotAction":
+                    bt.logging.warning(
+                        f"⚠️ MINIMAL_RESPONSE: {validator_ip} - Task {task_id} returned only ScreenshotAction "
+                        f"(may receive low score from validators)"
+                    )
+                
                 return result
 
             except Exception as e:
