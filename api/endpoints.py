@@ -345,11 +345,12 @@ async def solve_task(request: TaskRequest, http_request: Request):
         
         # CRITICAL FIX: Final cleanup - ensure ALL actions use camelCase (playground requirement)
         # AGGRESSIVE CLEANUP: Directly modify dicts to ensure camelCase (playground requirement)
+        import copy
         cleaned_actions = []
         for i, action in enumerate(actions):
             try:
-                # Create a copy to avoid modifying original
-                cleaned_action = dict(action)
+                # Create a deep copy to avoid modifying original (nested dicts need deep copy)
+                cleaned_action = copy.deepcopy(action)
                 
                 # Handle WaitAction: time_seconds/duration -> timeSeconds
                 if cleaned_action.get("type") == "WaitAction":
