@@ -9,43 +9,47 @@ def create_selector(
     attribute: str = None, 
     case_sensitive: bool = False
 ) -> Dict[str, Any]:
-    """Create IWA selector object - Returns Autoppia framework format"""
-    # Autoppia framework expects Selector objects with type, value, attribute fields
-    # Format: {"type": "selectorType", "value": "...", "attribute": "...", "case_sensitive": false}
+    """
+    Create IWA selector object - Returns Autoppia framework format
+    
+    CRITICAL FIX: Validator expects camelCase (caseSensitive) not snake_case (case_sensitive)
+    """
+    # CRITICAL FIX: Use camelCase for caseSensitive (validator expects this)
+    caseSensitive = case_sensitive  # Convert to camelCase for JSON output
 
     if selector_type == "attributeValueSelector":
         if attribute:
             return {
                 "type": "attributeValueSelector",
-                    "attribute": attribute,
-                    "value": value,
-                    "case_sensitive": case_sensitive
-                }
+                "attribute": attribute,
+                "value": value,
+                "caseSensitive": caseSensitive  # camelCase for validator
+            }
         else:
             # Fallback to tagContainsSelector if no attribute
             return {
                 "type": "tagContainsSelector",
                 "value": value,
-                "case_sensitive": case_sensitive
+                "caseSensitive": caseSensitive  # camelCase for validator
             }
     elif selector_type == "tagContainsSelector":
         return {
             "type": "tagContainsSelector",
             "value": value,
-            "case_sensitive": case_sensitive
+            "caseSensitive": caseSensitive  # camelCase for validator
         }
     elif selector_type == "xpathSelector":
         return {
             "type": "xpathSelector",
             "value": value,
-            "case_sensitive": case_sensitive
+            "caseSensitive": caseSensitive  # camelCase for validator
         }
     else:
         # Default to tagContainsSelector for unknown types
         return {
             "type": "tagContainsSelector",
             "value": value,
-            "case_sensitive": case_sensitive
+            "caseSensitive": caseSensitive  # camelCase for validator
         }
 
 

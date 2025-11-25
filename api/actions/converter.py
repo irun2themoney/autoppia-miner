@@ -38,18 +38,20 @@ def convert_to_iwa_action(action: Dict[str, Any]) -> Dict[str, Any]:
             # Ensure selector has required fields for IWA format
             if "type" not in selector:
                 # Convert old format to new IWA format
+                # CRITICAL FIX: Convert case_sensitive to caseSensitive (camelCase)
+                case_sensitive_val = selector.get("case_sensitive", selector.get("caseSensitive", False))
                 if "attributeValueSelector" in selector:
                     result["selector"] = {
                         "type": "attributeValueSelector",
                         "attribute": selector.get("attribute", "id"),
                         "value": selector.get("value", selector.get("attributeValueSelector", "")),
-                        "case_sensitive": selector.get("case_sensitive", False)
+                        "caseSensitive": case_sensitive_val  # camelCase for validator
                     }
                 elif "tagContainsSelector" in selector:
                     result["selector"] = {
                         "type": "tagContainsSelector",
                         "value": selector.get("value", selector.get("tagContainsSelector", "")),
-                        "case_sensitive": selector.get("case_sensitive", False)
+                        "caseSensitive": case_sensitive_val  # camelCase for validator
                     }
                 else:
                     # Fallback: assume attribute selector
@@ -57,7 +59,7 @@ def convert_to_iwa_action(action: Dict[str, Any]) -> Dict[str, Any]:
                         "type": "attributeValueSelector",
                         "attribute": "id",
                         "value": str(selector),
-                        "case_sensitive": False
+                        "caseSensitive": False  # camelCase for validator
                     }
             else:
                 # Already in correct format
@@ -65,13 +67,14 @@ def convert_to_iwa_action(action: Dict[str, Any]) -> Dict[str, Any]:
         else:
             # String selector -> convert to IWA format
             selector_str = str(action["selector"])
+            # CRITICAL FIX: Use camelCase (caseSensitive) not snake_case (case_sensitive)
             if selector_str.startswith("#"):
                 # ID selector
                 result["selector"] = {
                     "type": "attributeValueSelector",
                     "attribute": "id",
                     "value": selector_str[1:],  # Remove #
-                    "case_sensitive": False
+                    "caseSensitive": False  # camelCase for validator
                 }
             elif selector_str.startswith("."):
                 # Class selector
@@ -79,23 +82,26 @@ def convert_to_iwa_action(action: Dict[str, Any]) -> Dict[str, Any]:
                     "type": "attributeValueSelector",
                     "attribute": "class",
                     "value": selector_str[1:],  # Remove .
-                    "case_sensitive": False
+                    "caseSensitive": False  # camelCase for validator
                 }
             else:
                 # Text selector
                 result["selector"] = {
                     "type": "tagContainsSelector",
                     "value": selector_str,
-                    "case_sensitive": False
+                    "caseSensitive": False  # camelCase for validator
                 }
     
     # Action-specific fields
+    # CRITICAL FIX: Validator expects camelCase (timeSeconds) not snake_case (time_seconds)
     if iwa_type == "WaitAction":
-        # Handle both "duration" and "time_seconds"
-        if "time_seconds" in action:
-            result["time_seconds"] = action["time_seconds"]
+        # Handle both "duration" and "time_seconds" (convert to camelCase)
+        if "timeSeconds" in action:
+            result["timeSeconds"] = action["timeSeconds"]
+        elif "time_seconds" in action:
+            result["timeSeconds"] = action["time_seconds"]  # Convert to camelCase
         elif "duration" in action:
-            result["time_seconds"] = action["duration"]
+            result["timeSeconds"] = action["duration"]  # Convert to camelCase
     
     elif iwa_type == "TypeAction":
         if "text" in action:

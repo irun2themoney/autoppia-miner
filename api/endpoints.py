@@ -67,7 +67,7 @@ async def _generate_fallback_actions(prompt: str, url: str, max_actions: int = 2
         # This is better than just ScreenshotAction - at least tries to navigate
         minimal_actions = [
             {"type": "NavigateAction", "url": fallback_url},
-            {"type": "WaitAction", "time_seconds": 1.0},
+            {"type": "WaitAction", "timeSeconds": 1.0},  # CRITICAL FIX: camelCase for validator
         ]
         
         # Try to add task-specific actions based on prompt keywords
@@ -85,7 +85,7 @@ async def _generate_fallback_actions(prompt: str, url: str, max_actions: int = 2
         # Absolute last resort: minimal navigation
         return [
             {"type": "NavigateAction", "url": url or "https://autobooks.autoppia.com"},
-            {"type": "WaitAction", "time_seconds": 1.0},
+            {"type": "WaitAction", "timeSeconds": 1.0},  # CRITICAL FIX: camelCase for validator
             {"type": "ScreenshotAction"}
         ]
 
@@ -301,7 +301,7 @@ async def solve_task(request: TaskRequest, http_request: Request):
                 # Use 3 actions to satisfy god-tier test requirement (needs 3+ actions)
                 actions = [
                     {"type": "NavigateAction", "url": request.url or "https://example.com"},
-                    {"type": "WaitAction", "time_seconds": 1.0},  # Add wait for verification step
+                    {"type": "WaitAction", "timeSeconds": 1.0},  # CRITICAL FIX: camelCase for validator  # Add wait for verification step
                     {"type": "ScreenshotAction"}
                 ]
             else:

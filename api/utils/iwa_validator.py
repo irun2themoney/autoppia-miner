@@ -42,11 +42,17 @@ def validate_iwa_action(action: Dict[str, Any]) -> Tuple[bool, str]:
         return False, f"Invalid action type '{action_type}'. Must be one of {VALID_ACTION_TYPES}"
     
     # Validate action-specific fields
+    # CRITICAL FIX: Validator expects camelCase (timeSeconds) not snake_case (time_seconds)
     if action_type == "WaitAction":
-        if "time_seconds" not in action:
-            return False, "WaitAction missing required 'time_seconds' field"
-        if not isinstance(action["time_seconds"], (int, float)):
-            return False, "WaitAction 'time_seconds' must be a number"
+        # Check for camelCase first (validator expects this)
+        if "timeSeconds" not in action:
+            # Fallback: also check snake_case for backward compatibility
+            if "time_seconds" not in action:
+                return False, "WaitAction missing required 'timeSeconds' field"
+            # Convert snake_case to camelCase for validation
+            action["timeSeconds"] = action["time_seconds"]
+        if not isinstance(action.get("timeSeconds", action.get("time_seconds")), (int, float)):
+            return False, "WaitAction 'timeSeconds' must be a number"
     
     elif action_type == "TypeAction":
         if "text" not in action:
@@ -86,6 +92,8 @@ def validate_selector(selector: Dict[str, Any]) -> Tuple[bool, str]:
     """
     Validate IWA selector format
     
+    CRITICAL FIX: Validator expects camelCase (caseSensitive) not snake_case (case_sensitive)
+    
     Returns:
         (is_valid, error_message)
     """
@@ -98,6 +106,10 @@ def validate_selector(selector: Dict[str, Any]) -> Tuple[bool, str]:
     selector_type = selector["type"]
     if selector_type not in VALID_SELECTOR_TYPES:
         return False, f"Invalid selector type '{selector_type}'. Must be one of {VALID_SELECTOR_TYPES}"
+    
+    # CRITICAL FIX: Convert snake_case to camelCase if present (for backward compatibility)
+    if "case_sensitive" in selector and "caseSensitive" not in selector:
+        selector["caseSensitive"] = selector["case_sensitive"]
     
     # Validate selector-specific fields
     if selector_type == "tagContainsSelector":

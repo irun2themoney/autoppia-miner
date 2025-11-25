@@ -4,6 +4,7 @@ Based on official Autoppia patterns
 """
 import bittensor as bt
 from typing import List, Dict, Any, Optional
+from pydantic import Field
 
 
 class StartRoundSynapse(bt.Synapse):
@@ -31,6 +32,9 @@ class TaskSynapse(bt.Synapse):
     """
     Main task synapse for processing IWA tasks
     Matches ApifiedWebAgent pattern
+    
+    CRITICAL FIX: Use Pydantic aliases for camelCase JSON keys
+    Validators expect camelCase (webAgentId, taskType) not snake_case (web_agent_id, task_type)
     """
     # Task input (from task.clean_task())
     id: str = ""
@@ -39,11 +43,13 @@ class TaskSynapse(bt.Synapse):
     
     # Task response
     actions: List[Dict[str, Any]] = []
-    web_agent_id: str = ""
+    
+    # CRITICAL FIX: Use field aliases for camelCase JSON keys (validator expects camelCase)
+    web_agent_id: str = Field(default="", alias="webAgentId")  # camelCase for JSON
     recording: str = ""
     task_id: str = ""
     success: bool = False
-    task_type: str = "generic"
+    task_type: str = Field(default="generic", alias="taskType")  # camelCase for JSON
     
     def deserialize(self) -> "TaskSynapse":
         """Deserialize synapse data"""
