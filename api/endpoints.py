@@ -715,11 +715,16 @@ async def solve_task(request: TaskRequest, http_request: Request):
             ]
         
         # 🧠 SELF-LEARNING: Enhance actions using learned patterns (if enabled)
-        # CRITICAL FIX: Wrap in try-except to prevent NameError if LEARNING_ENABLED is not defined
+        # CRITICAL FIX: Define LEARNING_ENABLED BEFORE using it to prevent NameError
+        LEARNING_ENABLED = False
         try:
             from config.settings import settings
             LEARNING_ENABLED = getattr(settings, 'learning_enabled', False)
-            if LEARNING_ENABLED:
+        except (ImportError, AttributeError):
+            LEARNING_ENABLED = False
+        
+        if LEARNING_ENABLED:
+            try:
                 try:
                     from api.utils.learning_system import LearningSystem
                     learning_system = LearningSystem()
@@ -734,9 +739,8 @@ async def solve_task(request: TaskRequest, http_request: Request):
                         response_content["actions"] = enhanced_actions
                 except Exception as learn_err:
                     logger.debug(f"Learning enhancement error (non-critical): {learn_err}")
-        except (NameError, AttributeError):
-            # Learning system not available - skip enhancement
-            pass
+            except Exception as learn_err:
+                logger.debug(f"Learning system error (non-critical): {learn_err}")
         
         # 🔍 DIAGNOSTIC: Track response before sending and validate
         try:
