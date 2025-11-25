@@ -724,15 +724,16 @@ async def solve_task(request: TaskRequest, http_request: Request):
             ]
         
         # 🧠 SELF-LEARNING: Enhance actions using learned patterns (if enabled)
-        # CRITICAL FIX: Define LEARNING_ENABLED BEFORE using it to prevent NameError
-        LEARNING_ENABLED = False
+        # CRITICAL FIX: Define LEARNING_ENABLED at function start to prevent NameError
+        # Initialize to False first, then try to get from settings
+        learning_enabled_flag = False
         try:
             from config.settings import settings
-            LEARNING_ENABLED = getattr(settings, 'learning_enabled', False)
-        except (ImportError, AttributeError):
-            LEARNING_ENABLED = False
+            learning_enabled_flag = getattr(settings, 'learning_enabled', False)
+        except (ImportError, AttributeError, Exception):
+            learning_enabled_flag = False
         
-        if LEARNING_ENABLED:
+        if learning_enabled_flag:
             try:
                 from api.utils.learning_system import LearningSystem
                 learning_system = LearningSystem()
@@ -850,11 +851,35 @@ async def solve_task(request: TaskRequest, http_request: Request):
             try:
                 verify_parsed = json_module.loads(response_json_str)
                 if "webAgentId" in verify_parsed:
-                    logger.error(f"🚨 FATAL: webAgentId STILL in final response! This should be impossible!")
+                    logger.error(f"🚨 FATAL: webAgentId STILL in final response! Removing it one more time.")
+                    del verify_parsed["webAgentId"]
+                    response_json_str = json_module.dumps(verify_parsed, ensure_ascii=False)
+                    # Recreate response with cleaned JSON
+                    response = Response(
+                        content=response_json_str,
+                        status_code=200,
+                        media_type="application/json",
+                        headers=CORS_HEADERS
+                    )
                 else:
                     logger.info(f"✅ Created response with ONLY web_agent_id (no webAgentId) - VERIFIED")
             except Exception as verify_err:
                 logger.debug(f"Response verification error (non-critical): {verify_err}")
+            
+            # FINAL FINAL CHECK: Parse response content one last time before returning
+            try:
+                final_check = json_module.loads(response.content.decode('utf-8'))
+                if "webAgentId" in final_check:
+                    logger.error(f"🚨 FINAL FINAL CHECK: webAgentId found! Removing and recreating response.")
+                    del final_check["webAgentId"]
+                    response = Response(
+                        content=json_module.dumps(final_check, ensure_ascii=False),
+                        status_code=200,
+                        media_type="application/json",
+                        headers=CORS_HEADERS
+                    )
+            except Exception:
+                pass  # Ignore errors in final check
             
             return response
         except Exception as response_err:
