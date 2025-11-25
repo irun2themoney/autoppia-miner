@@ -35,7 +35,8 @@ class ResponseQualityEnhancer:
                 return False
         
         elif action_type == "WaitAction":
-            if not action.get("time_seconds"):
+            # CRITICAL FIX: Check for camelCase (timeSeconds) not snake_case (time_seconds)
+            if not action.get("timeSeconds") and not action.get("time_seconds"):
                 return False
         
         return True
@@ -73,9 +74,13 @@ class ResponseQualityEnhancer:
         # Ensure proper selector format
         if "selector" in enhanced and isinstance(enhanced["selector"], dict):
             selector = enhanced["selector"]
-            # Ensure case_sensitive is set
-            if "case_sensitive" not in selector:
-                selector["case_sensitive"] = False
+            # CRITICAL FIX: Use camelCase (caseSensitive) not snake_case (case_sensitive)
+            if "caseSensitive" not in selector:
+                # Convert snake_case to camelCase if present
+                if "case_sensitive" in selector:
+                    selector["caseSensitive"] = selector.pop("case_sensitive")
+                else:
+                    selector["caseSensitive"] = False
             
             # Ensure attribute is set for attributeValueSelector
             if selector.get("type") == "attributeValueSelector" and not selector.get("attribute"):
