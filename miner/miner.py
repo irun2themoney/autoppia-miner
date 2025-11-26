@@ -640,14 +640,15 @@ class AutoppiaMiner:
         # CRITICAL FIX: Add verify_fn to catch unknown synapses before UnknownSynapseError
         # Even though verify_fn might have limitations, it's worth trying to catch unknown synapses
         # This might help with health checks and discovery probes that are being rejected
-        def verify_fn(synapse: bt.Synapse) -> bool:
+        # NOTE: Bittensor expects verify_fn signature: verify(synapse: Synapse) -> None
+        def verify_fn(synapse: bt.Synapse) -> None:
             """Verify function to accept all synapses, including unknown types"""
-            # Always return True to accept all synapses
+            # Accept all synapses by not raising an exception
             # This might help catch synapses before UnknownSynapseError is raised
             synapse_type = type(synapse).__name__
             synapse_name = getattr(synapse, '__class__', {}).__name__ if hasattr(synapse, '__class__') else 'Synapse'
             bt.logging.debug(f"🔍 VERIFY_FN: Checking synapse type={synapse_type}, name={synapse_name}")
-            return True  # Accept all synapses
+            # Return None (don't raise exception = accept synapse)
         
         # NOTE: verify_fn approach might have limitations - Bittensor's signature checking can be strict
         # The UnknownSynapseError happens at protocol level, but verify_fn might help in some cases
