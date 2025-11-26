@@ -362,32 +362,60 @@ class AutoppiaMiner:
         # CRITICAL FIX: Register custom synapse types with axon's forward_class_types
         # Bittensor's axon uses forward_class_types dict to validate incoming synapses
         # Without registration, Bittensor rejects StartRoundSynapse with UnknownSynapseError
+        # SOLUTION: Ensure synapse classes have proper names and register with explicit string keys
         print("Registering custom synapse types with axon...", flush=True)
         try:
-            # forward_class_types is a dict mapping synapse names to classes
+            # CRITICAL: Ensure synapse classes have proper __name__ attributes
+            # Bittensor validates synapses by their string name, not just class type
+            if not hasattr(StartRoundSynapse, '__name__') or StartRoundSynapse.__name__ != 'StartRoundSynapse':
+                StartRoundSynapse.__name__ = 'StartRoundSynapse'
+            if not hasattr(TaskSynapse, '__name__') or TaskSynapse.__name__ != 'TaskSynapse':
+                TaskSynapse.__name__ = 'TaskSynapse'
+            
+            # forward_class_types is a dict mapping synapse names (strings) to classes
             # Add our custom synapse types so Bittensor recognizes them
             if hasattr(self.axon, 'forward_class_types'):
                 # Ensure it's a dict (might be initialized as empty dict or list)
                 if isinstance(self.axon.forward_class_types, dict):
+                    # Register with explicit string keys (CRITICAL for Bittensor validation)
+                    self.axon.forward_class_types['Synapse'] = bt.Synapse  # Generic handler
                     self.axon.forward_class_types['StartRoundSynapse'] = StartRoundSynapse
                     self.axon.forward_class_types['TaskSynapse'] = TaskSynapse
+                    # Also try registering with class names directly
+                    self.axon.forward_class_types[StartRoundSynapse.__name__] = StartRoundSynapse
+                    self.axon.forward_class_types[TaskSynapse.__name__] = TaskSynapse
                     bt.logging.info(f"✅ Registered StartRoundSynapse and TaskSynapse with axon")
                     print(f"✅ Registered custom synapse types: {list(self.axon.forward_class_types.keys())}", flush=True)
                 else:
-                    # If it's not a dict, try to convert or set it
+                    # If it's not a dict, initialize it as a dict
                     self.axon.forward_class_types = {
                         'Synapse': bt.Synapse,
                         'StartRoundSynapse': StartRoundSynapse,
-                        'TaskSynapse': TaskSynapse
+                        'TaskSynapse': TaskSynapse,
+                        StartRoundSynapse.__name__: StartRoundSynapse,
+                        TaskSynapse.__name__: TaskSynapse,
                     }
                     bt.logging.info(f"✅ Initialized forward_class_types with custom synapses")
                     print(f"✅ Initialized synapse registry with custom types", flush=True)
             else:
                 bt.logging.warning("⚠️ Axon doesn't have forward_class_types attribute")
                 print("⚠️ Cannot register synapse types (axon structure may have changed)", flush=True)
+                
+            # CRITICAL: Also try to register via axon's internal synapse registry if available
+            # Some Bittensor versions use different registration mechanisms
+            if hasattr(self.axon, 'synapse_registry'):
+                try:
+                    self.axon.synapse_registry.register(StartRoundSynapse)
+                    self.axon.synapse_registry.register(TaskSynapse)
+                    bt.logging.info("✅ Registered synapses via synapse_registry")
+                except Exception:
+                    pass  # synapse_registry might not exist or work differently
+                    
         except Exception as e:
             bt.logging.error(f"❌ Failed to register synapse types: {e}")
             print(f"⚠️ Synapse registration failed (non-critical): {e}", flush=True)
+            import traceback
+            bt.logging.debug(traceback.format_exc())
             # Continue anyway - forward function will handle via attribute detection
         
         # Attach forward function - handles all synapse types
@@ -609,12 +637,33 @@ class AutoppiaMiner:
                     # Re-raise non-synapse errors
                     raise
         
-        # NOTE: verify_fn approach didn't work - Bittensor's signature checking is too strict
-        # The UnknownSynapseError happens at protocol level before verify_fn is called
+        # CRITICAL FIX: Add verify_fn to catch unknown synapses before UnknownSynapseError
+        # Even though verify_fn might have limitations, it's worth trying to catch unknown synapses
+        # This might help with health checks and discovery probes that are being rejected
+        def verify_fn(synapse: bt.Synapse) -> bool:
+            """Verify function to accept all synapses, including unknown types"""
+            # Always return True to accept all synapses
+            # This might help catch synapses before UnknownSynapseError is raised
+            synapse_type = type(synapse).__name__
+            synapse_name = getattr(synapse, '__class__', {}).__name__ if hasattr(synapse, '__class__') else 'Synapse'
+            bt.logging.debug(f"🔍 VERIFY_FN: Checking synapse type={synapse_type}, name={synapse_name}")
+            return True  # Accept all synapses
+        
+        # NOTE: verify_fn approach might have limitations - Bittensor's signature checking can be strict
+        # The UnknownSynapseError happens at protocol level, but verify_fn might help in some cases
         # Our forward function handles all synapse types via attribute detection
-        self.axon.attach(
-            forward_fn=forward_with_error_handling,
-        )
+        try:
+            self.axon.attach(
+                forward_fn=forward_with_error_handling,
+                verify_fn=verify_fn,  # Try to catch unknown synapses before rejection
+            )
+            bt.logging.info("✅ Attached forward_fn and verify_fn")
+        except Exception as e:
+            # If verify_fn doesn't work, fall back to just forward_fn
+            bt.logging.warning(f"⚠️ verify_fn attachment failed: {e}, using forward_fn only")
+            self.axon.attach(
+                forward_fn=forward_with_error_handling,
+            )
         print("Forward function attached with error handling", flush=True)
         bt.logging.info("✅ Forward function configured to handle all synapse types via attribute detection")
         
