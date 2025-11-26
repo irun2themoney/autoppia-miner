@@ -405,6 +405,11 @@ class AutoppiaMiner:
                 validator_ip = self._get_validator_ip(synapse)
                 synapse_name = getattr(synapse, '__class__', {}).__name__ if hasattr(synapse, '__class__') else 'Synapse'
                 
+                # ENHANCED LOGGING: Log synapse details immediately (helps debug new miner issues)
+                synapse_dict = {k: v for k, v in synapse.__dict__.items() if not k.startswith('_')}
+                bt.logging.info(f"🔍 SYNAPSE_DETAILS: Type={synapse_name}, IP={validator_ip}, Keys={list(synapse_dict.keys())}")
+                print(f"🔍 SYNAPSE_DETAILS: Type={synapse_name}, IP={validator_ip}", flush=True)
+                
                 # CRITICAL: Check for StartRoundSynapse first (handles Bittensor deserialization issues)
                 if self._is_start_round_synapse(synapse):
                     round_id = getattr(synapse, 'round_id', None)
@@ -564,11 +569,21 @@ class AutoppiaMiner:
         # Wrap forward function to catch UnknownSynapseError and handle it gracefully
         async def forward_with_error_handling(synapse: bt.Synapse) -> bt.Synapse:
             """Wrapper that catches synapse errors and routes to forward_wrapper"""
+            # ENHANCED LOGGING: Log ALL incoming synapses (even before processing)
+            # This helps debug why new miners aren't receiving round start requests
+            synapse_type = type(synapse).__name__
+            synapse_attrs = {k: v for k, v in synapse.__dict__.items() if not k.startswith('_')}
+            bt.logging.info(f"🔔 INCOMING_SYNAPSE: Type={synapse_type}, Attrs={list(synapse_attrs.keys())}")
+            print(f"🔔 INCOMING_SYNAPSE: Type={synapse_type}", flush=True)
+            
             try:
                 return await forward_wrapper(synapse)
             except Exception as e:
                 # Catch any synapse-related errors (including UnknownSynapseError)
                 error_type = type(e).__name__
+                bt.logging.error(f"❌ SYNAPSE_ERROR: Type={error_type}, Error={e}, SynapseType={synapse_type}")
+                print(f"❌ SYNAPSE_ERROR: {error_type} - {e}", flush=True)
+                
                 if "UnknownSynapse" in error_type or "Synapse" in error_type:
                     bt.logging.warning(f"⚠️ Synapse error caught: {e} - Attempting to handle as generic synapse")
                     # Try to handle as generic synapse with attribute detection
