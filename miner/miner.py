@@ -643,11 +643,13 @@ class AutoppiaMiner:
         # NOTE: Bittensor expects verify_fn signature: verify(synapse: Synapse) -> None
         def verify_fn(synapse: bt.Synapse) -> None:
             """Verify function to accept all synapses, including unknown types"""
+            # CRITICAL: Log at INFO level so we can see if this is being called
             # Accept all synapses by not raising an exception
             # This might help catch synapses before UnknownSynapseError is raised
             synapse_type = type(synapse).__name__
             synapse_name = getattr(synapse, '__class__', {}).__name__ if hasattr(synapse, '__class__') else 'Synapse'
-            bt.logging.debug(f"🔍 VERIFY_FN: Checking synapse type={synapse_type}, name={synapse_name}")
+            bt.logging.info(f"🔍 VERIFY_FN CALLED: Type={synapse_type}, Name={synapse_name}, Accepting synapse")
+            print(f"🔍 VERIFY_FN CALLED: Type={synapse_type}", flush=True)
             # Return None (don't raise exception = accept synapse)
         
         # NOTE: verify_fn approach might have limitations - Bittensor's signature checking can be strict
