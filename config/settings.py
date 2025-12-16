@@ -33,7 +33,9 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     
     # Self-Learning Configuration
-    self_learning_enabled: bool = True  # Enable self-learning from official docs
+    # Keep both names for backward compatibility; code uses `learning_enabled`.
+    learning_enabled: bool = True  # Enable self-learning from official docs
+    self_learning_enabled: bool = True  # Back-compat alias (older env var / docs)
     self_learning_interval: int = 3600  # Check for updates every hour (seconds)
     
     # Browser Automation Configuration

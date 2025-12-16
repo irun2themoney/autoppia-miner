@@ -229,7 +229,8 @@ async def solve_task_test(request: TaskRequest):
     logger.info(f"🧪 TEST ENDPOINT CALLED: id={request.id}")
     # Return hardcoded actions - if this works, the issue is in our action generation
     test_actions = [
-        {"type": "GotoAction", "url": "https://example.com"},
+        # Keep types aligned with IWA action naming used elsewhere (NavigateAction, etc.)
+        {"type": "NavigateAction", "url": "https://example.com"},
         {"type": "ScreenshotAction"},
         {"type": "ClickAction", "selector": {"cssSelector": "button"}},
     ]
@@ -1069,113 +1070,6 @@ async def solve_task(request: TaskRequest, http_request: Request):
             status_code=200,  # Return 200 with fallback actions (better than 500 with empty)
             media_type="application/json",
             headers=CORS_HEADERS
-        )
-
-
-
-@router.get("/learning/stats")
-async def get_learning_stats():
-    """Get learning system statistics - view self-learning progress"""
-    try:
-        LEARNING_ENABLED = getattr(settings, 'learning_enabled', False)
-        if not LEARNING_ENABLED:
-            return JSONResponse(
-                content={"error": "Learning system not enabled"},
-                status_code=503
-            )
-    except (NameError, AttributeError):
-        return JSONResponse(
-            content={"error": "Learning system not available"},
-            status_code=503
-        )
-    
-    try:
-        from api.utils.learning_system import LearningSystem
-        learning_system = LearningSystem()
-        stats = learning_system.get_statistics()
-        return JSONResponse(content=stats, status_code=200)
-    except Exception as e:
-        logger.error(f"Error getting learning stats: {e}", exc_info=True)
-        return JSONResponse(
-            content={"error": str(e)},
-            status_code=500
-        )
-
-
-@router.post("/learning/feedback")
-async def record_feedback(feedback: Dict[str, Any]):
-    """
-    Record feedback from playground/validators for self-learning
-    
-    Expected format:
-    {
-        "task_id": "...",
-        "task_type": "login|form|search|...",
-        "prompt": "...",
-        "url": "...",
-        "success": true/false,
-        "execution_time": 0.5,
-        "error": "optional error message",
-        "actions": [...]
-    }
-    """
-    try:
-        LEARNING_ENABLED = getattr(settings, 'learning_enabled', False)
-        if not LEARNING_ENABLED:
-            return JSONResponse(
-                content={"error": "Learning system not enabled"},
-                status_code=503
-            )
-    except (NameError, AttributeError):
-        return JSONResponse(
-            content={"error": "Learning system not available"},
-            status_code=503
-        )
-    
-    try:
-        from api.utils.learning_system import LearningSystem
-        from api.utils.feedback_analyzer import FeedbackAnalyzer
-        learning_system = LearningSystem()
-        feedback_analyzer = FeedbackAnalyzer()
-        
-        task_id = feedback.get("task_id", "unknown")
-        success = feedback.get("success", False)
-        execution_time = feedback.get("execution_time", 0.0)
-        error = feedback.get("error")
-        actions = feedback.get("actions", [])
-        
-        # Analyze feedback
-        analysis = feedback_analyzer.analyze_execution_result(
-            task_id=task_id,
-            actions=actions,
-            result={"success": 1 if success else 0}
-        )
-        
-        # Record in learning system
-        learning_system.record_task_result(
-            task_id=task_id,
-            task_type=feedback.get("task_type", "generic"),
-            prompt=feedback.get("prompt", ""),
-            url=feedback.get("url", ""),
-            actions=actions,
-            success=success,
-            execution_time=execution_time,
-            error=error
-        )
-        
-        return JSONResponse(
-            content={
-                "status": "recorded",
-                "analysis": analysis,
-                "suggestions": feedback_analyzer.get_improvement_suggestions()
-            },
-            status_code=200
-        )
-    except Exception as e:
-        logger.error(f"Error recording feedback: {e}", exc_info=True)
-        return JSONResponse(
-            content={"error": str(e)},
-            status_code=500
         )
 
 
