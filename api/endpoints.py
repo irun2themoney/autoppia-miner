@@ -904,7 +904,9 @@ async def solve_task(request: TaskRequest, http_request: Request):
             # FINAL FINAL CHECK: Parse response content one last time before returning
             # CRITICAL: Build response manually with ONLY allowed fields - NO webAgentId possible
             try:
-                final_check = json_module.loads(response.content.decode('utf-8'))
+                # `fastapi.Response`/`starlette.responses.Response` uses `.body` (bytes) not `.content`.
+                # We already have the exact JSON string in `response_json_str`, so validate against that.
+                final_check = json_module.loads(response_json_str)
                 final_check = remove_webagentid_recursive(final_check)
                 
                 # Build manually to guarantee no webAgentId
@@ -936,7 +938,7 @@ async def solve_task(request: TaskRequest, http_request: Request):
                 )
                 
                 # Verify one last time
-                verify_final = json_module.loads(response.content.decode('utf-8'))
+                verify_final = json_module.loads(final_json_str)
                 if "webAgentId" in verify_final:
                     logger.error(f"🚨 FATAL: webAgentId in final response after manual build!")
                 else:
