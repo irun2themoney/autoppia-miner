@@ -107,7 +107,7 @@ curl -X POST http://localhost:8080/solve_task \
 {
   "actions": [
     {"type": "NavigateAction", "url": "https://autobooks.autoppia.com"},
-    {"type": "WaitAction", "time_seconds": 1.0},
+    {"type": "WaitAction", "timeSeconds": 1.0},
     {"type": "ClickAction", "selector": {...}},
     ...
   ],
